@@ -7,8 +7,9 @@ from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.services.research import ExaSearchService
+from app.services.perplexity import PerplexitySonarService
 from app.services.cache import CacheService
-from app.core.telemetry import timed_step
+from app.core.telemetry import log_event, timed_step
 
 
 class ResearchRequest(BaseModel):
@@ -22,6 +23,8 @@ class BusinessResult(BaseModel):
     snippet: Optional[str] = None
     published: Optional[str] = None
     score: Optional[float] = None
+    phone_numbers: List[str] = Field(default_factory=list)
+    highlights: List[str] = Field(default_factory=list)
 
 
 class ResearchResponse(BaseModel):
@@ -58,6 +61,19 @@ def get_routes(cache: Optional[CacheService] = None):
         with timed_step("api", "search_businesses", details={"query": trimmed_query, "limit": normalized_limit}):
             service = ExaSearchService()
             result = await service.search(trimmed_query, limit=normalized_limit)
+
+            # Perplexity Sonar — available for future enrichment but not
+            # called in the hot path yet.  Instantiate so the service is
+            # importable and the config is validated at startup.
+            _sonar = PerplexitySonarService()
+            if _sonar.enabled:
+                log_event(
+                    "research",
+                    "perplexity_sonar_available",
+                    status="ok",
+                    details={"query": trimmed_query, "note": "sonar ready but not invoked"},
+                )
+
             if cache_key is not None:
                 await local_cache.set_json(
                     cache_key,

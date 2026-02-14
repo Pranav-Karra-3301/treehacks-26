@@ -14,7 +14,7 @@ else:  # fallback when launched from inside backend/
 
 
 class Settings:
-    DATA_ROOT = Path(os.getenv("NEGOTIATEAI_DATA_ROOT", "data"))
+    DATA_ROOT = Path(os.getenv("KIRU_DATA_ROOT", os.getenv("NEGOTIATEAI_DATA_ROOT", "data")))
     SQLITE_PATH = DATA_ROOT / "calls.db"
 
     APP_HOST = os.getenv("HOST", "0.0.0.0")
@@ -145,6 +145,15 @@ class Settings:
     EXA_API_KEY = os.getenv("EXA_API_KEY", "")
     EXA_SEARCH_URL = os.getenv("EXA_SEARCH_URL", "https://api.exa.ai/search")
     EXA_SEARCH_RESULTS_LIMIT = int(os.getenv("EXA_SEARCH_RESULTS_LIMIT", "5"))
+    EXA_SEARCH_TYPE = os.getenv("EXA_SEARCH_TYPE", "auto")
+
+    # Perplexity Sonar
+    PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
+    PERPLEXITY_BASE_URL = os.getenv("PERPLEXITY_BASE_URL", "https://api.perplexity.ai")
+    PERPLEXITY_MODEL = os.getenv("PERPLEXITY_MODEL", "sonar")
+    PERPLEXITY_SEARCH_ENABLED = (
+        os.getenv("PERPLEXITY_SEARCH_ENABLED", "false").strip().lower() == "true"
+    )
 
     # Redis / caching
     UPSTASH_REDIS_URL = os.getenv("UPSTASH_REDIS_URL", "").strip()
@@ -154,7 +163,7 @@ class Settings:
     CACHE_RESEARCH_TTL_SECONDS = int(os.getenv("CACHE_RESEARCH_TTL_SECONDS", "300"))
     CACHE_TASK_TTL_SECONDS = int(os.getenv("CACHE_TASK_TTL_SECONDS", "120"))
     CACHE_ANALYSIS_TTL_SECONDS = int(os.getenv("CACHE_ANALYSIS_TTL_SECONDS", "300"))
-    CACHE_KEY_PREFIX = os.getenv("CACHE_KEY_PREFIX", "negotiatai")
+    CACHE_KEY_PREFIX = os.getenv("CACHE_KEY_PREFIX", "kiru")
 
 
 settings = Settings()
