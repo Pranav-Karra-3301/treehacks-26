@@ -2,30 +2,30 @@
 
 ## Run
 
-```
+```bash
 cd backend
 python -m venv .venv
 source .venv/bin/activate
+cp .env.example .env
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 3001
 ```
 
-## LLM Provider Configuration
+Set runtime configuration in `backend/.env` from `backend/.env.example`.
 
-Set the following in `backend/.env`:
+## LLM provider configuration
 
-- `LLM_PROVIDER=openai` to use OpenAI API.
-- `LLM_PROVIDER=anthropic` to use Claude API.
-- `LLM_PROVIDER=local` to use DGX/vLLM (OpenAI-compatible endpoint).
+Set `LLM_PROVIDER`:
 
-OpenAI and Claude values are pulled from:
+- `LLM_PROVIDER=openai` for OpenAI
+- `LLM_PROVIDER=anthropic` for Claude
+- `LLM_PROVIDER=local` for DGX/vLLM
 
-- `OPENAI_API_KEY`
-- `OPENAI_MODEL`
-- `OPENAI_BASE_URL`
-- `ANTHROPIC_API_KEY`
-- `ANTHROPIC_MODEL`
-- `ANTHROPIC_BASE_URL`
+Required keys per provider:
+
+- OpenAI: `OPENAI_API_KEY`
+- Claude: `ANTHROPIC_API_KEY`
+- Local: `VLLM_BASE_URL` and `VLLM_MODEL`
 
 ## REST Endpoints
 
