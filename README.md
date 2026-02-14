@@ -42,9 +42,31 @@ npm install
 npm run dev
 ```
 
+Preferred dev flow (single terminal):
+
+```bash
+scripts/dev-up.sh
+```
+
 Then open:
 - `http://localhost:3000` (dashboard)
 - `http://localhost:3001/health` (backend health)
+
+To use alternate host ports when 3000/3001 are occupied:
+
+```bash
+BACKEND_HOST_PORT=3002 FRONTEND_HOST_PORT=3003 ./scripts/dev-up.sh
+```
+
+This automatically points the frontend env to `http://localhost:3002` for API/ws by compose interpolation.
+
+`scripts/dev-up.sh` also auto-resolves occupied host ports by default:
+
+```bash
+AUTO_FIX_PORTS=0 ./scripts/dev-up.sh
+```
+
+The command above disables automatic reassignment and restores strict fail-fast behavior.
 
 ## Environment and Secrets
 
@@ -83,8 +105,22 @@ Optional tuning:
 ## Running with Docker
 
 ```bash
-docker-compose up --build
+scripts/dev-up.sh
 ```
+
+Or with raw compose (if you prefer direct compose commands):
+
+```bash
+docker compose up --build
+```
+
+The compose stack now mounts `backend/.env` and `frontend/.env.local`, and backend runs with `--reload` for hot code changes.
+
+Troubleshooting:
+- If compose is not available as `docker compose`, install/update Docker CLI/Compose plugin.
+- If startup reports a permission error to `/var/run/docker.sock`, add your user to the docker group and restart your shell:
+  - `sudo usermod -aG docker $USER`
+  - `newgrp docker`
 
 ## API surface
 

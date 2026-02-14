@@ -46,11 +46,42 @@ Frontend runs at `http://localhost:3000` and calls backend on `http://localhost:
 
 ## 5) Launch both via Docker
 
+Run both services from a single terminal (recommended for rapid iteration):
+
 ```bash
-docker-compose up --build
+scripts/dev-up.sh
 ```
 
-Note: container-based env variables are set directly in services; for advanced env use the `*-app` shell or compose env files.
+The containerized backend now runs with `--reload`, so code changes are picked up without restarting the stack.
+
+Or run compose directly once env files are in place:
+
+```bash
+docker compose up --build
+```
+
+If port `3000` or `3001` is already in use on your machine, `scripts/dev-up.sh` now auto-selects nearby free ports by default:
+
+```bash
+BACKEND_HOST_PORT=3002 FRONTEND_HOST_PORT=3003 docker compose up --build
+BACKEND_HOST_PORT=3002 FRONTEND_HOST_PORT=3003 ./scripts/dev-up.sh
+```
+
+To keep strict behavior and fail immediately when ports are occupied, disable auto-fix:
+
+```bash
+AUTO_FIX_PORTS=0 ./scripts/dev-up.sh
+```
+
+When using alternate host ports, the frontend URL variables are auto-adjusted to match `BACKEND_HOST_PORT` for API/WS calls.
+
+If you get daemon permission errors, start Docker and add your user to the docker group before rerunning:
+
+```bash
+sudo systemctl start docker
+sudo usermod -aG docker "$USER"
+newgrp docker
+```
 
 ## 6) Configure LLM provider (important)
 
