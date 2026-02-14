@@ -44,6 +44,7 @@ class CallOrchestrator:
         self._task_to_media_ws: dict[str, Any] = {}
         self._task_to_stream_sid: dict[str, str] = {}
         self._task_to_call_sid: dict[str, str] = {}
+        self._stream_sid_to_task: dict[str, str] = {}
         self._call_sid_to_task: dict[str, str] = {}
         self._deepgram_sessions: dict[str, DeepgramVoiceAgentSession] = {}
 
@@ -55,6 +56,23 @@ class CallOrchestrator:
 
     def _voice_mode_enabled(self) -> bool:
         return settings.DEEPGRAM_VOICE_AGENT_ENABLED and bool(settings.DEEPGRAM_API_KEY)
+
+    def _link_stream_sid(self, task_id: str, stream_sid: Optional[str]) -> None:
+        if not task_id or task_id == "unknown" or not stream_sid:
+            return
+        self._task_to_stream_sid[task_id] = stream_sid
+        self._stream_sid_to_task[stream_sid] = task_id
+
+    def _link_call_sid(self, task_id: str, call_sid: Optional[str]) -> None:
+        if not task_id or task_id == "unknown" or not call_sid:
+            return
+        self._task_to_call_sid[task_id] = call_sid
+        self._call_sid_to_task[call_sid] = task_id
+
+    def _clear_media_context(self, task_id: str) -> None:
+        stream_sid = self._task_to_stream_sid.pop(task_id, None)
+        if stream_sid and self._stream_sid_to_task.get(stream_id := stream_sid) == task_id:
+            self._stream_sid_to_task.pop(stream_id, None)
 
     def _clear_task_call_sid(self, task_id: str) -> None:
         call_sid = self._task_to_call_sid.pop(task_id, None)
@@ -82,8 +100,7 @@ class CallOrchestrator:
                 call = await self._twilio.place_call(task["target_phone"], task_id)
                 call_sid = call.get("sid")
                 if call_sid:
-                    self._task_to_call_sid[task_id] = call_sid
-                    self._call_sid_to_task[call_sid] = task_id
+                    self._link_call_sid(task_id, call_sid)
 
             call_status = str(call.get("status") or "")
             if call_status == "failed":
@@ -156,6 +173,8 @@ class CallOrchestrator:
             else:
                 self._store.update_status(task_id, "ended")
                 self._store.update_ended_at(task_id)
+            self._task_to_media_ws.pop(task_id, None)
+            self._clear_media_context(task_id)
 
             if not from_status_callback:
                 if call_sid:
@@ -174,11 +193,35 @@ class CallOrchestrator:
     async def get_task_id_for_call_sid(self, call_sid: str) -> Optional[str]:
         return self._call_sid_to_task.get(call_sid)
 
+    def get_task_id_for_stream_sid(self, stream_sid: Optional[str]) -> Optional[str]:
+        if not stream_sid:
+            return None
+        return self._stream_sid_to_task.get(stream_sid)
+
     def get_task_id_for_session(self, session_id: str) -> Optional[str]:
         for task_id, mapped_session_id in self._task_to_session.items():
             if mapped_session_id == session_id:
                 return task_id
         return None
+
+    def resolve_task_for_media_event(
+        self,
+        task_id: str,
+        *,
+        stream_sid: Optional[str] = None,
+        call_sid: Optional[str] = None,
+    ) -> str:
+        if task_id and task_id != "unknown" and self._task_to_session.get(task_id):
+            return task_id
+        if call_sid:
+            mapped_task = self._call_sid_to_task.get(call_sid)
+            if mapped_task:
+                return mapped_task
+        if stream_sid:
+            mapped_task = self._stream_sid_to_task.get(stream_sid)
+            if mapped_task:
+                return mapped_task
+        return task_id or "unknown"
 
     async def handle_twilio_status(self, task_id: Optional[str], call_sid: Optional[str], status: Optional[str]) -> None:
         if not task_id and call_sid:
@@ -214,21 +257,49 @@ class CallOrchestrator:
     def get_session_id_for_task(self, task_id: str) -> Optional[str]:
         return self._task_to_session.get(task_id)
 
-    async def register_media_stream(self, task_id: str, websocket: Any, stream_sid: Optional[str] = None) -> None:
+    async def register_media_stream(
+        self,
+        task_id: str,
+        websocket: Any,
+        *,
+        stream_sid: Optional[str] = None,
+        call_sid: Optional[str] = None,
+    ) -> None:
+        if not task_id or task_id == "unknown":
+            return
         self._task_to_media_ws[task_id] = websocket
-        if stream_sid:
-            self._task_to_stream_sid[task_id] = stream_sid
+        self._link_stream_sid(task_id, stream_sid)
+        self._link_call_sid(task_id, call_sid)
 
     async def unregister_media_stream(self, task_id: str) -> None:
         self._task_to_media_ws.pop(task_id, None)
-        self._task_to_stream_sid.pop(task_id, None)
+        self._clear_media_context(task_id)
 
     async def set_media_stream_sid(self, task_id: str, stream_sid: str) -> None:
-        self._task_to_stream_sid[task_id] = stream_sid
+        self._link_stream_sid(task_id, stream_sid)
+
+    async def set_media_call_sid(self, task_id: str, call_sid: str) -> None:
+        self._link_call_sid(task_id, call_sid)
 
     async def on_media_chunk(self, task_id: str, chunk: bytes) -> None:
+        if task_id == "unknown":
+            log_event(
+                "orchestrator",
+                "media_chunk_unmapped",
+                status="warning",
+                task_id=task_id,
+                details={"reason": "media_stream_task_unknown"},
+            )
+            return
         session_id = self._task_to_session.get(task_id)
         if not session_id or not chunk:
+            if not session_id:
+                log_event(
+                    "orchestrator",
+                    "media_chunk_no_session",
+                    status="warning",
+                    task_id=task_id,
+                )
             return
 
         await self.save_audio_chunk(session_id, "caller", chunk)
@@ -471,9 +542,10 @@ class CallOrchestrator:
                 {"type": "call_status", "data": {"status": "ended", "session_id": session_id}},
             )
 
-        self._task_to_session.pop(task_id, None)
+        self._clear_media_context(task_id)
         self._task_to_media_ws.pop(task_id, None)
-        self._task_to_stream_sid.pop(task_id, None)
+        self._task_to_session.pop(task_id, None)
+        self._clear_task_call_sid(task_id)
         self._audio_stats.pop(session_id, None)
 
     async def _persist_recording_stats(self, session_id: str) -> None:

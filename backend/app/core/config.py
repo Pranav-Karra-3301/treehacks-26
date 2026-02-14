@@ -76,6 +76,15 @@ class Settings:
     TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER", "")
     TWILIO_WEBHOOK_HOST = os.getenv("TWILIO_WEBHOOK_HOST", "")
 
+    # Logging controls
+    LOG_LEVEL = (os.getenv("LOG_LEVEL", "INFO") or "INFO").upper()
+    if LOG_LEVEL not in {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"}:
+        LOG_LEVEL = "INFO"
+    try:
+        LOG_NOISY_EVENTS_EVERY_N = int(os.getenv("LOG_NOISY_EVENTS_EVERY_N", "40"))
+    except ValueError:
+        LOG_NOISY_EVENTS_EVERY_N = 40
+
     # Exa / web lookup
     EXA_SEARCH_ENABLED = (
         os.getenv("EXA_SEARCH_ENABLED", "false").strip().lower() == "true"

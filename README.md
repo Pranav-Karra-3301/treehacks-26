@@ -85,6 +85,8 @@ Optional tuning:
 - `CACHE_RESEARCH_TTL_SECONDS`
 - `CACHE_TASK_TTL_SECONDS`
 - `CACHE_ANALYSIS_TTL_SECONDS`
+- `LOG_LEVEL=INFO|DEBUG|WARNING|ERROR`
+- `LOG_NOISY_EVENTS_EVERY_N=40`
 
 ### LLM provider examples
 
@@ -139,6 +141,11 @@ Troubleshooting:
 - `POST /twilio/status`
 
 Telemetry output lives under `backend/data/service.log` and `backend/data/telemetry_events.jsonl`.
+`LOG_NOISY_EVENTS_EVERY_N` controls how often chatty events are logged to stdout/file:
+- `media_event`
+- `audio.save_audio_chunk`
+- `twilio.send_media`
+- `twilio.media_mark_received`
 
 ## CLI-first validation
 

@@ -16,6 +16,8 @@ from app.core.config import settings
 
 _LOGGER = logging.getLogger("negotiateai")
 _METRICS_LOCK = threading.Lock()
+_NOISY_METRIC_COUNTERS: Dict[str, int] = {}
+_NOISY_ACTIONS = {"media_event", "save_audio_chunk", "send_media", "media_mark_received"}
 
 
 def _metric_file() -> Path:
@@ -27,6 +29,24 @@ def _log_file() -> Path:
     return settings.DATA_ROOT / "service.log"
 
 
+def _should_emit_console_log(action: str, status: str) -> bool:
+    if status != "ok":
+        return True
+    if action not in _NOISY_ACTIONS:
+        return True
+
+    try:
+        sample_every = max(1, int(settings.LOG_NOISY_EVENTS_EVERY_N))
+    except (TypeError, ValueError):
+        sample_every = 20
+
+    key = f"noisy::{action}"
+    with _METRICS_LOCK:
+        count = _NOISY_METRIC_COUNTERS.get(key, 0) + 1
+        _NOISY_METRIC_COUNTERS[key] = count
+    return count % sample_every == 0
+
+
 def _timestamp() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -35,7 +55,8 @@ def configure_logging() -> None:
     if getattr(_LOGGER, "_negotiateai_configured", False):
         return
 
-    _LOGGER.setLevel(logging.INFO)
+    log_level = getattr(logging, settings.LOG_LEVEL, logging.INFO)
+    _LOGGER.setLevel(log_level)
 
     fmt = logging.Formatter(
         "%(asctime)s %(levelname)s [%(name)s] %(message)s",
@@ -44,12 +65,14 @@ def configure_logging() -> None:
 
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(fmt)
+    stream_handler.setLevel(log_level)
     _LOGGER.addHandler(stream_handler)
 
     log_path = _log_file()
     log_path.parent.mkdir(parents=True, exist_ok=True)
     file_handler = logging.FileHandler(log_path, encoding="utf-8")
     file_handler.setFormatter(fmt)
+    file_handler.setLevel(log_level)
     _LOGGER.addHandler(file_handler)
 
     _LOGGER._negotiateai_configured = True  # type: ignore[attr-defined]
@@ -234,16 +257,17 @@ def log_event(
         entry["duration_ms"] = round(duration_ms, 3)
 
     _append_jsonl(entry)
-    _LOGGER.info(
-        "%s | %s | status=%s | duration_ms=%s | task_id=%s | session_id=%s | details=%s",
-        component,
-        action,
-        status,
-        round(duration_ms, 3) if duration_ms is not None else "n/a",
-        task_id or "n/a",
-        session_id or "n/a",
-        details or {},
-    )
+    if _should_emit_console_log(action, status):
+        _LOGGER.info(
+            "%s | %s | status=%s | duration_ms=%s | task_id=%s | session_id=%s | details=%s",
+            component,
+            action,
+            status,
+            round(duration_ms, 3) if duration_ms is not None else "n/a",
+            task_id or "n/a",
+            session_id or "n/a",
+            details or {},
+        )
 
 
 @contextmanager
@@ -280,13 +304,14 @@ def timed_step(
         if caught_error:
             event["error"] = caught_error
         _append_jsonl(event)
-    _LOGGER.info(
-        "%s | %s | %s | %.3f ms | task_id=%s session_id=%s | %s",
-        component,
-        action,
-        status,
-        elapsed_ms,
-        task_id or "n/a",
-        session_id or "n/a",
-        details or {},
-    )
+    if _should_emit_console_log(action, status):
+        _LOGGER.info(
+            "%s | %s | %s | %.3f ms | task_id=%s session_id=%s | %s",
+            component,
+            action,
+            status,
+            elapsed_ms,
+            task_id or "n/a",
+            session_id or "n/a",
+            details or {},
+        )

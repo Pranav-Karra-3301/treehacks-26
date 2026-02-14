@@ -120,6 +120,13 @@ Twilio requires a public webhook host (ngrok or similar):
 TWILIO_WEBHOOK_HOST=https://your-public-ngrok-url
 ```
 
+Optional logging throttles:
+
+```bash
+LOG_LEVEL=INFO
+LOG_NOISY_EVENTS_EVERY_N=40
+```
+
 ## 7) Sanity checks
 
 - Backend health: `curl http://localhost:3001/health`
