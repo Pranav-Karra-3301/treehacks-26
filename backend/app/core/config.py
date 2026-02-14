@@ -17,9 +17,24 @@ class Settings:
         if origin.strip()
     ]
 
-    # LLM / vLLM
+    # LLM provider selection
+    # values: local | openai | anthropic
+    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
+
+    # vLLM (local DGX stack)
     VLLM_BASE_URL = os.getenv("VLLM_BASE_URL", "http://localhost:8000")
     VLLM_MODEL = os.getenv("VLLM_MODEL", "Qwen/Qwen3-30B-A3B-Instruct-2507")
+    VLLM_API_KEY = os.getenv("VLLM_API_KEY", "")
+
+    # OpenAI API
+    OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
+    OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+
+    # Anthropic Claude API
+    ANTHROPIC_BASE_URL = os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
+    ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
+    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
     # Deepgram / STT / TTS
     DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY", "")
