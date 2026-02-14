@@ -27,9 +27,11 @@ class Settings:
     ]
 
     # LLM provider selection
-    # values: local | ollama | openai | anthropic
-    # "ollama" is an alias for "local" pointing at Ollama's OpenAI-compatible endpoint.
+    # values: ollama (preferred) | openai | anthropic
+    # "local" is accepted as a backward-compatible alias and normalized to ollama.
     LLM_PROVIDER = (os.getenv("LLM_PROVIDER", "openai") or "openai").strip().lower()
+    if LLM_PROVIDER == "local":
+        LLM_PROVIDER = "ollama"
 
     # Ollama / local OpenAI-compatible endpoint
     # OLLAMA_* are preferred; VLLM_* kept as fallbacks for backward compatibility.
