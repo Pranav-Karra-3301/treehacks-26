@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Phone, ArrowRight, Globe } from 'lucide-react';
 import type { BusinessResult } from '../lib/types';
@@ -45,6 +46,53 @@ function displayDomain(url: string): string {
   }
 }
 
+/** Get Google favicon URL for a domain */
+function faviconUrl(url: string): string | null {
+  try {
+    const host = new URL(url).hostname;
+    return `https://www.google.com/s2/favicons?domain=${host}&sz=64`;
+  } catch {
+    return null;
+  }
+}
+
+/** Generate a deterministic pastel color from a string */
+function initialColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  const h = Math.abs(hash) % 360;
+  return `hsl(${h}, 45%, 88%)`;
+}
+
+/** Favicon with colored-initial fallback */
+function BizIcon({ url, title }: { url?: string; title: string }) {
+  const [failed, setFailed] = useState(false);
+  const src = url ? faviconUrl(url) : null;
+  const letter = (title || '?')[0].toUpperCase();
+
+  if (src && !failed) {
+    return (
+      <img
+        src={src}
+        alt=""
+        width={28}
+        height={28}
+        className="rounded-md object-contain shrink-0"
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+
+  return (
+    <div
+      className="flex items-center justify-center w-7 h-7 rounded-md shrink-0 text-[13px] font-semibold"
+      style={{ backgroundColor: initialColor(title), color: 'rgba(0,0,0,0.5)' }}
+    >
+      {letter}
+    </div>
+  );
+}
+
 const ease = [0.16, 1, 0.3, 1] as const;
 
 export default function SearchResultCards({ results, onCall, onSkip }: Props) {
@@ -65,8 +113,11 @@ export default function SearchResultCards({ results, onCall, onSkip }: Props) {
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05, duration: 0.25, ease }}
-              className="group flex items-center gap-3 rounded-xl bg-white border border-gray-100 pl-3.5 pr-2 py-2.5 transition-all duration-150 hover:border-gray-200 hover:shadow-soft"
+              className="group flex items-center gap-2.5 rounded-xl bg-white border border-gray-100 pl-2.5 pr-2 py-2 transition-all duration-150 hover:border-gray-200 hover:shadow-soft"
             >
+              {/* Favicon */}
+              <BizIcon url={result.url} title={result.title || 'Untitled'} />
+
               {/* Content */}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
