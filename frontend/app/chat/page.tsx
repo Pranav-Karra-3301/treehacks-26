@@ -3,21 +3,25 @@
 import { useState, useRef, useEffect, useCallback, type FormEvent, type KeyboardEvent } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowUp, ArrowLeft, Phone, Clock, RotateCcw, AlertTriangle, Plus, MessageSquare, PanelLeftClose, PanelLeft, BarChart3 } from 'lucide-react';
+import { ArrowUp, ArrowLeft, Phone, RotateCcw, AlertTriangle, Plus, PanelLeftClose, PanelLeft, BarChart3 } from 'lucide-react';
 import { createTask, startCall, stopCall, createCallSocket, checkVoiceReadiness, searchResearch, getTaskAnalysis, getTaskTranscript, getTask, listTasks } from '../../lib/api';
-import type { CallEvent, CallStatus, AnalysisPayload, TaskSummary, CallOutcome } from '../../lib/types';
+import type { CallEvent, CallStatus, AnalysisPayload, TaskSummary, CallOutcome, BusinessResult } from '../../lib/types';
 import AnalysisCard from '../../components/analysis-card';
 import AudioPlayer from '../../components/audio-player';
+import SearchResultCards from '../../components/search-result-cards';
 
 type Message = {
   id: string;
-  role: 'user' | 'ai' | 'status' | 'analysis' | 'audio';
+  role: 'user' | 'ai' | 'status' | 'analysis' | 'audio' | 'search-results';
   text: string;
   analysisData?: AnalysisPayload;
   audioTaskId?: string;
+  searchResults?: BusinessResult[];
 };
 
-type ConversationPhase = 'objective' | 'phone' | 'connecting' | 'active' | 'ended';
+type ConversationPhase = 'objective' | 'discovery' | 'phone' | 'connecting' | 'active' | 'ended';
+
+const ease = [0.16, 1, 0.3, 1] as const;
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([
@@ -40,6 +44,7 @@ export default function ChatPage() {
   const [analysisLoaded, setAnalysisLoaded] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [pastTasks, setPastTasks] = useState<TaskSummary[]>([]);
+  const [discoveryResults, setDiscoveryResults] = useState<BusinessResult[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const socketRef = useRef<WebSocket | null>(null);
@@ -81,9 +86,7 @@ export default function ChatPage() {
           setReadinessWarning(issues.join(', ') || 'Voice system not ready');
         }
       })
-      .catch(() => {
-        // Backend may be down — don't block the UI
-      });
+      .catch(() => {});
   }, []);
 
   // Cleanup WebSocket on unmount
@@ -99,7 +102,7 @@ export default function ChatPage() {
     setMessages((prev) => [...prev, { ...msg, id: `${Date.now()}-${Math.random()}` }]);
   }
 
-  function aiReply(text: string, delay = 800) {
+  function aiReply(text: string, delay = 700) {
     setTyping(true);
     setTimeout(() => {
       setTyping(false);
@@ -120,7 +123,6 @@ export default function ChatPage() {
       ]);
       setAnalysisLoaded(true);
     } catch {
-      // Analysis may not be ready yet
       analysisLoadedRef.current = false;
     }
   }, []);
@@ -193,20 +195,17 @@ export default function ChatPage() {
       socketRef.current.close();
     }
     const socket = createCallSocket(sid, handleCallEvent);
-    socket.onclose = () => {
-      // Don't reconnect if the call has ended
-    };
+    socket.onclose = () => {};
     socketRef.current = socket;
   }, [handleCallEvent]);
 
-  async function startNegotiation(phoneNumber: string) {
+  async function startNegotiation(phone: string) {
     setPhase('connecting');
     addMessage({ role: 'status', text: 'Setting up your negotiation...' });
 
     try {
-      // Create the task
       const task = await createTask({
-        target_phone: phoneNumber,
+        target_phone: phone,
         objective: objective,
         task_type: 'custom',
         style: 'collaborative',
@@ -215,7 +214,6 @@ export default function ChatPage() {
       setTaskId(task.id);
       refreshPastTasks();
 
-      // Start the call
       const callResult = await startCall(task.id);
 
       if (!callResult.ok) {
@@ -271,13 +269,29 @@ export default function ChatPage() {
     setCallStatus('pending');
     setResearchContext('');
     setAnalysisLoaded(false);
+    setDiscoveryResults([]);
     analysisLoadedRef.current = false;
     thinkingBufferRef.current = '';
     refreshPastTasks();
   }
 
+  function handleCallFromSearch(result: BusinessResult, phone: string) {
+    setPhoneNumber(phone);
+    addMessage({ role: 'user', text: `Call ${result.title || phone}` });
+    // Enrich context with this specific result
+    const snippet = result.snippet || '';
+    const extra = `Selected business: ${result.title || 'Unknown'}\n${snippet}`;
+    setResearchContext((prev) => (prev ? `${prev}\n\n${extra}` : extra));
+    startNegotiation(phone);
+  }
+
+  function handleSkipDiscovery() {
+    setPhase('phone');
+    addMessage({ role: 'user', text: 'I have my own number' });
+    aiReply("No problem. What's the phone number I should call?", 500);
+  }
+
   async function loadPastChat(id: string) {
-    // Clean up current state
     if (socketRef.current) {
       socketRef.current.close();
       socketRef.current = null;
@@ -286,7 +300,6 @@ export default function ChatPage() {
     const newMessages: Message[] = [];
 
     try {
-      // Load task details and transcript in parallel
       const [task, transcriptRes] = await Promise.all([
         getTask(id),
         getTaskTranscript(id).catch(() => null),
@@ -299,9 +312,9 @@ export default function ChatPage() {
       setSessionId(null);
       setResearchContext('');
       setTyping(false);
+      setDiscoveryResults([]);
       thinkingBufferRef.current = '';
 
-      // Build messages from task info
       newMessages.push({ id: 'welcome', role: 'ai', text: 'What would you like me to negotiate?' });
       if (task.objective) {
         newMessages.push({ id: `obj-${Date.now()}`, role: 'user', text: task.objective });
@@ -311,7 +324,6 @@ export default function ChatPage() {
         newMessages.push({ id: `phone-${Date.now()}`, role: 'user', text: task.target_phone });
       }
 
-      // Build transcript messages
       if (transcriptRes?.turns?.length) {
         newMessages.push({ id: `status-connected-${Date.now()}`, role: 'status', text: 'Connected' });
         for (const turn of transcriptRes.turns) {
@@ -325,7 +337,6 @@ export default function ChatPage() {
         newMessages.push({ id: `status-ended-${Date.now()}`, role: 'status', text: 'Call ended' });
       }
 
-      // Try to load analysis
       try {
         const analysis = await getTaskAnalysis(id);
         newMessages.push({ id: `analysis-${Date.now()}`, role: 'analysis', text: '', analysisData: analysis });
@@ -344,6 +355,11 @@ export default function ChatPage() {
     }
   }
 
+  function looksLikePhone(text: string): boolean {
+    const digits = text.replace(/\D/g, '');
+    return digits.length >= 10;
+  }
+
   function handleSend() {
     const text = input.trim();
     if (!text || typing) return;
@@ -353,24 +369,64 @@ export default function ChatPage() {
 
     if (phase === 'objective') {
       setObjective(text);
-      setPhase('phone');
-      aiReply("Got it. What's the phone number I should call?", 800);
 
-      // Fire research in background
+      // Show typing while researching
+      setTyping(true);
+
       searchResearch(text)
         .then((res) => {
+          setTyping(false);
+
           if (res.ok && res.count > 0) {
+            // Build research context from all results
             const snippets = res.results
               .filter((r) => r.snippet)
               .map((r) => `${r.title ?? ''}: ${r.snippet}`)
               .join('\n');
             setResearchContext(snippets);
+
+            // Check if any results have phone numbers
+            const withPhones = res.results.filter((r) => r.phone_numbers && r.phone_numbers.length > 0);
+
+            if (withPhones.length > 0) {
+              setDiscoveryResults(res.results);
+              addMessage({
+                role: 'ai',
+                text: `I found ${withPhones.length} business${withPhones.length === 1 ? '' : 'es'} you can call directly. Pick one, or enter your own number.`,
+              });
+              addMessage({
+                role: 'search-results',
+                text: '',
+                searchResults: res.results,
+              });
+              setPhase('discovery');
+              return;
+            }
+
+            // Results but no phone numbers — fall through to phone phase
             addMessage({ role: 'status', text: `Found ${res.count} relevant result${res.count === 1 ? '' : 's'} for context` });
           }
+
+          // Default: ask for phone
+          setPhase('phone');
+          addMessage({ role: 'ai', text: "Got it. What's the phone number I should call?" });
         })
         .catch(() => {
-          // Research is optional
+          setTyping(false);
+          // Research failed/disabled — ask for phone
+          setPhase('phone');
+          addMessage({ role: 'ai', text: "Got it. What's the phone number I should call?" });
         });
+    } else if (phase === 'discovery') {
+      // In discovery, if user types a phone number, use it
+      if (looksLikePhone(text)) {
+        setPhoneNumber(text);
+        startNegotiation(text);
+      } else {
+        // Treat as a new search or just move to phone phase
+        setPhase('phone');
+        aiReply("What's the phone number I should call?", 400);
+      }
     } else if (phase === 'phone') {
       setPhoneNumber(text);
       startNegotiation(text);
@@ -399,6 +455,18 @@ export default function ChatPage() {
     success: 'bg-emerald-500', partial: 'bg-amber-500', failed: 'bg-red-500', walkaway: 'bg-red-500', unknown: 'bg-gray-300',
   };
 
+  const placeholderText = inputDisabled
+    ? 'Setting up your negotiation...'
+    : phase === 'discovery'
+      ? 'Or type a phone number...'
+      : phase === 'phone'
+        ? 'Enter the phone number...'
+        : phase === 'active'
+          ? 'Send a note...'
+          : phase === 'ended'
+            ? 'Negotiation complete'
+            : 'Describe what you want to negotiate...';
+
   return (
     <div className="flex h-screen bg-[#fafaf9]">
       {/* ── Left Sidebar ──────────────────────────────────────────────── */}
@@ -408,14 +476,14 @@ export default function ChatPage() {
             initial={{ width: 0, opacity: 0 }}
             animate={{ width: 260, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.25, ease }}
             className="shrink-0 h-full bg-white border-r border-gray-200/60 flex flex-col overflow-hidden"
           >
             {/* Sidebar header */}
             <div className="px-3 pt-3.5 pb-2 shrink-0">
               <button
                 onClick={handleNewNegotiation}
-                className="w-full flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-[13px] font-medium text-gray-700 shadow-soft hover:shadow-card hover:border-gray-300 transition-all"
+                className="w-full flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-[13px] font-medium text-gray-700 shadow-soft hover:shadow-card hover:border-gray-300 active:scale-[0.98] transition-all duration-150"
               >
                 <Plus size={14} />
                 New negotiation
@@ -438,13 +506,15 @@ export default function ChatPage() {
                       <button
                         key={t.id}
                         onClick={() => loadPastChat(t.id)}
-                        className={`w-full text-left rounded-lg px-3 py-2 text-[13px] transition-colors group ${
-                          isActive ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'
+                        className={`w-full text-left rounded-lg px-3 py-2 text-[13px] transition-all duration-150 group ${
+                          isActive
+                            ? 'bg-gray-100 text-gray-900 shadow-soft'
+                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
                         }`}
                         title={t.objective}
                       >
                         <div className="flex items-center gap-2">
-                          <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${dot}`} />
+                          <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${dot} transition-colors`} />
                           <span className="truncate flex-1 font-medium">{t.objective || 'Untitled'}</span>
                         </div>
                         <div className="flex items-center gap-1.5 mt-0.5 ml-3.5">
@@ -462,13 +532,13 @@ export default function ChatPage() {
 
             {/* Sidebar footer */}
             <div className="shrink-0 border-t border-gray-100 px-3 py-2.5 flex items-center justify-between">
-              <Link href="/dashboard" className="flex items-center gap-1.5 text-[12px] text-gray-400 hover:text-gray-600 transition-colors">
+              <Link href="/dashboard" className="flex items-center gap-1.5 text-[12px] text-gray-400 hover:text-gray-600 transition-colors duration-150">
                 <BarChart3 size={13} />
                 Dashboard
               </Link>
               <button
                 onClick={() => setSidebarOpen(false)}
-                className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-all duration-150"
               >
                 <PanelLeftClose size={14} />
               </button>
@@ -480,19 +550,19 @@ export default function ChatPage() {
       {/* ── Main area ─────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <header className="flex items-center justify-between bg-white/80 backdrop-blur-xl border-b border-gray-200/60 px-5 py-3.5 shrink-0">
+        <header className="flex items-center justify-between bg-white/80 backdrop-blur-xl border-b border-gray-200/60 px-5 py-3 shrink-0">
           <div className="flex items-center gap-3">
             {!sidebarOpen && (
               <button
                 onClick={() => setSidebarOpen(true)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-all duration-150 hover:bg-gray-100 hover:text-gray-600"
               >
                 <PanelLeft size={16} />
               </button>
             )}
             <Link
               href="/"
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-all duration-150 hover:bg-gray-100 hover:text-gray-600"
             >
               <ArrowLeft size={16} />
             </Link>
@@ -504,6 +574,7 @@ export default function ChatPage() {
               <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.2, ease }}
                 className="flex items-center gap-2"
               >
                 <span className="relative flex h-2 w-2">
@@ -516,7 +587,7 @@ export default function ChatPage() {
             {isOnCall && (
               <button
                 onClick={handleEndCall}
-                className="rounded-full bg-red-50 px-3 py-1 text-[12px] font-medium text-red-600 transition hover:bg-red-100"
+                className="rounded-full bg-red-50 px-3.5 py-1.5 text-[12px] font-medium text-red-600 transition-all duration-150 hover:bg-red-100 active:scale-[0.97]"
               >
                 End call
               </button>
@@ -524,162 +595,167 @@ export default function ChatPage() {
           </div>
         </header>
 
-      {/* Readiness warning banner */}
-      {readinessWarning && (
-        <div className="flex items-center justify-center gap-2 bg-amber-50 border-b border-amber-100 px-4 py-2">
-          <AlertTriangle size={13} className="text-amber-500" />
-          <span className="text-[12px] text-amber-700">{readinessWarning} &mdash; calls may run in dry-run mode</span>
-        </div>
-      )}
+        {/* Readiness warning banner */}
+        {readinessWarning && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="flex items-center justify-center gap-2 bg-amber-50 border-b border-amber-100 px-4 py-2"
+          >
+            <AlertTriangle size={13} className="text-amber-500" />
+            <span className="text-[12px] text-amber-700">{readinessWarning} &mdash; calls may run in dry-run mode</span>
+          </motion.div>
+        )}
 
-      {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-2xl px-5 py-8 space-y-4">
-          <AnimatePresence initial={false}>
-            {messages.map((msg) => (
-              <motion.div
-                key={msg.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-              >
-                {msg.role === 'analysis' && msg.analysisData ? (
-                  <AnalysisCard analysis={msg.analysisData} />
-                ) : msg.role === 'audio' && msg.audioTaskId ? (
-                  <AudioPlayer taskId={msg.audioTaskId} />
-                ) : msg.role === 'status' ? (
-                  <div className="flex justify-center py-2">
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-white border border-gray-200/60 px-3.5 py-1.5 text-[11px] font-medium text-gray-500 shadow-soft">
-                      <Phone size={10} />
-                      {msg.text}
-                    </span>
-                  </div>
-                ) : msg.role === 'user' ? (
-                  <div className="flex justify-end">
-                    <div className="max-w-[75%] rounded-2xl rounded-tr-md bg-gray-900 px-4 py-3 text-[14px] leading-relaxed text-white shadow-card">
-                      {msg.text}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex justify-start items-start gap-2.5">
-                    <div className="h-7 w-7 shrink-0 rounded-full bg-gradient-to-br from-gray-800 to-gray-950 flex items-center justify-center mt-0.5 shadow-soft">
-                      <span className="text-[10px] font-serif italic text-gray-300">k</span>
-                    </div>
-                    <div className="max-w-[75%] rounded-2xl rounded-tl-md bg-white border border-gray-100 px-4 py-3 text-[14px] leading-relaxed text-gray-900 shadow-soft">
-                      {msg.text}
-                    </div>
-                  </div>
-                )}
-              </motion.div>
-            ))}
-          </AnimatePresence>
-
-          {typing && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="flex justify-start items-start gap-2.5"
-            >
-              <div className="h-7 w-7 shrink-0 rounded-full bg-gradient-to-br from-gray-800 to-gray-950 flex items-center justify-center mt-0.5 shadow-soft">
-                <span className="text-[10px] font-serif italic text-gray-300">k</span>
-              </div>
-              <div className="rounded-2xl rounded-tl-md bg-white border border-gray-100 px-4 py-3 shadow-soft">
-                <div className="flex items-center gap-1">
-                  {[0, 1, 2].map((i) => (
-                    <span
-                      key={i}
-                      className="h-1.5 w-1.5 rounded-full bg-gray-400 animate-bounce-dot"
-                      style={{ animationDelay: `${i * 0.16}s` }}
-                    />
-                  ))}
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {/* Post-call actions */}
-          {showNewNegotiation && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex justify-center gap-3 pt-2"
-            >
-              {objective && phoneNumber && (
-                <button
-                  onClick={() => {
-                    if (socketRef.current) { socketRef.current.close(); socketRef.current = null; }
-                    setMessages([
-                      { id: 'welcome', role: 'ai', text: 'What would you like me to negotiate?' },
-                      { id: `obj-${Date.now()}`, role: 'user', text: objective },
-                      { id: `ai-phone-${Date.now()}`, role: 'ai', text: "Got it. What's the phone number I should call?" },
-                      { id: `phone-${Date.now()}`, role: 'user', text: phoneNumber },
-                    ]);
-                    setInput('');
-                    setTyping(false);
-                    setTaskId(null);
-                    setSessionId(null);
-                    setCallStatus('pending');
-                    setResearchContext('');
-                    setAnalysisLoaded(false);
-                    analysisLoadedRef.current = false;
-                    thinkingBufferRef.current = '';
-                    startNegotiation(phoneNumber);
-                  }}
-                  className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-[13px] font-medium text-gray-700 shadow-soft transition-all hover:shadow-card hover:border-gray-300"
+        {/* Messages */}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-2xl px-5 py-8 space-y-3">
+            <AnimatePresence initial={false}>
+              {messages.map((msg) => (
+                <motion.div
+                  key={msg.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, ease }}
                 >
-                  <Phone size={14} />
-                  Call again
-                </button>
-              )}
-              <button
-                onClick={handleNewNegotiation}
-                className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-[13px] font-medium text-gray-700 shadow-soft transition-all hover:shadow-card hover:border-gray-300"
+                  {msg.role === 'analysis' && msg.analysisData ? (
+                    <AnalysisCard analysis={msg.analysisData} />
+                  ) : msg.role === 'audio' && msg.audioTaskId ? (
+                    <AudioPlayer taskId={msg.audioTaskId} />
+                  ) : msg.role === 'search-results' && msg.searchResults ? (
+                    <div className="py-1">
+                      <SearchResultCards
+                        results={msg.searchResults}
+                        onCall={handleCallFromSearch}
+                        onSkip={handleSkipDiscovery}
+                      />
+                    </div>
+                  ) : msg.role === 'status' ? (
+                    <div className="flex justify-center py-1.5">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-white/80 backdrop-blur-sm border border-gray-200/50 px-3 py-1 text-[11px] font-medium text-gray-500 shadow-soft">
+                        <Phone size={9} className="text-gray-400" />
+                        {msg.text}
+                      </span>
+                    </div>
+                  ) : msg.role === 'user' ? (
+                    <div className="flex justify-end">
+                      <div className="max-w-[75%] rounded-2xl rounded-tr-md bg-gray-900 px-4 py-2.5 text-[14px] leading-relaxed text-white shadow-card">
+                        {msg.text}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex justify-start items-start gap-2.5">
+                      <div className="h-7 w-7 shrink-0 rounded-full bg-gradient-to-br from-gray-800 to-gray-950 flex items-center justify-center mt-0.5 shadow-soft">
+                        <span className="text-[10px] font-serif italic text-gray-300">k</span>
+                      </div>
+                      <div className="max-w-[75%] rounded-2xl rounded-tl-md bg-white border border-gray-100 px-4 py-2.5 text-[14px] leading-relaxed text-gray-900 shadow-soft">
+                        {msg.text}
+                      </div>
+                    </div>
+                  )}
+                </motion.div>
+              ))}
+            </AnimatePresence>
+
+            {/* Typing indicator */}
+            {typing && (
+              <motion.div
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2, ease }}
+                className="flex justify-start items-start gap-2.5"
               >
-                <RotateCcw size={14} />
-                New negotiation
-              </button>
-            </motion.div>
-          )}
-        </div>
-      </div>
+                <div className="h-7 w-7 shrink-0 rounded-full bg-gradient-to-br from-gray-800 to-gray-950 flex items-center justify-center mt-0.5 shadow-soft">
+                  <span className="text-[10px] font-serif italic text-gray-300">k</span>
+                </div>
+                <div className="rounded-2xl rounded-tl-md bg-white border border-gray-100 px-4 py-3 shadow-soft">
+                  <div className="flex items-center gap-1">
+                    {[0, 1, 2].map((i) => (
+                      <span
+                        key={i}
+                        className="h-1.5 w-1.5 rounded-full bg-gray-300 animate-bounce-dot"
+                        style={{ animationDelay: `${i * 0.16}s` }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            )}
 
-      {/* Input */}
-      <div className="shrink-0 border-t border-gray-200/60 bg-white px-5 py-4">
-        <form onSubmit={onSubmit} className="mx-auto max-w-2xl">
-          <div className="flex items-end gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-soft transition-all focus-within:border-gray-300 focus-within:shadow-card">
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={onKeyDown}
-              placeholder={
-                inputDisabled
-                  ? 'Setting up your negotiation...'
-                  : phase === 'phone'
-                    ? 'Enter the phone number...'
-                    : phase === 'active'
-                      ? 'Send a note...'
-                      : phase === 'ended'
-                        ? 'Negotiation complete'
-                        : 'Describe what you want to negotiate...'
-              }
-              disabled={inputDisabled || phase === 'ended'}
-              rows={1}
-              className="flex-1 resize-none bg-transparent text-[14px] text-gray-900 placeholder-gray-400 outline-none disabled:text-gray-400"
-              style={{ maxHeight: '120px' }}
-            />
-            <button
-              type="submit"
-              disabled={!input.trim() || inputDisabled || typing || phase === 'ended'}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-900 text-white shadow-soft transition-all hover:bg-gray-700 hover:shadow-card disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none"
-            >
-              <ArrowUp size={15} strokeWidth={2.5} />
-            </button>
+            {/* Post-call actions */}
+            {showNewNegotiation && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2, duration: 0.4, ease }}
+                className="flex justify-center gap-2.5 pt-3"
+              >
+                {objective && phoneNumber && (
+                  <button
+                    onClick={() => {
+                      if (socketRef.current) { socketRef.current.close(); socketRef.current = null; }
+                      setMessages([
+                        { id: 'welcome', role: 'ai', text: 'What would you like me to negotiate?' },
+                        { id: `obj-${Date.now()}`, role: 'user', text: objective },
+                        { id: `ai-phone-${Date.now()}`, role: 'ai', text: "Got it. What's the phone number I should call?" },
+                        { id: `phone-${Date.now()}`, role: 'user', text: phoneNumber },
+                      ]);
+                      setInput('');
+                      setTyping(false);
+                      setTaskId(null);
+                      setSessionId(null);
+                      setCallStatus('pending');
+                      setResearchContext('');
+                      setAnalysisLoaded(false);
+                      setDiscoveryResults([]);
+                      analysisLoadedRef.current = false;
+                      thinkingBufferRef.current = '';
+                      startNegotiation(phoneNumber);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-4 py-2 text-[12.5px] font-medium text-gray-700 shadow-soft transition-all duration-150 hover:shadow-card hover:border-gray-300 active:scale-[0.97]"
+                  >
+                    <Phone size={13} />
+                    Call again
+                  </button>
+                )}
+                <button
+                  onClick={handleNewNegotiation}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-4 py-2 text-[12.5px] font-medium text-gray-700 shadow-soft transition-all duration-150 hover:shadow-card hover:border-gray-300 active:scale-[0.97]"
+                >
+                  <RotateCcw size={13} />
+                  New negotiation
+                </button>
+              </motion.div>
+            )}
           </div>
-        </form>
-      </div>
+        </div>
 
+        {/* Input */}
+        <div className="shrink-0 border-t border-gray-200/60 bg-white/80 backdrop-blur-xl px-5 py-3.5">
+          <form onSubmit={onSubmit} className="mx-auto max-w-2xl">
+            <div className="flex items-end gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-2.5 shadow-soft transition-all duration-200 focus-within:border-gray-300 focus-within:shadow-card">
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={onKeyDown}
+                placeholder={placeholderText}
+                disabled={inputDisabled || phase === 'ended'}
+                rows={1}
+                className="flex-1 resize-none bg-transparent text-[14px] text-gray-900 placeholder-gray-400 outline-none disabled:text-gray-400"
+                style={{ maxHeight: '120px' }}
+              />
+              <button
+                type="submit"
+                disabled={!input.trim() || inputDisabled || typing || phase === 'ended'}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-900 text-white shadow-soft transition-all duration-150 hover:bg-gray-700 hover:shadow-card active:scale-[0.93] disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none"
+              >
+                <ArrowUp size={15} strokeWidth={2.5} />
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   );
