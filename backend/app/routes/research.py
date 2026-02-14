@@ -6,6 +6,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from app.services.research import ExaSearchService
+from app.core.telemetry import timed_step
 
 
 class ResearchRequest(BaseModel):
@@ -36,26 +37,16 @@ router = APIRouter(prefix="/api/research", tags=["research"])
 def get_routes():
     @router.post("", response_model=ResearchResponse)
     async def search_businesses(request: ResearchRequest):
-        service = ExaSearchService()
-        result = await service.search(request.query, limit=request.limit)
-        if "reason" in result:
-            # keep disabled/validation states as explicit but non-fatal
+        with timed_step("api", "search_businesses", details={"query": request.query, "limit": request.limit}):
+            service = ExaSearchService()
+            result = await service.search(request.query, limit=request.limit)
             return ResearchResponse(
                 ok=bool(result.get("results")),
                 enabled=result.get("enabled", False),
-                query=request.query,
+                query=result.get("query", request.query),
                 count=result.get("count", len(result.get("results", []))),
                 results=result.get("results", []),
                 reason=result.get("reason"),
             )
-
-        return ResearchResponse(
-            ok=bool(result.get("results")),
-            enabled=result.get("enabled", False),
-            query=result.get("query", request.query),
-            count=result.get("count", 0),
-            results=result.get("results", []),
-            reason=None,
-        )
 
     return router

@@ -36,7 +36,7 @@ ws_manager = ConnectionManager()
 orchestrator = CallOrchestrator(store, session_manager, ws_manager)
 
 app.include_router(task_routes.get_routes(store, orchestrator))
-app.include_router(ws_routes.get_routes(ws_manager))
+app.include_router(ws_routes.get_routes(ws_manager, orchestrator))
 app.include_router(twilio_routes.get_routes(orchestrator, ws_manager))
 app.include_router(telemetry_routes.get_routes())
 app.include_router(research_routes.get_routes())
