@@ -25,7 +25,7 @@ class _CountingCache:
         from hashlib import sha256
 
         normalized = ":".join(str(part) for part in parts)
-        return f"negotiatai:{namespace}:{sha256(normalized.encode()).hexdigest()}"
+        return f"kiru:{namespace}:{sha256(normalized.encode()).hexdigest()}"
 
     async def ping(self) -> bool:
         self.ping_calls += 1

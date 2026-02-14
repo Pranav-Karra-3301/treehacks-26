@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-NegotiateAI is an AI voice negotiation agent with a FastAPI backend orchestrator and a Next.js dashboard for live monitoring, history, and analysis. It supports outbound phone calls via Twilio, real-time transcription, and LLM-driven negotiation responses.
+kiru is an AI voice negotiation agent with a FastAPI backend orchestrator and a Next.js dashboard for live monitoring, history, and analysis. It supports outbound phone calls via Twilio, real-time transcription, and LLM-driven negotiation responses.
 
 ## Commands
 

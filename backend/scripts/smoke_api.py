@@ -161,7 +161,7 @@ async def run_smoke(base_url: str, task_phone: str, with_ws: bool) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="NegotiateAI backend CLI smoke test")
+    parser = argparse.ArgumentParser(description="kiru backend CLI smoke test")
     parser.add_argument("--base-url", default="http://127.0.0.1:3001")
     parser.add_argument("--phone", default="+15550001111")
     parser.add_argument("--no-websocket", action="store_true", help="skip websocket lifecycle assertions")

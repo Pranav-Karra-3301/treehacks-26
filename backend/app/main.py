@@ -62,7 +62,7 @@ def create_app(
         key_prefix=settings.CACHE_KEY_PREFIX,
     )
     local_orchestrator = orchestrator
-    app = FastAPI(title="NegotiateAI Orchestrator")
+    app = FastAPI(title="kiru Orchestrator")
     if local_orchestrator is None:
         local_orchestrator = CallOrchestrator(
             store=local_store,

@@ -39,7 +39,7 @@ def test_cache_service_roundtrip(monkeypatch) -> None:
             redis_url="redis://localhost:6379/0",
             enabled=True,
             default_ttl_seconds=60,
-            key_prefix="negotiateai",
+            key_prefix="kiru",
         )
 
         assert cache.enabled
@@ -75,7 +75,7 @@ def test_cache_service_key_is_deterministic(monkeypatch) -> None:
         first = cache.key("research", "search", "query", 3)
         second = cache.key("research", "search", "query", 3)
         assert first == second
-        assert first.startswith("negotiatai:")
+        assert first.startswith("kiru:")
 
         third = cache.key("research", "search", "query", 4)
         assert third != first

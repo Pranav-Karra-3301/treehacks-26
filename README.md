@@ -1,6 +1,6 @@
-# NegotiateAI MVP
+# kiru
 
-NegotiateAI is a local-or-API-driven voice negotiation agent scaffold for TreeHacks-style demos.
+kiru is a local-or-API-driven voice negotiation agent scaffold for TreeHacks-style demos.
 It includes a FastAPI orchestrator and a Next.js dashboard for live monitoring, history, and analysis.
 
 ## Repository Layout
