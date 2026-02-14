@@ -31,6 +31,15 @@ def _normalize_openai_endpoint(base_url: str) -> str:
     return f"{base}/v1/chat/completions"
 
 
+def _normalize_anthropic_endpoint(base_url: str) -> str:
+    base = base_url.rstrip("/")
+    if base.endswith("/v1/messages"):
+        return base
+    if base.endswith("/v1"):
+        return f"{base}/messages"
+    return f"{base}/v1/messages"
+
+
 def _build_think_payload(task: Dict[str, Any], endpoint_url: str) -> Dict[str, Any]:
     model = settings.DEEPGRAM_VOICE_AGENT_THINK_MODEL
     provider = settings.DEEPGRAM_VOICE_AGENT_THINK_PROVIDER.lower() if settings.DEEPGRAM_VOICE_AGENT_THINK_PROVIDER else ""
@@ -49,8 +58,11 @@ def _build_think_payload(task: Dict[str, Any], endpoint_url: str) -> Dict[str, A
     elif provider == "anthropic":
         if not model:
             model = settings.ANTHROPIC_MODEL
-        if settings.ANTHROPIC_API_KEY and not think_headers:
-            think_headers["x-api-key"] = settings.ANTHROPIC_API_KEY
+        if not endpoint_url:
+            endpoint_url = _normalize_anthropic_endpoint(settings.ANTHROPIC_BASE_URL)
+        if settings.ANTHROPIC_API_KEY:
+            think_headers.setdefault("anthropic-version", "2023-06-01")
+            think_headers.setdefault("x-api-key", settings.ANTHROPIC_API_KEY)
     elif provider in ("local", "ollama"):
         if not model:
             model = settings.VLLM_MODEL
@@ -72,12 +84,20 @@ def _build_think_payload(task: Dict[str, Any], endpoint_url: str) -> Dict[str, A
         think_headers = {**think_headers}
         think_headers.setdefault("X-Llm-Proxy-Key", settings.LLM_PROXY_API_KEY)
 
+    provider_cfg: Dict[str, Any] = {
+        "type": "open_ai" if provider in {"openai", "local", "ollama"} else provider,
+        "model": model,
+        "temperature": settings.DEEPGRAM_VOICE_AGENT_THINK_TEMPERATURE,
+    }
+
+    # Deepgram's native Anthropic provider expects the key inline, not as
+    # an endpoint header (sending endpoint-with-headers-but-no-url causes
+    # UNPARSABLE_CLIENT_MESSAGE).
+    if provider == "anthropic" and settings.ANTHROPIC_API_KEY:
+        provider_cfg["api_key"] = settings.ANTHROPIC_API_KEY
+
     think: Dict[str, Any] = {
-        "provider": {
-            "type": "open_ai" if provider in {"openai", "local", "ollama"} else provider,
-            "model": model,
-            "temperature": settings.DEEPGRAM_VOICE_AGENT_THINK_TEMPERATURE,
-        },
+        "provider": provider_cfg,
         "prompt": build_negotiation_prompt(task),
     }
 

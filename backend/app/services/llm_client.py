@@ -19,6 +19,15 @@ def _normalize_openai_chat_endpoint(base_url: str) -> str:
     return f"{base}/v1/chat/completions"
 
 
+def _normalize_anthropic_endpoint(base_url: str) -> str:
+    normalized_base = base_url.rstrip("/")
+    if normalized_base.endswith("/v1/messages"):
+        return normalized_base
+    if normalized_base.endswith("/v1"):
+        return f"{normalized_base}/messages"
+    return f"{normalized_base}/v1/messages"
+
+
 FALLBACK_RESPONSES = [
     "Sorry, I missed that -- could you say that again?",
     "Hey, I think we had a little connection issue. What was that last part?",
@@ -134,6 +143,7 @@ class AnthropicProvider:
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self._model = model
+        self._endpoint = _normalize_anthropic_endpoint(self._base_url)
 
     def _prepare_messages(self, messages: List[Dict[str, str]]) -> tuple[str, List[Dict[str, str]]]:
         system_prompt = ""
@@ -174,7 +184,7 @@ class AnthropicProvider:
             "anthropic-dangerous-direct-browser-access": "false",
         }
 
-        url = f"{self._base_url}/messages"
+        url = self._endpoint
         async with httpx.AsyncClient(timeout=None, headers=headers) as client:
             try:
                 async with client.stream("POST", url, json=payload) as resp:
@@ -267,9 +277,18 @@ class LLMClient:
         except Exception as exc:
             log_event(
                 "llm",
-                "stream_completion_fallback",
-                status="fallback",
+                "stream_completion_error",
+                status="error",
                 details={"provider": self._provider_name, "error": f"{type(exc).__name__}: {exc}"},
+            )
+            log_event(
+                "llm",
+                "stream_completion_fallback",
+                status="warning",
+                details={
+                    "provider": self._provider_name,
+                    "reason": "using_fallback_response",
+                },
             )
             # Keep the agent alive if the configured API is unavailable.
             for token in _fallback_stream():
