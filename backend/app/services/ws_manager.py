@@ -4,6 +4,7 @@ import json
 from typing import Dict, List
 
 from fastapi import WebSocket
+from app.core.telemetry import timed_step
 
 
 class ConnectionManager:
@@ -26,8 +27,9 @@ class ConnectionManager:
     async def broadcast(self, session_id: str, event: Dict) -> None:
         payload = json.dumps(event, default=str)
         connections = self._active_connections.get(session_id, [])
-        for connection in list(connections):
-            try:
-                await connection.send_text(payload)
-            except Exception:
-                self.disconnect(session_id, connection)
+        with timed_step("websocket", "broadcast", session_id=session_id, details={"peer_count": len(connections)}):
+            for connection in list(connections):
+                try:
+                    await connection.send_text(payload)
+                except Exception:
+                    self.disconnect(session_id, connection)

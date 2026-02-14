@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from app.models.schemas import CallStatus
+from app.core.telemetry import timed_step
 
 
 @dataclass
@@ -30,39 +31,43 @@ class SessionManager:
     async def create_session(self, task_id: str) -> CallSession:
         session_id = str(uuid4())
         session = CallSession(session_id=session_id, task_id=task_id, status="pending")
-        async with self._lock:
-            self._sessions[session_id] = session
+        with timed_step("session", "create", task_id=task_id, details={"session_id": session_id}):
+            async with self._lock:
+                self._sessions[session_id] = session
         return session
 
     async def get(self, session_id: str) -> Optional[CallSession]:
         return self._sessions.get(session_id)
 
     async def set_status(self, session_id: str, status: CallStatus) -> Optional[CallSession]:
-        async with self._lock:
-            session = self._sessions.get(session_id)
-            if not session:
-                return None
-            session.status = status
-            if status == "active" and not session.started_at:
-                session.started_at = datetime.utcnow()
-            if status == "ended":
-                session.ended_at = datetime.utcnow()
-            return session
+        with timed_step("session", "set_status", session_id=session_id, details={"status": status}):
+            async with self._lock:
+                session = self._sessions.get(session_id)
+                if not session:
+                    return None
+                session.status = status
+                if status == "active" and not session.started_at:
+                    session.started_at = datetime.utcnow()
+                if status == "ended":
+                    session.ended_at = datetime.utcnow()
+                return session
 
     async def append_transcript(self, session_id: str, turn: Dict[str, Any]) -> None:
-        async with self._lock:
-            session = self._sessions.get(session_id)
-            if not session:
-                return
-            session.transcript.append(turn)
-            session.metadata["last_transcript_at"] = datetime.utcnow().isoformat()
+        with timed_step("session", "append_transcript", session_id=session_id, details={"speaker": turn.get("speaker")}):
+            async with self._lock:
+                session = self._sessions.get(session_id)
+                if not session:
+                    return
+                session.transcript.append(turn)
+                session.metadata["last_transcript_at"] = datetime.utcnow().isoformat()
 
     async def append_conversation(self, session_id: str, message: Dict[str, Any]) -> None:
-        async with self._lock:
-            session = self._sessions.get(session_id)
-            if not session:
-                return
-            session.conversation.append(message)
+        with timed_step("session", "append_conversation", session_id=session_id, details={"role": message.get("role")}):
+            async with self._lock:
+                session = self._sessions.get(session_id)
+                if not session:
+                    return
+                session.conversation.append(message)
 
     async def dump_conversation(self, session_id: str) -> List[Dict[str, Any]]:
         session = self._sessions.get(session_id)

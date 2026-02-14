@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import AsyncGenerator, Dict, Iterable, List
 
 import httpx
 
 from app.core.config import settings
+from app.core.telemetry import log_event
 
 
 FALLBACK_TOKENS = [
@@ -43,6 +45,11 @@ class OpenAICompatibleProvider:
     async def stream_completion(
         self, messages: List[Dict[str, str]], max_tokens: int = 128
     ) -> AsyncGenerator[str, None]:
+        start_ts = time.perf_counter()
+        started_at = time.perf_counter()
+        first_token_ms = None
+        token_count = 0
+        total_chars = 0
         payload = {
             "model": self._model,
             "messages": messages,
@@ -56,21 +63,42 @@ class OpenAICompatibleProvider:
 
         url = f"{self._base_url}/v1/chat/completions"
         async with httpx.AsyncClient(timeout=None, headers=headers) as client:
-            async with client.stream("POST", url, json=payload) as resp:
-                async for raw_line in resp.aiter_lines():
-                    if not raw_line.startswith("data:"):
-                        continue
-                    line = raw_line.removeprefix("data:").strip()
-                    if line == "[DONE]":
-                        break
-                    if not line:
-                        continue
-                    data = json.loads(line)
-                    choice = data["choices"][0]
-                    delta = choice.get("delta", {})
-                    content = delta.get("content")
-                    if content:
-                        yield content
+            try:
+                async with client.stream("POST", url, json=payload) as resp:
+                    async for raw_line in resp.aiter_lines():
+                        if not raw_line.startswith("data:"):
+                            continue
+                        line = raw_line.removeprefix("data:").strip()
+                        if line == "[DONE]":
+                            break
+                        if not line:
+                            continue
+                        data = json.loads(line)
+                        choice = data["choices"][0]
+                        delta = choice.get("delta", {})
+                        content = delta.get("content")
+                        if content:
+                            if first_token_ms is None:
+                                first_token_ms = (time.perf_counter() - started_at) * 1000.0
+                            token_count += 1
+                            total_chars += len(content)
+                            yield content
+            finally:
+                total_ms = (time.perf_counter() - start_ts) * 1000.0
+                log_event(
+                    "llm",
+                    "stream_completion",
+                    duration_ms=total_ms,
+                    details={
+                        "provider": "openai_compatible",
+                        "model": self._model,
+                        "endpoint": url,
+                        "token_count": token_count,
+                        "chars": total_chars,
+                        "first_token_ms": round(first_token_ms, 3) if first_token_ms is not None else None,
+                        "max_tokens": max_tokens,
+                    },
+                )
 
 
 class AnthropicProvider:
@@ -97,6 +125,11 @@ class AnthropicProvider:
     async def stream_completion(
         self, messages: List[Dict[str, str]], max_tokens: int = 128
     ) -> AsyncGenerator[str, None]:
+        start_ts = time.perf_counter()
+        started_at = time.perf_counter()
+        first_token_ms = None
+        token_count = 0
+        total_chars = 0
         system_prompt, conversation = self._prepare_messages(messages)
 
         payload = {
@@ -117,28 +150,49 @@ class AnthropicProvider:
 
         url = f"{self._base_url}/messages"
         async with httpx.AsyncClient(timeout=None, headers=headers) as client:
-            async with client.stream("POST", url, json=payload) as resp:
-                current_event = ""
-                async for raw_line in resp.aiter_lines():
-                    if raw_line.startswith("event:"):
-                        current_event = raw_line.removeprefix("event:").strip()
-                        continue
-                    if not raw_line.startswith("data:"):
-                        continue
+            try:
+                async with client.stream("POST", url, json=payload) as resp:
+                    current_event = ""
+                    async for raw_line in resp.aiter_lines():
+                        if raw_line.startswith("event:"):
+                            current_event = raw_line.removeprefix("event:").strip()
+                            continue
+                        if not raw_line.startswith("data:"):
+                            continue
 
-                    line = raw_line.removeprefix("data:").strip()
-                    if not line:
-                        continue
-                    data = json.loads(line)
+                        line = raw_line.removeprefix("data:").strip()
+                        if not line:
+                            continue
+                        data = json.loads(line)
 
-                    if data.get("type") == "message_stop" or current_event == "message_stop":
-                        break
+                        if data.get("type") == "message_stop" or current_event == "message_stop":
+                            break
 
-                    if data.get("type") == "content_block_delta":
-                        delta = data.get("delta", {})
-                        text = delta.get("text") if isinstance(delta, dict) else None
-                        if text:
-                            yield text
+                        if data.get("type") == "content_block_delta":
+                            delta = data.get("delta", {})
+                            text = delta.get("text") if isinstance(delta, dict) else None
+                            if text:
+                                if first_token_ms is None:
+                                    first_token_ms = (time.perf_counter() - started_at) * 1000.0
+                                token_count += 1
+                                total_chars += len(text)
+                                yield text
+            finally:
+                total_ms = (time.perf_counter() - start_ts) * 1000.0
+                log_event(
+                    "llm",
+                    "stream_completion",
+                    duration_ms=total_ms,
+                    details={
+                        "provider": "anthropic",
+                        "model": self._model,
+                        "endpoint": url,
+                        "token_count": token_count,
+                        "chars": total_chars,
+                        "first_token_ms": round(first_token_ms, 3) if first_token_ms is not None else None,
+                        "max_tokens": max_tokens,
+                    },
+                )
 
 
 class LLMClient:
@@ -175,7 +229,13 @@ class LLMClient:
             async for token in self._provider.stream_completion(messages, max_tokens=max_tokens):
                 yield token
             return
-        except Exception:
+        except Exception as exc:
+            log_event(
+                "llm",
+                "stream_completion_fallback",
+                status="fallback",
+                details={"provider": self._provider_name, "error": f"{type(exc).__name__}: {exc}"},
+            )
             # Keep the agent alive if the configured API is unavailable.
             for token in _fallback_stream():
                 yield token

@@ -3,8 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Tuple
 
-from app.models.schemas import TranscriptTurn
+from app.models.schemas import CallOutcome, TranscriptTurn
 from app.services.llm_client import LLMClient
+from app.core.telemetry import timed_step
 
 
 SYSTEM_PROMPT = """
@@ -49,26 +50,75 @@ class NegotiationEngine:
         task: Dict[str, Any],
         user_utterance: str,
     ) -> Tuple[str, str]:
-        conversation = session.get("conversation", [])
-        turn_count = len([m for m in conversation if m.get("role") == "assistant"])
-        system_prompt = self.build_system_prompt(task, turn_count)
+        with timed_step(
+            "negotiation",
+            "respond",
+            task_id=task.get("id"),
+            details={"utterance_chars": len(user_utterance)},
+        ):
+            conversation = session.get("conversation", [])
+            turn_count = len([m for m in conversation if m.get("role") == "assistant"])
+            system_prompt = self.build_system_prompt(task, turn_count)
 
-        messages = [{"role": "system", "content": system_prompt}]
-        messages.extend(conversation)
-        messages.append({"role": "user", "content": user_utterance})
+            messages = [{"role": "system", "content": system_prompt}]
+            messages.extend(conversation)
+            messages.append({"role": "user", "content": user_utterance})
 
-        generated = []
-        async for token in self._llm.stream_completion(messages):
-            generated.append(token)
+            generated = []
+            async for token in self._llm.stream_completion(messages):
+                generated.append(token)
 
-        response = "".join(generated).strip()
-        return response, system_prompt
+            response = "".join(generated).strip()
+            return response, system_prompt
 
     async def summarize_turn(self, transcript: List[TranscriptTurn]) -> Dict[str, Any]:
-        """Post-call analysis placeholder. Keep in-session summary lightweight."""
-        return {
-            "turn_count": len(transcript),
-            "generated_at": datetime.utcnow().isoformat(),
-            "summary": "Post-call analysis not yet fully implemented in MVP.",
-            "outcome": "unknown",
-        }
+        """Compute lightweight post-call summary from the transcript."""
+        with timed_step("negotiation", "summarize_turn", details={"transcript_lines": len(transcript)}):
+            speaker_turns = [turn for turn in transcript]
+            caller_turns = [turn for turn in speaker_turns if turn.speaker == "caller"]
+            agent_turns = [turn for turn in speaker_turns if turn.speaker == "agent"]
+            transcript_text = " ".join((turn.content or "").strip() for turn in speaker_turns).lower()
+            total_chars = sum(len((turn.content or "")) for turn in speaker_turns)
+
+            concessions: List[Dict[str, Any]] = []
+            tactics: List[str] = []
+            score = 0
+            outcome: CallOutcome = "unknown"
+
+            if "good faith" in transcript_text or "compromise" in transcript_text:
+                concessions.append({"type": "intent", "detail": "Negotiation language used"})
+                tactics.append("empathize_then_reframe")
+                score += 2
+            if "can't" in transcript_text or "cannot" in transcript_text:
+                tactics.append("firm_constraints")
+            if "offer" in transcript_text:
+                concessions.append({"type": "offer", "detail": "Offer-related terms discussed"})
+                score += 1
+            if "thank you" in transcript_text or "thanks" in transcript_text:
+                tactics.append("rapport_building")
+
+            if len(agent_turns) > len(caller_turns):
+                outcome = "partial"
+            if score >= 3 and len(caller_turns) <= len(agent_turns):
+                outcome = "success"
+
+            summary = (
+                f"Transcript contained {len(speaker_turns)} turns, "
+                f"{len(caller_turns)} from caller and {len(agent_turns)} from agent."
+            )
+
+            return {
+                "turn_count": len(speaker_turns),
+                "generated_at": datetime.utcnow().isoformat(),
+                "summary": summary,
+                "outcome": outcome,
+                "concessions": concessions,
+                "tactics": tactics,
+                "score": max(0, min(score, 100)),
+                "details": {
+                    "total_chars": total_chars,
+                    "contains_offer": "offer" in transcript_text,
+                    "contains_constraints": ("can't" in transcript_text) or ("cannot" in transcript_text),
+                    "length_seconds_estimate": round(total_chars / 4.0, 2),
+                },
+            }
