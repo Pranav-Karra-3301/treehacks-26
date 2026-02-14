@@ -64,9 +64,15 @@ class AnalysisRequest(BaseModel):
 class AnalysisPayload(BaseModel):
     summary: str
     outcome: CallOutcome
+    outcome_reasoning: str = ""
     concessions: List[Dict[str, Any]] = Field(default_factory=list)
     tactics: List[str] = Field(default_factory=list)
+    tactics_used: List[Dict[str, Any]] = Field(default_factory=list)
     score: int = 0
+    score_reasoning: str = ""
+    rapport_quality: str = ""
+    key_moments: List[str] = Field(default_factory=list)
+    improvement_suggestions: List[str] = Field(default_factory=list)
     details: Dict[str, Any] = Field(default_factory=dict)
 
 

@@ -35,7 +35,7 @@ npm run lint         # ESLint
 
 ### Docker (both services)
 ```bash
-docker-compose up --build
+scripts/dev-up.sh
 ```
 
 ### Tests

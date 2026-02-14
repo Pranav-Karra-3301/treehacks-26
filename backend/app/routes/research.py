@@ -5,7 +5,9 @@ from typing import List, Optional
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from app.core.config import settings
 from app.services.research import ExaSearchService
+from app.services.cache import CacheService
 from app.core.telemetry import timed_step
 
 
@@ -31,14 +33,37 @@ class ResearchResponse(BaseModel):
     reason: Optional[str] = None
 
 
-def get_routes():
+def get_routes(cache: Optional[CacheService] = None):
     router = APIRouter(prefix="/api/research", tags=["research"])
+    local_cache = cache
 
     @router.post("", response_model=ResearchResponse)
     async def search_businesses(request: ResearchRequest):
-        with timed_step("api", "search_businesses", details={"query": request.query, "limit": request.limit}):
+        trimmed_query = request.query.strip()
+        normalized_limit = request.limit if request.limit is not None else settings.EXA_SEARCH_RESULTS_LIMIT
+        cache_key = None
+        if local_cache is not None:
+            cache_key = local_cache.key("research", "search", normalized_limit, trimmed_query.lower())
+            cached = await local_cache.get_json(cache_key)
+            if cached is not None:
+                return ResearchResponse(
+                    ok=bool(cached.get("results")),
+                    enabled=cached.get("enabled", False),
+                    query=cached.get("query", trimmed_query),
+                    count=cached.get("count", len(cached.get("results", []))),
+                    results=cached.get("results", []),
+                    reason=cached.get("reason"),
+                )
+
+        with timed_step("api", "search_businesses", details={"query": trimmed_query, "limit": normalized_limit}):
             service = ExaSearchService()
-            result = await service.search(request.query, limit=request.limit)
+            result = await service.search(trimmed_query, limit=normalized_limit)
+            if cache_key is not None:
+                await local_cache.set_json(
+                    cache_key,
+                    result,
+                    ttl_seconds=settings.CACHE_RESEARCH_TTL_SECONDS,
+                )
             return ResearchResponse(
                 ok=bool(result.get("results")),
                 enabled=result.get("enabled", False),

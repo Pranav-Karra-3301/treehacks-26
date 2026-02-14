@@ -159,7 +159,16 @@ class CallOrchestrator:
 
             if not from_status_callback:
                 if call_sid:
-                    await self._twilio.end_call(call_sid)
+                    try:
+                        await self._twilio.end_call(call_sid)
+                    except Exception as exc:
+                        log_event(
+                            "orchestrator",
+                            "end_call_warning",
+                            task_id=task_id,
+                            status="warning",
+                            details={"call_sid": call_sid, "error": f"{type(exc).__name__}: {exc}"},
+                        )
             self._clear_task_call_sid(task_id)
 
     async def get_task_id_for_call_sid(self, call_sid: str) -> Optional[str]:

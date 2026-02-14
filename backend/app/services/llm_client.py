@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import random
 import time
 from typing import AsyncGenerator, Dict, Iterable, List
 
@@ -10,27 +11,18 @@ from app.core.config import settings
 from app.core.telemetry import log_event
 
 
-FALLBACK_TOKENS = [
-    "I",
-    "can",
-    "help",
-    " with",
-    "you",
-    " now.",
-    "Let\'s",
-    "focus",
-    "on",
-    "the",
-    "next",
-    "step",
-    "in",
-    "this",
-    "call.",
+FALLBACK_RESPONSES = [
+    "Sorry, I missed that -- could you say that again?",
+    "Hey, I think we had a little connection issue. What was that last part?",
+    "I didn't quite catch that. Could you repeat it?",
+    "Oh sorry, you cut out for a second there. One more time?",
+    "My signal's being weird -- what did you say?",
 ]
 
 
 def _fallback_stream() -> Iterable[str]:
-    for word in FALLBACK_TOKENS:
+    response = random.choice(FALLBACK_RESPONSES)
+    for word in response.split():
         yield word + " "
 
 
@@ -43,7 +35,7 @@ class OpenAICompatibleProvider:
         self._model = model
 
     async def stream_completion(
-        self, messages: List[Dict[str, str]], max_tokens: int = 128
+        self, messages: List[Dict[str, str]], max_tokens: int = 200
     ) -> AsyncGenerator[str, None]:
         start_ts = time.perf_counter()
         started_at = time.perf_counter()
@@ -123,7 +115,7 @@ class AnthropicProvider:
         return system_prompt, conversation
 
     async def stream_completion(
-        self, messages: List[Dict[str, str]], max_tokens: int = 128
+        self, messages: List[Dict[str, str]], max_tokens: int = 200
     ) -> AsyncGenerator[str, None]:
         start_ts = time.perf_counter()
         started_at = time.perf_counter()
@@ -223,7 +215,7 @@ class LLMClient:
             raise ValueError(f"Unsupported LLM provider '{self._provider_name}'")
 
     async def stream_completion(
-        self, messages: List[Dict[str, str]], max_tokens: int = 128
+        self, messages: List[Dict[str, str]], max_tokens: int = 200
     ) -> AsyncGenerator[str, None]:
         try:
             async for token in self._provider.stream_completion(messages, max_tokens=max_tokens):

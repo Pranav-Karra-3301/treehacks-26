@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.telemetry import configure_logging, log_event, timed_step
 from app.services.orchestrator import CallOrchestrator
+from app.services.cache import CacheService
 from app.services.session_manager import SessionManager
 from app.services.storage import DataStore
 from app.services.ws_manager import ConnectionManager
@@ -31,6 +32,7 @@ def create_app(
     session_manager: Optional[SessionManager] = None,
     ws_manager: Optional[ConnectionManager] = None,
     orchestrator: Optional[CallOrchestrator] = None,
+    cache: Optional[CacheService] = None,
     data_root: str | Path | None = None,
     sqlite_path: str | Path | None = None,
     allowed_origins: Optional[ALLOWED_ORIGINS_TYPE] = None,
@@ -52,6 +54,12 @@ def create_app(
     local_store = store or DataStore(data_root=data_root, sqlite_path=sqlite_path)
     local_session_manager = session_manager or SessionManager()
     local_ws_manager = ws_manager or ConnectionManager()
+    local_cache = cache or CacheService(
+        redis_url=settings.REDIS_URL,
+        enabled=settings.CACHE_ENABLED,
+        default_ttl_seconds=settings.CACHE_DEFAULT_TTL_SECONDS,
+        key_prefix=settings.CACHE_KEY_PREFIX,
+    )
     local_orchestrator = orchestrator
     if local_orchestrator is None:
         local_orchestrator = CallOrchestrator(
@@ -66,13 +74,14 @@ def create_app(
     app.state.session_manager = local_session_manager
     app.state.ws_manager = local_ws_manager
     app.state.orchestrator = local_orchestrator
+    app.state.cache = local_cache
 
-    app.include_router(task_routes.get_routes(local_store, local_orchestrator))
+    app.include_router(task_routes.get_routes(local_store, local_orchestrator, local_cache))
     app.include_router(ws_routes.get_routes(local_ws_manager, local_orchestrator))
     app.include_router(twilio_routes.get_routes(local_orchestrator, local_ws_manager))
     app.include_router(telemetry_routes.get_routes())
-    app.include_router(research_routes.get_routes())
-    app.include_router(system_routes.get_routes())
+    app.include_router(research_routes.get_routes(local_cache))
+    app.include_router(system_routes.get_routes(local_cache))
 
     app.add_middleware(
         CORSMiddleware,

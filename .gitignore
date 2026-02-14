@@ -4,6 +4,10 @@ __pycache__/
 *.so
 .venv/
 .env
+*.env.local
+.coverage
+.coverage.*
+.pytest_cache/
 
 # Node
 node_modules/

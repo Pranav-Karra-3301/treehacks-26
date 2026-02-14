@@ -44,6 +44,8 @@ class Settings:
     ANTHROPIC_BASE_URL = os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
     ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+    LLM_MAX_TOKENS_VOICE = int(os.getenv("LLM_MAX_TOKENS_VOICE", "200"))
+    LLM_MAX_TOKENS_ANALYSIS = int(os.getenv("LLM_MAX_TOKENS_ANALYSIS", "1024"))
 
     # Deepgram / STT / TTS
     DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY", "")

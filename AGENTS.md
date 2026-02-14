@@ -25,7 +25,7 @@ This repo is a two-service app.
 - `cd frontend && npm run dev` — run dashboard at `http://localhost:3000`.
 - `cd frontend && npm run build` — production build sanity check.
 - `cd frontend && npm run lint` — run frontend linting.
-- `docker-compose up --build` — start both services together.
+- `scripts/dev-up.sh` — validate local environment and start both services together.
 - `cd backend && ./scripts/run-tests.sh` — run backend test suite and grouped targets (`unit`, `integration`, `ws`, `benchmark`).
 - `cd backend && pytest -q -m unit` — fast unit regression set.
 - `cd backend && pytest -q -m integration` — API/integration tests with mocked providers.

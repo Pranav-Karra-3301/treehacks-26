@@ -8,6 +8,7 @@ import websockets
 
 from app.core.config import settings
 from app.core.telemetry import log_event, timed_step
+from app.services.prompt_builder import build_negotiation_prompt, build_greeting
 
 
 def _coerce_headers(raw: str) -> Dict[str, str]:
@@ -27,26 +28,6 @@ def _normalize_openai_endpoint(base_url: str) -> str:
     if base.endswith("/v1"):
         return f"{base}/chat/completions"
     return f"{base}/v1/chat/completions"
-
-
-def _build_negotiation_prompt(task: Dict[str, Any]) -> str:
-    style = task.get("style", "collaborative")
-    objective = task.get("objective", "")
-    context = task.get("context", "")
-    walkaway = task.get("walkaway_point", "No walkaway point configured")
-    persona = task.get("agent_persona", "Polite but firm negotiation agent")
-    opening = task.get("opening_line", "Hi, thanks for taking my call.")
-    return (
-        "You are a live phone negotiation agent. Keep responses short (1-3 sentences), "
-        "natural, and practical. Never reveal you are an AI unless explicitly asked."
-        "\n\n"
-        f"Style: {style}.\n"
-        f"Persona: {persona}.\n"
-        f"Primary objective: {objective}.\n"
-        f"Context: {context}.\n"
-        f"Walkaway point: {walkaway}.\n"
-        f"Opening line: {opening}."
-    )
 
 
 def _build_think_payload(task: Dict[str, Any], endpoint_url: str) -> Dict[str, Any]:
@@ -86,7 +67,7 @@ def _build_think_payload(task: Dict[str, Any], endpoint_url: str) -> Dict[str, A
             "model": model,
             "temperature": settings.DEEPGRAM_VOICE_AGENT_THINK_TEMPERATURE,
         },
-        "prompt": _build_negotiation_prompt(task),
+        "prompt": build_negotiation_prompt(task),
     }
 
     if endpoint_url:
@@ -191,7 +172,7 @@ class DeepgramVoiceAgentSession:
                 "speak": {
                     "provider": {"type": "deepgram", "model": settings.DEEPGRAM_VOICE_AGENT_SPEAK_MODEL}
                 },
-                "greeting": _build_negotiation_prompt(self._task),
+                "greeting": build_greeting(self._task),
             },
             "tags": [self._task_id],
         }
