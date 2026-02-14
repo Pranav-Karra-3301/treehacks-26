@@ -99,6 +99,7 @@ def create_app(
         route = request.scope.get("route")
         route_path = getattr(route, "path", None)
         action = f"{request.method} {route_path or request.url.path}"
+        should_skip_request_log = request.url.path in settings.LOG_SKIP_REQUEST_PATHS
         details = {
             "request_id": request_id,
             "route": route_path or str(request.url.path),
@@ -136,13 +137,14 @@ def create_app(
             details["response_content_length"] = (
                 response.headers.get("content-length") if isinstance(response, Response) else None
             )
-            log_event(
-                "http",
-                action,
-                status="ok",
-                duration_ms=elapsed_ms,
-                details=details,
-            )
+            if not should_skip_request_log or details["status_code"] >= 400:
+                log_event(
+                    "http",
+                    action,
+                    status="ok",
+                    duration_ms=elapsed_ms,
+                    details=details,
+                )
             return response
 
     @app.get("/health")

@@ -17,7 +17,7 @@ from app.core.config import settings
 _LOGGER = logging.getLogger("negotiateai")
 _METRICS_LOCK = threading.Lock()
 _NOISY_METRIC_COUNTERS: Dict[str, int] = {}
-_NOISY_ACTIONS = {"media_event", "save_audio_chunk", "media_mark_received"}
+_NOISY_ACTIONS = set(settings.LOG_NOISY_ACTIONS or [])
 
 
 def _metric_file() -> Path:
@@ -32,8 +32,14 @@ def _log_file() -> Path:
 def _should_emit_console_log(action: str, status: str) -> bool:
     if status != "ok":
         return True
+
+    if not _NOISY_ACTIONS:
+        _NOISY_ACTIONS.update(settings.LOG_NOISY_ACTIONS or ())
     if action not in _NOISY_ACTIONS:
         return True
+
+    if settings.LOG_NOISY_EVENTS_EVERY_N <= 0:
+        return False
 
     try:
         sample_every = max(1, int(settings.LOG_NOISY_EVENTS_EVERY_N))

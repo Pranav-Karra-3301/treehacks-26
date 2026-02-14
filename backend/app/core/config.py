@@ -84,6 +84,25 @@ class Settings:
         LOG_NOISY_EVENTS_EVERY_N = int(os.getenv("LOG_NOISY_EVENTS_EVERY_N", "120"))
     except ValueError:
         LOG_NOISY_EVENTS_EVERY_N = 120
+    if LOG_NOISY_EVENTS_EVERY_N < 0:
+        LOG_NOISY_EVENTS_EVERY_N = 0
+
+    LOG_NOISY_ACTIONS = tuple(
+        action.strip()
+        for action in os.getenv(
+            "LOG_NOISY_ACTIONS",
+            "media_event,save_audio_chunk,media_mark_received",
+        ).split(",")
+        if action.strip()
+    )
+    if not LOG_NOISY_ACTIONS:
+        LOG_NOISY_ACTIONS = ("media_event", "save_audio_chunk", "media_mark_received")
+
+    LOG_SKIP_REQUEST_PATHS = tuple(
+        path.strip()
+        for path in os.getenv("LOG_SKIP_REQUEST_PATHS", "/health").split(",")
+        if path.strip()
+    )
 
     # Exa / web lookup
     EXA_SEARCH_ENABLED = (

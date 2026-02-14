@@ -87,6 +87,8 @@ Optional tuning:
 - `CACHE_ANALYSIS_TTL_SECONDS`
 - `LOG_LEVEL=INFO|DEBUG|WARNING|ERROR`
 - `LOG_NOISY_EVENTS_EVERY_N=120`
+- `LOG_NOISY_ACTIONS=media_event,save_audio_chunk,media_mark_received`
+- `LOG_SKIP_REQUEST_PATHS=/health`
 
 ### LLM provider examples
 
@@ -145,6 +147,8 @@ Telemetry output lives under `backend/data/service.log` and `backend/data/teleme
 - `media_event`
 - `save_audio_chunk`
 - `twilio.media_mark_received`
+
+Set `LOG_NOISY_EVENTS_EVERY_N=0` to suppress all noisy ok-status events while keeping warnings/errors.
 
 Run this before starting the stack to catch missing call keys:
 
