@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 
 from app.core.config import settings
-from app.core.telemetry import log_event
+from app.core.telemetry import log_event, timed_step
 
 
 class ExaSearchService:
@@ -60,41 +60,46 @@ class ExaSearchService:
             "Authorization": f"Bearer {self._api_key}",
         }
 
-        try:
-            async with httpx.AsyncClient(timeout=15.0, headers=headers) as client:
-                resp = await client.post(settings.EXA_SEARCH_URL, json=payload)
-                resp.raise_for_status()
-                data = resp.json()
-        except httpx.HTTPStatusError as exc:
-            log_event(
-                "research",
-                "exa_search_http_error",
-                status="error",
-                details={
-                    "status_code": exc.response.status_code,
-                    "response": exc.response.text[:500],
+        with timed_step(
+            "research",
+            "exa_search",
+            details={"query": trimmed_query, "limit": limit},
+        ):
+            try:
+                async with httpx.AsyncClient(timeout=15.0, headers=headers) as client:
+                    resp = await client.post(settings.EXA_SEARCH_URL, json=payload)
+                    resp.raise_for_status()
+                    data = resp.json()
+            except httpx.HTTPStatusError as exc:
+                log_event(
+                    "research",
+                    "exa_search_http_error",
+                    status="error",
+                    details={
+                        "status_code": exc.response.status_code,
+                        "response": exc.response.text[:500],
+                        "query": trimmed_query,
+                    },
+                )
+                return {
+                    "enabled": True,
                     "query": trimmed_query,
-                },
-            )
-            return {
-                "enabled": True,
-                "query": trimmed_query,
-                "results": [],
-                "reason": f"http_{exc.response.status_code}",
-            }
-        except Exception as exc:
-            log_event(
-                "research",
-                "exa_search_error",
-                status="error",
-                details={"error": f"{type(exc).__name__}: {exc}", "query": trimmed_query},
-            )
-            return {
-                "enabled": True,
-                "query": trimmed_query,
-                "results": [],
-                "reason": f"{type(exc).__name__}: {exc}",
-            }
+                    "results": [],
+                    "reason": f"http_{exc.response.status_code}",
+                }
+            except Exception as exc:
+                log_event(
+                    "research",
+                    "exa_search_error",
+                    status="error",
+                    details={"error": f"{type(exc).__name__}: {exc}", "query": trimmed_query},
+                )
+                return {
+                    "enabled": True,
+                    "query": trimmed_query,
+                    "results": [],
+                    "reason": f"{type(exc).__name__}: {exc}",
+                }
 
         results = self._normalize_results(data)
         return {

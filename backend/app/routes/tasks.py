@@ -145,7 +145,7 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
                 await local_cache.delete(_task_cache_key(task_id))
                 await local_cache.delete(_tasks_cache_key())
                 await local_cache.delete(_analysis_cache_key(task_id))
-            await orchestrator.stop_task_call(task_id)
+            await orchestrator.stop_task_call(task_id, stop_reason="user_stop")
             return ActionResponse(ok=True, message="call stopped")
 
     @router.get("/{task_id}/audio")
@@ -207,6 +207,24 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
             return {
                 "task_id": task_id,
                 "files": _build_recording_files(call_dir),
+            }
+
+    @router.get("/{task_id}/transcript")
+    async def get_transcript(task_id: str):
+        with timed_step("api", "get_transcript", task_id=task_id):
+            row = store.get_task(task_id)
+            if not row:
+                raise HTTPException(status_code=404, detail="Task not found")
+            call_dir = store.get_task_dir(task_id)
+            transcript_path = call_dir / "transcript.json"
+            if not transcript_path.exists():
+                return {"task_id": task_id, "turns": [], "count": 0}
+            with open(transcript_path, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            return {
+                "task_id": task_id,
+                "turns": raw,
+                "count": len(raw),
             }
 
     @router.get("/{task_id}/analysis", response_model=AnalysisPayload)

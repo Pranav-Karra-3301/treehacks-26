@@ -27,13 +27,28 @@ class Settings:
     ]
 
     # LLM provider selection
-    # values: local | openai | anthropic
-    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
+    # values: local | ollama | openai | anthropic
+    # "ollama" is an alias for "local" pointing at Ollama's OpenAI-compatible endpoint.
+    LLM_PROVIDER = (os.getenv("LLM_PROVIDER", "openai") or "openai").strip().lower()
 
-    # vLLM (local DGX stack)
-    VLLM_BASE_URL = os.getenv("VLLM_BASE_URL", "http://localhost:8000")
-    VLLM_MODEL = os.getenv("VLLM_MODEL", "Qwen/Qwen3-30B-A3B-Instruct-2507")
-    VLLM_API_KEY = os.getenv("VLLM_API_KEY", "")
+    # Ollama / local OpenAI-compatible endpoint
+    # OLLAMA_* are preferred; VLLM_* kept as fallbacks for backward compatibility.
+    OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "").strip()
+    OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "").strip()
+    OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "30m").strip()
+
+    # Legacy vLLM vars (used when OLLAMA_* not set)
+    _VLLM_BASE_URL = os.getenv("VLLM_BASE_URL", "http://localhost:11434")
+    _VLLM_MODEL = os.getenv("VLLM_MODEL", "qwen3:30b-a3b")
+    _VLLM_API_KEY = os.getenv("VLLM_API_KEY", "")
+
+    # Resolved local provider settings (OLLAMA_* wins over VLLM_*)
+    VLLM_BASE_URL = OLLAMA_BASE_URL or _VLLM_BASE_URL
+    VLLM_MODEL = OLLAMA_MODEL or _VLLM_MODEL
+    VLLM_API_KEY = _VLLM_API_KEY
+
+    # Optional auth key for the local LLM reverse proxy endpoint.
+    LLM_PROXY_API_KEY = os.getenv("LLM_PROXY_API_KEY", "").strip()
 
     # OpenAI API
     OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
@@ -44,8 +59,15 @@ class Settings:
     ANTHROPIC_BASE_URL = os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
     ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-    LLM_MAX_TOKENS_VOICE = int(os.getenv("LLM_MAX_TOKENS_VOICE", "200"))
+    # Budget must account for reasoning tokens in thinking models (e.g. Qwen3).
+    # ~150 reasoning + ~150 content = 300 total is a safe default.
+    LLM_MAX_TOKENS_VOICE = int(os.getenv("LLM_MAX_TOKENS_VOICE", "300"))
     LLM_MAX_TOKENS_ANALYSIS = int(os.getenv("LLM_MAX_TOKENS_ANALYSIS", "1024"))
+    LLM_VOICE_CONTEXT_TURNS = int(os.getenv("LLM_VOICE_CONTEXT_TURNS", "10"))
+    try:
+        LLM_STREAM_TIMEOUT_SECONDS = float(os.getenv("LLM_STREAM_TIMEOUT_SECONDS", "30"))
+    except ValueError:
+        LLM_STREAM_TIMEOUT_SECONDS = 30.0
 
     # Deepgram / STT / TTS
     DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY", "")

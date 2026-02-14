@@ -132,11 +132,13 @@ def get_routes(orchestrator: CallOrchestrator, ws_manager: ConnectionManager):
             or websocket.query_params.get("task")
             or "unknown"
         )
+        initial_query_task_id = query_task_id
         task_id = query_task_id
         stream_sid = None
         call_sid = None
         events_received = 0
         marks_received = 0
+        media_chunks_received = 0
 
         with timed_step("twilio", "media_stream", task_id=query_task_id, details={"initial_task_id": query_task_id}):
             with timed_step("twilio", "media_stream_open", task_id=query_task_id):
@@ -165,7 +167,7 @@ def get_routes(orchestrator: CallOrchestrator, ws_manager: ConnectionManager):
                     if event == "start":
                         with timed_step("twilio", "media_event", task_id=task_id, details={"event": event, "task_id": task_id}):
                             candidate_task_id = context_task_id or task_id
-                            task_id = orchestrator.resolve_task_for_media_event(
+                            task_id, resolution_method = orchestrator.resolve_task_for_media_event(
                                 candidate_task_id,
                                 stream_sid=stream_sid,
                                 call_sid=call_sid,
@@ -180,6 +182,7 @@ def get_routes(orchestrator: CallOrchestrator, ws_manager: ConnectionManager):
                                     "candidate_task_id": candidate_task_id,
                                     "stream_sid": stream_sid,
                                     "call_sid": call_sid,
+                                    "resolution_method": resolution_method,
                                 },
                             )
 
@@ -213,6 +216,12 @@ def get_routes(orchestrator: CallOrchestrator, ws_manager: ConnectionManager):
                                 if call_sid:
                                     await orchestrator.set_media_call_sid(task_id, call_sid)
 
+                            if task_id != "unknown" and task_id != initial_query_task_id:
+                                await ws_manager.broadcast(
+                                    task_id,
+                                    {"type": "call_status", "data": {"status": "connected"}},
+                                )
+
                             await ws_manager.broadcast(
                                 task_id,
                                 {"type": "call_status", "data": {"status": "media_connected", "stream_sid": stream_sid}},
@@ -220,7 +229,7 @@ def get_routes(orchestrator: CallOrchestrator, ws_manager: ConnectionManager):
                         continue
 
                     if task_id == "unknown" and (context_task_id or call_sid or stream_sid):
-                        resolved_task_id = orchestrator.resolve_task_for_media_event(
+                        resolved_task_id, _ = orchestrator.resolve_task_for_media_event(
                             context_task_id or task_id,
                             stream_sid=stream_sid,
                             call_sid=call_sid,
@@ -255,6 +264,7 @@ def get_routes(orchestrator: CallOrchestrator, ws_manager: ConnectionManager):
 
                     with timed_step("twilio", "media_event", task_id=task_id, details={"event": event}):
                         if event == "media":
+                            media_chunks_received += 1
                             if task_id == "unknown":
                                 media_payload = message.get("media", {})
                                 media_data = media_payload.get("payload", "") if isinstance(media_payload, dict) else ""
@@ -312,7 +322,7 @@ def get_routes(orchestrator: CallOrchestrator, ws_manager: ConnectionManager):
 
                         if event == "stop":
                             if task_id == "unknown" and call_sid:
-                                task_id = orchestrator.resolve_task_for_media_event(
+                                task_id, _ = orchestrator.resolve_task_for_media_event(
                                     task_id,
                                     stream_sid=stream_sid,
                                     call_sid=call_sid,
@@ -321,15 +331,17 @@ def get_routes(orchestrator: CallOrchestrator, ws_manager: ConnectionManager):
                                 task_id,
                                 {"type": "call_status", "data": {"status": "ended", "reason": "stream_closed"}},
                             )
-                            await orchestrator.stop_task_call(task_id, from_status_callback=True)
+                            await orchestrator.stop_task_call(task_id, from_status_callback=True, stop_reason="stream_stop")
             except WebSocketDisconnect:
                 await ws_manager.broadcast(task_id, {"type": "call_status", "data": {"status": "disconnected"}})
                 log_event(
                     "twilio",
                     "media_stream_disconnect",
                     task_id=task_id,
-                    details={"events_received": events_received, "marks_received": marks_received},
+                    details={"events_received": events_received, "marks_received": marks_received, "media_chunks_received": media_chunks_received},
                 )
+                if task_id and task_id != "unknown":
+                    await orchestrator.stop_task_call(task_id, from_status_callback=True, stop_reason="ws_disconnect")
             except Exception as exc:
                 log_event(
                     "twilio",
@@ -339,6 +351,7 @@ def get_routes(orchestrator: CallOrchestrator, ws_manager: ConnectionManager):
                     details={
                         "events_received": events_received,
                         "marks_received": marks_received,
+                        "media_chunks_received": media_chunks_received,
                         "error": f"{type(exc).__name__}: {exc}",
                     },
                 )

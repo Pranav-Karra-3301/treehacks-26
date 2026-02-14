@@ -8,7 +8,7 @@ from app.models.schemas import CallOutcome, TranscriptTurn
 from app.services.llm_client import LLMClient
 from app.services.prompt_builder import build_negotiation_prompt
 from app.core.config import settings
-from app.core.telemetry import timed_step
+from app.core.telemetry import log_event, timed_step
 
 
 ANALYSIS_SYSTEM_PROMPT = """\
@@ -63,6 +63,12 @@ class NegotiationEngine:
             details={"utterance_chars": len(user_utterance)},
         ):
             conversation = session.get("conversation", [])
+
+            # Trim conversation to last N turns for low-latency voice responses
+            max_turns = settings.LLM_VOICE_CONTEXT_TURNS
+            if max_turns and len(conversation) > max_turns * 2:
+                conversation = conversation[-(max_turns * 2):]
+
             turn_count = len([m for m in conversation if m.get("role") == "assistant"])
             system_prompt = self.build_system_prompt(task, turn_count)
 
@@ -87,7 +93,16 @@ class NegotiationEngine:
             # Try LLM-powered analysis first
             try:
                 return await self._llm_analysis(transcript, task)
-            except Exception:
+            except Exception as exc:
+                log_event(
+                    "negotiation",
+                    "llm_analysis_fallback",
+                    status="warning",
+                    details={
+                        "error": f"{type(exc).__name__}: {exc}",
+                        "transcript_lines": len(transcript),
+                    },
+                )
                 return self._keyword_fallback_analysis(transcript)
 
     async def _llm_analysis(

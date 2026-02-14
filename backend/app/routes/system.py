@@ -25,7 +25,7 @@ def get_routes(cache: CacheService | None = None):
                 llm_ready = bool(settings.OPENAI_API_KEY)
             elif settings.LLM_PROVIDER == "anthropic":
                 llm_ready = bool(settings.ANTHROPIC_API_KEY)
-            elif settings.LLM_PROVIDER == "local":
+            elif settings.LLM_PROVIDER in ("local", "ollama"):
                 llm_ready = bool(settings.VLLM_BASE_URL and settings.VLLM_MODEL)
             else:
                 llm_ready = False

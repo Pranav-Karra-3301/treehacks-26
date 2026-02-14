@@ -15,6 +15,7 @@ from app.services.cache import CacheService
 from app.services.session_manager import SessionManager
 from app.services.storage import DataStore
 from app.services.ws_manager import ConnectionManager
+from app.routes import llm_proxy as llm_proxy_routes
 from app.routes import research as research_routes
 from app.routes import system as system_routes
 from app.routes import tasks as task_routes
@@ -61,6 +62,7 @@ def create_app(
         key_prefix=settings.CACHE_KEY_PREFIX,
     )
     local_orchestrator = orchestrator
+    app = FastAPI(title="NegotiateAI Orchestrator")
     if local_orchestrator is None:
         local_orchestrator = CallOrchestrator(
             store=local_store,
@@ -68,8 +70,7 @@ def create_app(
             ws_manager=local_ws_manager,
             **(llm_overrides or {}),
         )
-
-    app = FastAPI(title="NegotiateAI Orchestrator")
+    app.state.llm_client = getattr(local_orchestrator, "_llm", None)
     app.state.store = local_store
     app.state.session_manager = local_session_manager
     app.state.ws_manager = local_ws_manager
@@ -82,6 +83,7 @@ def create_app(
     app.include_router(telemetry_routes.get_routes())
     app.include_router(research_routes.get_routes(local_cache))
     app.include_router(system_routes.get_routes(local_cache))
+    app.include_router(llm_proxy_routes.get_routes())
 
     app.add_middleware(
         CORSMiddleware,
@@ -151,6 +153,57 @@ def create_app(
     async def health() -> dict:
         with timed_step("http", "healthcheck"):
             return {"status": "ok"}
+
+    # Startup telemetry — dump full config so we can trace issues back to settings
+    @app.on_event("startup")
+    async def startup_telemetry() -> None:
+        log_event(
+            "system",
+            "startup",
+            details={
+                "llm_provider": settings.LLM_PROVIDER,
+                "llm_model": (
+                    settings.VLLM_MODEL
+                    if settings.LLM_PROVIDER in ("local", "ollama")
+                    else settings.OPENAI_MODEL
+                    if settings.LLM_PROVIDER == "openai"
+                    else settings.ANTHROPIC_MODEL
+                ),
+                "llm_base_url": (
+                    settings.VLLM_BASE_URL
+                    if settings.LLM_PROVIDER in ("local", "ollama")
+                    else settings.OPENAI_BASE_URL
+                    if settings.LLM_PROVIDER == "openai"
+                    else settings.ANTHROPIC_BASE_URL
+                ),
+                "llm_max_tokens_voice": settings.LLM_MAX_TOKENS_VOICE,
+                "llm_max_tokens_analysis": settings.LLM_MAX_TOKENS_ANALYSIS,
+                "llm_voice_context_turns": settings.LLM_VOICE_CONTEXT_TURNS,
+                "llm_stream_timeout_seconds": settings.LLM_STREAM_TIMEOUT_SECONDS,
+                "deepgram_voice_agent_enabled": settings.DEEPGRAM_VOICE_AGENT_ENABLED,
+                "deepgram_listen_model": settings.DEEPGRAM_VOICE_AGENT_LISTEN_MODEL,
+                "deepgram_speak_model": settings.DEEPGRAM_VOICE_AGENT_SPEAK_MODEL,
+                "deepgram_think_provider": settings.DEEPGRAM_VOICE_AGENT_THINK_PROVIDER or "(inherit from LLM_PROVIDER)",
+                "deepgram_think_model": settings.DEEPGRAM_VOICE_AGENT_THINK_MODEL or "(inherit from provider)",
+                "twilio_configured": bool(settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN),
+                "twilio_webhook_host": settings.TWILIO_WEBHOOK_HOST or "(not set)",
+                "cache_enabled": settings.CACHE_ENABLED,
+                "exa_search_enabled": settings.EXA_SEARCH_ENABLED,
+                "log_level": settings.LOG_LEVEL,
+            },
+        )
+
+    @app.on_event("shutdown")
+    async def shutdown() -> None:
+        llm_client = getattr(app.state, "llm_client", None)
+        if llm_client is None:
+            return
+
+        close_fn = getattr(llm_client, "close", None)
+        if close_fn is None or not callable(close_fn):
+            return
+
+        await close_fn()
 
     return app
 

@@ -89,19 +89,45 @@ class CallOrchestrator:
         queue = self._pending_agent_audio.setdefault(task_id, [])
         queue.append(payload)
 
+        evicted = 0
         while len(queue) > self._max_pending_audio_chunks:
             queue.pop(0)
+            evicted += 1
 
         total_bytes = sum(len(chunk) for chunk in queue)
         while total_bytes > self._max_pending_audio_bytes and queue:
             removed = queue.pop(0)
             total_bytes -= len(removed)
+            evicted += 1
+
+        if evicted:
+            log_event(
+                "orchestrator",
+                "audio_buffer_eviction",
+                task_id=task_id,
+                status="warning",
+                details={
+                    "evicted_chunks": evicted,
+                    "queue_depth": len(queue),
+                    "queue_bytes": total_bytes,
+                },
+            )
 
     async def _flush_pending_agent_audio(self, task_id: str) -> None:
         queue = self._pending_agent_audio.pop(task_id, None)
         if not queue:
             return
 
+        total_bytes = sum(len(chunk) for chunk in queue)
+        log_event(
+            "orchestrator",
+            "audio_buffer_flush",
+            task_id=task_id,
+            details={
+                "chunks": len(queue),
+                "total_bytes": total_bytes,
+            },
+        )
         for chunk in queue:
             await self._send_agent_audio_to_twilio(task_id, chunk)
 
@@ -183,12 +209,12 @@ class CallOrchestrator:
 
             return {"session_id": session.session_id, "task_id": task_id, "twilio": call}
 
-    async def stop_task_call(self, task_id: str, *, from_status_callback: bool = False) -> None:
+    async def stop_task_call(self, task_id: str, *, from_status_callback: bool = False, stop_reason: str = "unknown") -> None:
         with timed_step("orchestrator", "stop_task_call", task_id=task_id):
             call_sid = self._task_to_call_sid.get(task_id)
             session_id = self._task_to_session.get(task_id)
             if session_id:
-                await self.stop_session(session_id)
+                await self.stop_session(session_id, stop_reason=stop_reason)
             else:
                 self._store.update_status(task_id, "ended")
                 self._store.update_ended_at(task_id)
@@ -231,18 +257,18 @@ class CallOrchestrator:
         *,
         stream_sid: Optional[str] = None,
         call_sid: Optional[str] = None,
-    ) -> str:
+    ) -> tuple[str, str]:
         if task_id and task_id != "unknown" and self._task_to_session.get(task_id):
-            return task_id
+            return task_id, "direct"
         if call_sid:
             mapped_task = self._call_sid_to_task.get(call_sid)
             if mapped_task:
-                return mapped_task
+                return mapped_task, "call_sid"
         if stream_sid:
             mapped_task = self._stream_sid_to_task.get(stream_sid)
             if mapped_task:
-                return mapped_task
-        return task_id or "unknown"
+                return mapped_task, "stream_sid"
+        return task_id or "unknown", "unresolved"
 
     async def handle_twilio_status(self, task_id: Optional[str], call_sid: Optional[str], status: Optional[str]) -> None:
         if not task_id and call_sid:
@@ -273,7 +299,7 @@ class CallOrchestrator:
             details={"call_sid": call_sid, "status": status},
         )
         if status in self._END_STATUSES:
-            await self.stop_task_call(task_id, from_status_callback=True)
+            await self.stop_task_call(task_id, from_status_callback=True, stop_reason=f"twilio_{status}")
 
     def get_session_id_for_task(self, task_id: str) -> Optional[str]:
         return self._task_to_session.get(task_id)
@@ -581,20 +607,23 @@ class CallOrchestrator:
             stats["bytes_by_side"]["mixed"] = stats["bytes_by_side"].get("mixed", 0) + len(chunk)
             stats["last_chunk_at"] = datetime.utcnow().isoformat()
 
-    async def stop_session(self, session_id: str) -> None:
+    async def stop_session(self, session_id: str, *, stop_reason: str = "unknown") -> None:
         session = await self._sessions.get(session_id)
         if not session:
             return
 
         task_id = session.task_id
         with timed_step("orchestrator", "stop_session", session_id=session_id, task_id=task_id):
-            await self._stop_voice_session(session_id)
             await self._sessions.set_status(session_id, "ended")
             duration = await self._sessions.get_duration_seconds(session_id)
             self._store.update_duration(task_id, duration)
             self._store.update_status(task_id, "ended")
             self._store.update_ended_at(task_id)
+            stats = self._audio_stats.get(session_id)
+            if stats is not None:
+                stats["stop_reason"] = stop_reason
             await self._persist_recording_stats(session_id)
+            await self._stop_voice_session(session_id)
             await self._ws.broadcast(
                 task_id,
                 {"type": "call_status", "data": {"status": "ended", "session_id": session_id}},
@@ -623,5 +652,34 @@ class CallOrchestrator:
         stats["duration_seconds"] = int(
             ((session.ended_at or datetime.utcnow()) - (session.started_at or datetime.utcnow())).total_seconds()
         )
+
+        # Transcript completeness
+        stats["transcript_turns"] = len(session.transcript)
+        if session.transcript:
+            last_at = session.transcript[-1].get("created_at")
+            stats["last_turn_at"] = (
+                datetime.utcfromtimestamp(float(last_at)).isoformat()
+                if isinstance(last_at, (int, float)) else str(last_at) if last_at else None
+            )
+        else:
+            stats["last_turn_at"] = None
+
+        # Twilio correlation IDs (persist runs BEFORE _clear_*)
+        task_id = session.task_id
+        stats["call_sid"] = self._task_to_call_sid.get(task_id)
+        stats["stream_sid"] = self._task_to_stream_sid.get(task_id)
+        stats["stop_reason"] = stats.get("stop_reason", "unknown")
+
+        # Deepgram session counters
+        dg = self._deepgram_sessions.get(session_id)
+        if dg is not None:
+            stats["deepgram"] = {
+                "audio_chunks_sent": getattr(dg, "_audio_chunks_sent", 0),
+                "audio_bytes_sent": getattr(dg, "_audio_bytes_sent", 0),
+                "audio_chunks_received": getattr(dg, "_audio_chunks_received", 0),
+                "audio_bytes_received": getattr(dg, "_audio_bytes_received", 0),
+                "messages_received": getattr(dg, "_messages_received", 0),
+            }
+
         with open(self._session_recording_path(session.task_id), "w", encoding="utf-8") as f:
             json.dump(stats, f, indent=2)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from typing import Any, Optional
 
 import redis.asyncio as redis_asyncio
@@ -62,15 +63,20 @@ class CacheService:
             return False
         if self._usable:
             return True
+        t0 = time.perf_counter()
         try:
             await self._client.ping()  # type: ignore[union-attr]
             self._usable = True
+            elapsed_ms = (time.perf_counter() - t0) * 1000.0
+            log_event("cache", "ping_ok", duration_ms=elapsed_ms)
             return True
         except Exception as exc:
+            elapsed_ms = (time.perf_counter() - t0) * 1000.0
             log_event(
                 "cache",
                 "ping_failed",
                 status="error",
+                duration_ms=elapsed_ms,
                 details={"error": f"{type(exc).__name__}: {exc}"},
             )
             return False
@@ -78,18 +84,29 @@ class CacheService:
     async def get_json(self, cache_key: str) -> Optional[Any]:
         if not self.enabled:
             return None
+        t0 = time.perf_counter()
         try:
             if not await self.ping():
                 return None
             raw = await self._client.get(cache_key)  # type: ignore[union-attr]
+            elapsed_ms = (time.perf_counter() - t0) * 1000.0
+            hit = raw is not None
+            log_event(
+                "cache",
+                "get_json",
+                duration_ms=elapsed_ms,
+                details={"key": cache_key, "hit": hit, "bytes": len(raw) if raw else 0},
+            )
             if raw is None:
                 return None
             return json.loads(raw)
         except Exception as exc:
+            elapsed_ms = (time.perf_counter() - t0) * 1000.0
             log_event(
                 "cache",
                 "get_json_failed",
                 status="error",
+                duration_ms=elapsed_ms,
                 details={"key": cache_key, "error": f"{type(exc).__name__}: {exc}"},
             )
             return None
@@ -97,17 +114,27 @@ class CacheService:
     async def set_json(self, cache_key: str, value: Any, *, ttl_seconds: int | None = None) -> bool:
         if not self.enabled:
             return False
+        t0 = time.perf_counter()
         try:
             if not await self.ping():
                 return False
             serialized = json.dumps(value)
             await self._client.set(cache_key, serialized, ex=int(ttl_seconds or self._ttl))  # type: ignore[union-attr]
+            elapsed_ms = (time.perf_counter() - t0) * 1000.0
+            log_event(
+                "cache",
+                "set_json",
+                duration_ms=elapsed_ms,
+                details={"key": cache_key, "bytes": len(serialized), "ttl": ttl_seconds or self._ttl},
+            )
             return True
         except Exception as exc:
+            elapsed_ms = (time.perf_counter() - t0) * 1000.0
             log_event(
                 "cache",
                 "set_json_failed",
                 status="error",
+                duration_ms=elapsed_ms,
                 details={"key": cache_key, "error": f"{type(exc).__name__}: {exc}"},
             )
             return False
@@ -115,16 +142,26 @@ class CacheService:
     async def delete(self, cache_key: str) -> bool:
         if not self.enabled:
             return False
+        t0 = time.perf_counter()
         try:
             if not await self.ping():
                 return False
             deleted = await self._client.delete(cache_key)  # type: ignore[union-attr]
+            elapsed_ms = (time.perf_counter() - t0) * 1000.0
+            log_event(
+                "cache",
+                "delete",
+                duration_ms=elapsed_ms,
+                details={"key": cache_key, "deleted": bool(deleted)},
+            )
             return bool(deleted)
         except Exception as exc:
+            elapsed_ms = (time.perf_counter() - t0) * 1000.0
             log_event(
                 "cache",
                 "delete_failed",
                 status="error",
+                duration_ms=elapsed_ms,
                 details={"key": cache_key, "error": f"{type(exc).__name__}: {exc}"},
             )
             return False
@@ -132,17 +169,26 @@ class CacheService:
     async def exists(self, cache_key: str) -> bool:
         if not self.enabled:
             return False
+        t0 = time.perf_counter()
         try:
             if not await self.ping():
                 return False
             exists = await self._client.exists(cache_key)  # type: ignore[union-attr]
+            elapsed_ms = (time.perf_counter() - t0) * 1000.0
+            log_event(
+                "cache",
+                "exists",
+                duration_ms=elapsed_ms,
+                details={"key": cache_key, "exists": bool(exists)},
+            )
             return bool(exists)
         except Exception as exc:
+            elapsed_ms = (time.perf_counter() - t0) * 1000.0
             log_event(
                 "cache",
                 "exists_failed",
                 status="error",
+                duration_ms=elapsed_ms,
                 details={"key": cache_key, "error": f"{type(exc).__name__}: {exc}"},
             )
             return False
-
