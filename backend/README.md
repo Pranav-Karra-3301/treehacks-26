@@ -46,3 +46,33 @@ Required keys per provider:
 - `POST /twilio/voice`
 - `WS /twilio/media-stream`
 - `POST /twilio/status`
+
+## Telemetry and Profiling
+
+- Event logs are written to:
+  - `backend/data/service.log` (human-readable log stream)
+  - `backend/data/telemetry_events.jsonl` (structured timing events)
+- Inspect recent events:
+  - `GET /api/telemetry/recent`
+- Inspect timing profile summary (avg/min/max/percentiles):
+  - `GET /api/telemetry/summary`
+
+Both endpoints support query-based filtering on recent events when using the raw endpoint:
+
+- `GET /api/telemetry/recent?limit=200&component=audio&action=save_audio_chunk`
+
+## Deepgram Voice Agent Settings
+
+Live calls use Deepgram when these are enabled:
+
+- `DEEPGRAM_VOICE_AGENT_ENABLED=true` (or `false` to use legacy/no live LLM bridge)
+- `DEEPGRAM_VOICE_AGENT_WS_URL` (defaults to `wss://agent.deepgram.com/v1/agent/converse`)
+- `DEEPGRAM_VOICE_AGENT_LISTEN_MODEL` (`nova-3`)
+- `DEEPGRAM_VOICE_AGENT_SPEAK_MODEL` (`aura-2-thalia-en`)
+- `DEEPGRAM_VOICE_AGENT_THINK_PROVIDER` (`openai` | `anthropic` | `google` | `groq`)
+- `DEEPGRAM_VOICE_AGENT_THINK_MODEL` (for example `gpt-4o-mini`)
+- `DEEPGRAM_VOICE_AGENT_THINK_TEMPERATURE` (float, optional)
+- `DEEPGRAM_VOICE_AGENT_THINK_ENDPOINT_URL` (optional provider-specific endpoint)
+- `DEEPGRAM_VOICE_AGENT_THINK_ENDPOINT_HEADERS` (optional JSON headers string)
+
+The `DEEPGRAM_API_KEY` must be set when the voice pipeline is enabled.

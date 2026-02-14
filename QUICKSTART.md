@@ -69,6 +69,24 @@ For local DGX/vLLM you can set:
 LLM_PROVIDER=local
 VLLM_MODEL=Qwen/Qwen3-30B-A3B-Instruct-2507
 VLLM_BASE_URL=http://localhost:8000
+  # VLLM_API_KEY can stay empty unless your local endpoint enforces auth.
+```
+
+### Enable Deepgram voice pipeline (Twilio stream + STT/TTS + LLM routing)
+
+```bash
+DEEPGRAM_API_KEY=
+DEEPGRAM_VOICE_AGENT_ENABLED=true
+DEEPGRAM_VOICE_AGENT_THINK_PROVIDER=openai
+DEEPGRAM_VOICE_AGENT_THINK_MODEL=gpt-4o-mini
+# Leave endpoint URL empty for standard OpenAI-compatible providers.
+DEEPGRAM_VOICE_AGENT_THINK_ENDPOINT_URL=
+```
+
+Twilio requires a public webhook host (ngrok or similar):
+
+```bash
+TWILIO_WEBHOOK_HOST=https://your-public-ngrok-url
 ```
 
 ## 7) Sanity checks
@@ -76,3 +94,29 @@ VLLM_BASE_URL=http://localhost:8000
 - Backend health: `curl http://localhost:3001/health`
 - Create task: `POST http://localhost:3001/api/tasks`
 - Start call: `POST http://localhost:3001/api/tasks/<task_id>/call`
+
+## 8) Profiling and recordings
+
+- View timing events:
+
+```bash
+curl "http://localhost:3001/api/telemetry/recent?limit=200"
+```
+
+- View timing summary:
+
+```bash
+curl "http://localhost:3001/api/telemetry/summary?limit=500"
+```
+
+- Check per-task recordings + size accounting:
+
+```bash
+curl "http://localhost:3001/api/tasks/<task_id>/recording-metadata"
+curl "http://localhost:3001/api/tasks/<task_id>/recording-files"
+```
+
+Logs are written in:
+
+- `backend/data/service.log`
+- `backend/data/telemetry_events.jsonl`

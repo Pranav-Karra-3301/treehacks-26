@@ -67,6 +67,7 @@ Use `backend/.env` for server-side values and `frontend/.env.local` for browser 
 - Local DGX/vLLM:
   - `LLM_PROVIDER=local`
   - `VLLM_BASE_URL=http://localhost:8000`
+  - `VLLM_API_KEY` is optional for local endpoints unless auth is enabled.
 
 ## Running with Docker
 
@@ -83,7 +84,11 @@ docker-compose up --build
 - `POST /api/tasks/{id}/stop`
 - `GET /api/tasks/{id}/audio`
 - `GET /api/tasks/{id}/analysis`
+- `GET /api/telemetry/recent`
+- `GET /api/telemetry/summary`
 - `WS /ws/call/{id}`
 - `POST /twilio/voice`
 - `WS /twilio/media-stream`
 - `POST /twilio/status`
+
+Telemetry output lives under `backend/data/service.log` and `backend/data/telemetry_events.jsonl`.
