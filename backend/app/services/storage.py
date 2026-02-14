@@ -28,6 +28,7 @@ class DataStore:
                     target_phone TEXT,
                     objective TEXT,
                     context TEXT,
+                    location TEXT,
                     target_outcome TEXT,
                     walkaway_point TEXT,
                     agent_persona TEXT,
@@ -60,9 +61,9 @@ class DataStore:
                     """
                     INSERT INTO calls (
                         id, task_type, target_phone, objective, context,
-                        target_outcome, walkaway_point, agent_persona,
+                        location, target_outcome, walkaway_point, agent_persona,
                         opening_line, style, status, outcome, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         task_id,
@@ -70,6 +71,7 @@ class DataStore:
                         payload["target_phone"],
                         payload["objective"],
                         payload.get("context", ""),
+                        payload.get("location"),
                         payload.get("target_outcome"),
                         payload.get("walkaway_point"),
                         payload.get("agent_persona"),

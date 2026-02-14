@@ -143,6 +143,7 @@ def build_negotiation_prompt(
     style = task.get("style", "collaborative")
     objective = task.get("objective", "")
     context = task.get("context", "")
+    location = task.get("location") or ""
     walkaway = task.get("walkaway_point") or "No hard walkaway configured"
     target = task.get("target_outcome") or ""
 
@@ -160,6 +161,8 @@ def build_negotiation_prompt(
         "--- YOUR ASSIGNMENT ---",
         f"Objective: {objective}",
     ]
+    if location:
+        assignment_lines.append(f"Caller location: {location}")
     if context:
         assignment_lines.append(f"Background context: {context}")
     if target:

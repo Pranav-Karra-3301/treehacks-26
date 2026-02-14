@@ -16,6 +16,7 @@ class NegotiationTaskCreate(BaseModel):
     target_phone: str
     objective: str
     context: str = ""
+    location: Optional[str] = None
     target_outcome: Optional[str] = None
     walkaway_point: Optional[str] = None
     agent_persona: Optional[str] = None
@@ -43,6 +44,7 @@ class TaskSummary(BaseModel):
 
 class TaskDetail(TaskSummary):
     context: str = ""
+    location: Optional[str] = None
     target_outcome: Optional[str] = None
     walkaway_point: Optional[str] = None
     agent_persona: Optional[str] = None

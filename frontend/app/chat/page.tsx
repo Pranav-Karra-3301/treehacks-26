@@ -45,6 +45,7 @@ export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [pastTasks, setPastTasks] = useState<TaskSummary[]>([]);
   const [discoveryResults, setDiscoveryResults] = useState<BusinessResult[]>([]);
+  const [userLocation, setUserLocation] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const socketRef = useRef<WebSocket | null>(null);
@@ -87,6 +88,34 @@ export default function ChatPage() {
         }
       })
       .catch(() => {});
+  }, []);
+
+  // Grab user location on mount (reverse geocode to city, state)
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { latitude, longitude } = pos.coords;
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&zoom=10`,
+            { headers: { 'User-Agent': 'kiru-app' } },
+          );
+          if (!res.ok) return;
+          const data = await res.json();
+          const addr = data.address || {};
+          const city = addr.city || addr.town || addr.village || addr.county || '';
+          const state = addr.state || '';
+          if (city || state) {
+            setUserLocation([city, state].filter(Boolean).join(', '));
+          }
+        } catch {
+          // Location enrichment is best-effort
+        }
+      },
+      () => {}, // denied — no-op
+      { timeout: 5000, maximumAge: 600000 },
+    );
   }, []);
 
   // Cleanup WebSocket on unmount
@@ -210,6 +239,7 @@ export default function ChatPage() {
         task_type: 'custom',
         style: 'collaborative',
         ...(researchContext && { context: researchContext }),
+        ...(userLocation && { location: userLocation }),
       });
       setTaskId(task.id);
       refreshPastTasks();
@@ -373,7 +403,8 @@ export default function ChatPage() {
       // Show typing while researching
       setTyping(true);
 
-      searchResearch(text)
+      const searchQuery = userLocation ? `${text} near ${userLocation}` : text;
+      searchResearch(searchQuery)
         .then((res) => {
           setTyping(false);
 
