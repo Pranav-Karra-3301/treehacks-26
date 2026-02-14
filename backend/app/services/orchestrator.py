@@ -55,6 +55,9 @@ class CallOrchestrator:
 
         self._audio_stats: Dict[str, Dict[str, Any]] = {}
         self._voice_session_lock = asyncio.Lock()
+        # Track inbound byte counts so outbound can be time-aligned
+        self._inbound_bytes: dict[str, int] = {}
+        self._outbound_bytes: dict[str, int] = {}
 
     def _session_recording_path(self, task_id: str) -> Path:
         return self._store.get_task_dir(task_id) / "recording_stats.json"
@@ -585,9 +588,28 @@ class CallOrchestrator:
         if side_key not in {"caller", "agent"}:
             side_key = "agent"
 
-        # Write to individual track file only (mixed is created at call end)
+        # For outbound (agent) audio: pad with mulaw silence (0xFF) so
+        # the outbound track stays time-aligned with the continuous inbound
+        # stream.  The inbound stream is a steady 8 kHz clock from Twilio,
+        # so its byte count represents elapsed call time.
+        if side_key == "agent":
+            inbound_pos = self._inbound_bytes.get(session_id, 0)
+            outbound_pos = self._outbound_bytes.get(session_id, 0)
+            gap = inbound_pos - outbound_pos
+            if gap > 0:
+                with open(call_dir / filename, "ab") as f:
+                    f.write(b"\xff" * gap)
+                self._outbound_bytes[session_id] = outbound_pos + gap
+
+        # Write the actual audio data
         with open(call_dir / filename, "ab") as f:
             f.write(chunk)
+
+        # Track byte positions for time alignment
+        if side_key == "caller":
+            self._inbound_bytes[session_id] = self._inbound_bytes.get(session_id, 0) + len(chunk)
+        else:
+            self._outbound_bytes[session_id] = self._outbound_bytes.get(session_id, 0) + len(chunk)
 
         stats = self._audio_stats.setdefault(
             session_id,
@@ -729,6 +751,8 @@ class CallOrchestrator:
         self._task_to_session.pop(task_id, None)
         self._clear_task_call_sid(task_id)
         self._audio_stats.pop(session_id, None)
+        self._inbound_bytes.pop(session_id, None)
+        self._outbound_bytes.pop(session_id, None)
 
         # Auto-generate analysis in background so outcome is always set
         asyncio.create_task(self._auto_analyze(task_id))
