@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import json
 import inspect
+import struct
 from pathlib import Path
 from typing import List
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from app.core.config import settings
 from app.services.cache import CacheService
@@ -148,6 +149,43 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
             await orchestrator.stop_task_call(task_id, stop_reason="user_stop")
             return ActionResponse(ok=True, message="call stopped")
 
+    @router.get("/{task_id}/transcript")
+    async def get_transcript(task_id: str):
+        with timed_step("api", "get_transcript", task_id=task_id):
+            call_dir = store.get_task_dir(task_id)
+            transcript_path = call_dir / "transcript.json"
+            if not transcript_path.exists():
+                raise HTTPException(status_code=404, detail="Transcript not found")
+            with open(transcript_path, "r", encoding="utf-8") as f:
+                turns = json.load(f)
+            return {"task_id": task_id, "turns": turns}
+
+    def _wrap_mulaw_wav(raw_data: bytes, sample_rate: int = 8000, channels: int = 1) -> bytes:
+        """Wrap raw mulaw PCM data with a proper WAV header."""
+        bits_per_sample = 8
+        byte_rate = sample_rate * channels * bits_per_sample // 8
+        block_align = channels * bits_per_sample // 8
+        data_size = len(raw_data)
+        # RIFF header (12) + fmt chunk (26 for non-PCM) + data chunk header (8)
+        fmt_chunk_size = 18  # 16 base + 2 for cbSize
+        header_size = 12 + 8 + fmt_chunk_size + 8
+        riff_size = header_size + data_size - 8
+
+        header = struct.pack(
+            '<4sI4s'       # RIFF, size, WAVE
+            '4sI'          # fmt, chunk size
+            'HHIIHH'       # audioFormat, channels, sampleRate, byteRate, blockAlign, bitsPerSample
+            'H'            # cbSize (extra format bytes)
+            '4sI',         # data, data size
+            b'RIFF', riff_size, b'WAVE',
+            b'fmt ', fmt_chunk_size,
+            7,             # 7 = mulaw
+            channels, sample_rate, byte_rate, block_align, bits_per_sample,
+            0,             # no extra format data
+            b'data', data_size,
+        )
+        return header + raw_data
+
     @router.get("/{task_id}/audio")
     async def get_audio(task_id: str, side: str = Query(default="mixed")):
         with timed_step("api", "get_audio", task_id=task_id, details={"side": side}):
@@ -164,13 +202,21 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
             selected = side if side in files else "mixed"
             file_path = files[selected]
             if not file_path.exists():
-                # Fallback to the first available wav when preferred side is missing.
                 fallback = next(iter(sorted(call_dir.glob("*.wav"))), None)
                 if not fallback:
                     raise HTTPException(status_code=404, detail="No audio for task")
                 file_path = fallback
 
-            return FileResponse(file_path, media_type="audio/wav", filename=file_path.name)
+            raw_data = file_path.read_bytes()
+            # If the file lacks a RIFF header, wrap raw mulaw bytes
+            if not raw_data[:4] == b'RIFF':
+                raw_data = _wrap_mulaw_wav(raw_data)
+
+            return Response(
+                content=raw_data,
+                media_type="audio/wav",
+                headers={"Content-Disposition": f'inline; filename="{file_path.name}"'},
+            )
 
     @router.get("/{task_id}/recording-metadata")
     async def get_recording_metadata(task_id: str):
@@ -257,6 +303,11 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
             outcome_value = analysis.get("outcome", "unknown")
             valid_outcomes = {"unknown", "success", "partial", "failed", "walkaway"}
             outcome = outcome_value if outcome_value in valid_outcomes else "unknown"
+            # Always write the outcome back to the task record
+            store.update_status(task_id, row.get("status", "ended"), outcome=outcome)
+            if local_cache is not None:
+                await local_cache.delete(_task_cache_key(task_id))
+                await local_cache.delete(_tasks_cache_key())
             response = AnalysisPayload(
                 summary=analysis["summary"],
                 outcome=outcome,

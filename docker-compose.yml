@@ -23,7 +23,7 @@ services:
       - ./frontend/.env.local
     volumes:
       - .:/app
-    command: sh -c "cd frontend && npm install && npm run dev -- --hostname 0.0.0.0 --port 3000"
+    command: sh -c "cd frontend && npm install --legacy-peer-deps && npm run dev -- --hostname 0.0.0.0 --port 3000"
     environment:
       NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://localhost:${BACKEND_HOST_PORT:-3001}}
       NEXT_PUBLIC_BACKEND_WS_URL: ${NEXT_PUBLIC_BACKEND_WS_URL:-ws://localhost:${BACKEND_HOST_PORT:-3001}}

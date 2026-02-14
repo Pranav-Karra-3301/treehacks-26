@@ -234,5 +234,5 @@ else
   info "Auto-fixed ports: BACKEND_HOST_PORT=${BACKEND_HOST_PORT}, FRONTEND_HOST_PORT=${FRONTEND_HOST_PORT}"
 fi
 
-info "Starting services with: ${COMPOSE_CMD[*]} up --build ${*}"
-${COMPOSE_CMD[@]} up --build "$@"
+info "Starting services with: ${COMPOSE_CMD[*]} up --build ${*+"$*"}"
+${COMPOSE_CMD[@]} up --build ${@+"$@"}

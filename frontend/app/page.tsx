@@ -1,15 +1,649 @@
-import NewTaskForm from '@/components/new-task-form';
+'use client';
 
-export default function HomePage() {
+import Link from 'next/link';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { motion, useInView, useScroll, useTransform } from 'framer-motion';
+import { ArrowRight, ArrowUpRight, Phone, Mic, BarChart3, Shield, Sparkles, TrendingDown, FileText, CreditCard, Check, ChevronRight, Zap } from 'lucide-react';
+
+// ─── Branded wordmark ──────────────────────────────────────────────────────────
+
+function Kiru({ className = '' }: { className?: string }) {
+  return <span className={`font-serif italic ${className}`}>kiru</span>;
+}
+
+// ─── Animated counter ───────────────────────────────────────────────────────────
+
+function Counter({ end, prefix = '', suffix = '', duration = 2000 }: { end: number; prefix?: string; suffix?: string; duration?: number }) {
+  const [count, setCount] = useState(0);
+  const ref = useRef<HTMLSpanElement>(null);
+  const inView = useInView(ref, { once: true, margin: '-80px' });
+
+  useEffect(() => {
+    if (!inView) return;
+    let start = 0;
+    const step = end / (duration / 16);
+    const timer = setInterval(() => {
+      start += step;
+      if (start >= end) { setCount(end); clearInterval(timer); }
+      else setCount(Math.floor(start));
+    }, 16);
+    return () => clearInterval(timer);
+  }, [inView, end, duration]);
+
+  return <span ref={ref}>{prefix}{count.toLocaleString()}{suffix}</span>;
+}
+
+// ─── Animated hero chat mockup ─────────────────────────────────────────────────
+
+type PreviewMsg = { role: 'user' | 'ai' | 'status'; text: string };
+
+const script: PreviewMsg[] = [
+  { role: 'ai', text: 'What would you like me to negotiate?' },
+  { role: 'user', text: "Lower my Comcast bill. I'm paying $120/mo, been a customer for 5 years." },
+  { role: 'ai', text: "Calling Comcast now. I'll negotiate a lower rate for you." },
+  { role: 'status', text: 'Connected — retention dept' },
+  { role: 'ai', text: "Done. Your new rate is $85/mo — that's $420/year saved." },
+];
+
+function ChatMockup() {
+  const [messages, setMessages] = useState<PreviewMsg[]>([]);
+  const [typing, setTyping] = useState(false);
+  const [cycle, setCycle] = useState(0);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setMessages([]);
+    setTyping(false);
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    let t = 600;
+    script.forEach((msg, i) => {
+      if (msg.role === 'ai') { timers.push(setTimeout(() => setTyping(true), t)); t += 1000; }
+      timers.push(setTimeout(() => { setTyping(false); setMessages((p) => [...p, msg]); }, t));
+      t += i === script.length - 1 ? 3000 : 1500;
+    });
+    timers.push(setTimeout(() => setCycle((c) => c + 1), t));
+    return () => timers.forEach(clearTimeout);
+  }, [cycle]);
+
+  useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight; }, [messages, typing]);
+
   return (
-    <section className="card p-6 animate-pop">
-      <h2 className="text-xl font-bold">New Negotiation Task</h2>
-      <p className="mt-2 text-sm text-[var(--muted)]">
-        Fill in the task details and start a live phone negotiation session.
-      </p>
-      <div className="mt-4">
-        <NewTaskForm />
+    <div className="relative w-full min-w-[420px] max-w-[420px]">
+      {/* Soft ambient glow */}
+      <div className="absolute -inset-16 bg-gradient-to-br from-violet-100/40 via-rose-50/30 to-amber-50/30 rounded-[80px] blur-3xl -z-10" />
+      <div className="rounded-2xl border border-gray-200/60 bg-white/90 backdrop-blur-sm shadow-elevated overflow-hidden">
+        {/* Title bar */}
+        <div className="flex items-center gap-2 border-b border-gray-100 px-4 py-2.5">
+          <div className="flex gap-1.5">
+            <span className="h-[9px] w-[9px] rounded-full bg-[#FF5F57]" />
+            <span className="h-[9px] w-[9px] rounded-full bg-[#FEBC2E]" />
+            <span className="h-[9px] w-[9px] rounded-full bg-[#28C840]" />
+          </div>
+          <div className="flex-1 flex justify-center"><Kiru className="text-[12px] text-gray-400" /></div>
+          <div className="w-[42px]" />
+        </div>
+        {/* Messages */}
+        <div ref={ref} className="h-[260px] overflow-y-auto px-4 py-4 space-y-2.5">
+          {messages.map((msg, i) => (
+            <motion.div key={`${cycle}-${i}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
+              {msg.role === 'status' ? (
+                <div className="flex justify-center py-1"><span className="text-[11px] text-emerald-600 font-medium bg-emerald-50 rounded-full px-3 py-0.5">{msg.text}</span></div>
+              ) : msg.role === 'user' ? (
+                <div className="flex justify-end"><div className="max-w-[78%] rounded-[18px] rounded-tr-md bg-gray-900 px-3.5 py-2 text-[13px] leading-[1.45] text-white">{msg.text}</div></div>
+              ) : (
+                <div className="flex justify-start"><div className="max-w-[78%] rounded-[18px] rounded-tl-md bg-gray-100 px-3.5 py-2 text-[13px] leading-[1.45] text-gray-900">{msg.text}</div></div>
+              )}
+            </motion.div>
+          ))}
+          {typing && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
+              <div className="rounded-[18px] rounded-tl-md bg-gray-100 px-4 py-2.5 flex items-center gap-[3px]">
+                {[0, 1, 2].map((i) => (
+                  <span key={i} className="h-[5px] w-[5px] rounded-full bg-gray-400 animate-bounce-dot" style={{ animationDelay: `${i * 0.16}s` }} />
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </div>
+        {/* Input */}
+        <div className="border-t border-gray-100 px-4 py-2.5">
+          <div className="flex items-center rounded-xl bg-gray-50 px-3 py-2">
+            <span className="flex-1 text-[12px] text-gray-300">Message kiru...</span>
+            <div className="h-6 w-6 rounded-full bg-gray-200 flex items-center justify-center"><ArrowUpRight size={11} className="text-gray-400" /></div>
+          </div>
+        </div>
       </div>
-    </section>
+    </div>
+  );
+}
+
+// ─── Scroll reveal ─────────────────────────────────────────────────────────────
+
+function Reveal({ children, className = '', delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true, margin: '-60px' });
+  return (
+    <motion.div ref={ref} initial={{ opacity: 0, y: 24 }} animate={inView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.6, delay, ease: [0.16, 1, 0.3, 1] }} className={className}>
+      {children}
+    </motion.div>
+  );
+}
+
+// ─── Bento visuals ─────────────────────────────────────────────────────────────
+
+function BentoCallVisual() {
+  return (
+    <div className="mt-6 flex items-center gap-3">
+      <div className="h-10 w-10 rounded-full bg-emerald-500/10 flex items-center justify-center"><Phone size={16} className="text-emerald-600" /></div>
+      <div className="flex-1 space-y-1.5">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wider">Live</span>
+          <span className="text-[11px] text-gray-400">02:34</span>
+        </div>
+        <div className="flex gap-[2px]">
+          {[3,5,8,4,7,9,6,3,5,8,10,7,4,6,8,5,3,7,9,6,4,8,5,3,6,8,4,7].map((h,i) => (
+            <div key={i} className="w-[3px] rounded-full bg-emerald-500/50" style={{ height: `${h*2}px` }} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BentoTacticsVisual() {
+  return (
+    <div className="mt-6 flex flex-wrap gap-1.5">
+      {['Anchoring','Loyalty leverage','Competitor pricing','Escalation','Silence'].map((t) => (
+        <span key={t} className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-600">{t}</span>
+      ))}
+    </div>
+  );
+}
+
+function BentoScoreVisual() {
+  return (
+    <div className="mt-6 flex items-end gap-3">
+      <span className="text-[40px] font-bold leading-none tracking-tighter text-gray-900">87</span>
+      <div className="mb-1 space-y-0.5">
+        <span className="text-[11px] font-medium text-emerald-600">Excellent</span>
+        <div className="h-1.5 w-20 rounded-full bg-gray-100 overflow-hidden"><div className="h-full w-[87%] rounded-full bg-emerald-500" /></div>
+      </div>
+    </div>
+  );
+}
+
+function BentoTranscriptVisual() {
+  return (
+    <div className="mt-6 space-y-2 text-[12px] font-mono">
+      {[
+        { who: 'Agent', line: "I've been a loyal customer for five years and I'd like to discuss my rate." },
+        { who: 'Rep', line: 'Let me pull up your account and see what options we have.' },
+        { who: 'Agent', line: "I've seen competitors offering $79/mo for the same speed..." },
+      ].map((l, i) => (
+        <div key={i} className="flex gap-2">
+          <span className="text-gray-400 shrink-0 w-10">{l.who}</span>
+          <span className="text-gray-600">{l.line}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BentoPrivacyVisual() {
+  return (
+    <div className="mt-6 flex flex-wrap gap-1.5">
+      {['Encrypted', 'No training', 'Delete anytime'].map((t) => (
+        <span key={t} className="flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-medium text-emerald-700">
+          <Check size={8} />
+          {t}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function BentoAutomationVisual() {
+  const steps = [
+    { label: 'Dial', time: '0:00' },
+    { label: 'Phone tree', time: '0:12' },
+    { label: 'On hold', time: '0:45' },
+    { label: 'Transfer', time: '38:20' },
+    { label: 'Connected', time: '42:15' },
+  ];
+  return (
+    <div className="flex items-center mt-6 lg:mt-0">
+      {steps.map((step, i) => (
+        <div key={step.label} className="flex items-center flex-1 last:flex-initial">
+          <div className="text-center shrink-0">
+            <div className={`h-3 w-3 rounded-full mx-auto ${i === steps.length - 1 ? 'bg-emerald-500 ring-4 ring-emerald-500/10' : i === 2 ? 'bg-amber-400 ring-4 ring-amber-400/10' : 'bg-gray-300'}`} />
+            <p className="text-[11px] font-medium text-gray-600 mt-1.5 whitespace-nowrap">{step.label}</p>
+            <p className="text-[10px] text-gray-400 tabular-nums">{step.time}</p>
+          </div>
+          {i < steps.length - 1 && <div className="h-px flex-1 bg-gray-200 mx-2 min-w-[16px]" />}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Companies marquee ──────────────────────────────────────────────────────────
+
+const companies = ['Comcast', 'AT&T', 'Spectrum', 'Verizon', 'T-Mobile', 'Blue Cross', 'Aetna', 'Kaiser', 'State Farm', 'Geico', 'Chase', 'Citi'];
+
+function CompanyMarquee() {
+  return (
+    <div className="relative overflow-hidden">
+      <div className="absolute left-0 top-0 bottom-0 w-20 bg-gradient-to-r from-white to-transparent z-10" />
+      <div className="absolute right-0 top-0 bottom-0 w-20 bg-gradient-to-l from-white to-transparent z-10" />
+      <div className="flex animate-marquee">
+        {[...companies, ...companies].map((name, i) => (
+          <span key={i} className="shrink-0 px-6 text-[14px] font-medium text-gray-300 tracking-wide whitespace-nowrap">
+            {name}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Page ──────────────────────────────────────────────────────────────────────
+
+export default function LandingPage() {
+  const heroRef = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({ target: heroRef, offset: ['start start', 'end start'] });
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
+  const heroY = useTransform(scrollYProgress, [0, 0.5], [0, -60]);
+
+  return (
+    <div className="min-h-screen bg-white">
+
+      {/* ── Nav ─────────────────────────────────── */}
+      <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-gray-100/60">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 h-14">
+          <Link href="/" className="text-[18px] tracking-tight text-gray-950">
+            <Kiru />
+          </Link>
+          <div className="flex items-center gap-6">
+            <a href="#how-it-works" className="hidden sm:block text-[13px] text-gray-500 transition hover:text-gray-900">How it works</a>
+            <a href="#features" className="hidden sm:block text-[13px] text-gray-500 transition hover:text-gray-900">Features</a>
+            <Link href="/dashboard" className="hidden sm:block text-[13px] text-gray-500 transition hover:text-gray-900">Dashboard</Link>
+            <Link href="/chat" className="group inline-flex items-center gap-1.5 rounded-full bg-gray-950 px-4 py-1.5 text-[13px] font-medium text-white transition hover:bg-gray-800">
+              Launch App <ArrowUpRight size={12} strokeWidth={2.5} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+            </Link>
+          </div>
+        </div>
+      </nav>
+
+      {/* ── Hero ────────────────────────────────── */}
+      <section ref={heroRef} className="relative overflow-hidden">
+        {/* Dot grid bg */}
+        <div className="absolute inset-0 dot-grid opacity-40" />
+        {/* Radial fade */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,white_70%)]" />
+
+        <motion.div style={{ opacity: heroOpacity, y: heroY }} className="relative px-6 pt-24 sm:pt-32 pb-8">
+          <div className="mx-auto max-w-6xl lg:flex lg:items-center lg:justify-between lg:gap-16">
+            <div className="max-w-xl lg:shrink-0">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}
+                className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[12px] font-medium text-gray-500 mb-6 shadow-soft"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                Now in public beta
+              </motion.div>
+              <motion.h1
+                initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.7, delay: 0.05, ease: [0.16, 1, 0.3, 1] }}
+                className="text-[clamp(2.75rem,6.5vw,4.5rem)] font-bold leading-[1.05] tracking-[-0.04em] text-gray-950"
+              >
+                Your AI makes{' '}
+                <span className="font-serif italic font-normal">the call.</span>
+              </motion.h1>
+              <motion.p
+                initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.7, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
+                className="mt-5 text-[17px] leading-relaxed text-gray-500 max-w-md"
+              >
+                Tell <Kiru className="text-gray-700" /> what you want. It calls, negotiates in real-time, and saves you money — while you do literally anything else.
+              </motion.p>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.7, delay: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                className="mt-8 flex items-center gap-3"
+              >
+                <Link href="/chat" className="group inline-flex items-center gap-2 rounded-full bg-gray-950 pl-5 pr-4 py-2.5 text-[14px] font-medium text-white transition-all hover:bg-gray-800 hover:shadow-card active:scale-[0.98]">
+                  Start negotiating <ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" />
+                </Link>
+                <a href="#how-it-works" className="inline-flex items-center gap-1 rounded-full px-4 py-2.5 text-[14px] font-medium text-gray-500 transition hover:text-gray-900">
+                  See how it works <ChevronRight size={14} />
+                </a>
+              </motion.div>
+            </div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 30, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.9, delay: 0.35, ease: [0.16, 1, 0.3, 1] }}
+              className="mt-16 lg:mt-0"
+            >
+              <ChatMockup />
+            </motion.div>
+          </div>
+        </motion.div>
+      </section>
+
+      {/* ── Logo marquee ──────────────────────── */}
+      <Reveal className="py-10 border-t border-gray-100/60">
+        <p className="text-center text-[12px] font-medium text-gray-400 tracking-wide uppercase mb-5">
+          Negotiates with any company
+        </p>
+        <CompanyMarquee />
+      </Reveal>
+
+      {/* ── Stats bar ───────────────────────────── */}
+      <section className="px-6 py-16 sm:py-20">
+        <div className="mx-auto max-w-4xl">
+          <div className="grid grid-cols-3 divide-x divide-gray-100">
+            {[
+              { end: 2400000, prefix: '$', suffix: '+', label: 'Saved for users', display: '$2.4M+' },
+              { end: 12000, prefix: '', suffix: '+', label: 'Calls completed' },
+              { end: 94, prefix: '', suffix: '%', label: 'Success rate' },
+            ].map((s) => (
+              <Reveal key={s.label} className="text-center px-4">
+                <p className="text-[clamp(1.5rem,3.5vw,2.5rem)] font-bold tracking-tight text-gray-950 tabular-nums">
+                  {s.display ? s.display : <Counter end={s.end} prefix={s.prefix} suffix={s.suffix} />}
+                </p>
+                <p className="mt-1 text-[13px] text-gray-400 font-medium">{s.label}</p>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── How it works ──────────────────────── */}
+      <section id="how-it-works" className="px-6 py-20 sm:py-28 bg-gray-50/60">
+        <div className="mx-auto max-w-5xl">
+          <Reveal>
+            <p className="text-[13px] font-medium text-gray-400 tracking-wide uppercase mb-3">How it works</p>
+            <h2 className="text-[clamp(1.75rem,4vw,2.75rem)] font-bold tracking-[-0.03em] text-gray-950 max-w-lg">
+              Three steps.{' '}<span className="font-serif italic font-normal">Real savings.</span>
+            </h2>
+          </Reveal>
+
+          <div className="mt-14 grid gap-8 sm:grid-cols-3">
+            {[
+              {
+                step: '01',
+                title: 'Tell us what you want',
+                desc: 'Describe your goal in plain language. Lower your cable bill, dispute a charge, cancel and renegotiate — whatever it is.',
+                icon: FileText,
+              },
+              {
+                step: '02',
+                title: 'We make the call',
+                desc: 'Kiru dials the number, navigates phone trees, waits on hold, and speaks to a real human — using proven negotiation tactics.',
+                icon: Phone,
+              },
+              {
+                step: '03',
+                title: 'You get results',
+                desc: 'Get a full transcript, performance score, and breakdown of every tactic used. See exactly what was said and what you saved.',
+                icon: Check,
+              },
+            ].map((item, i) => (
+              <Reveal key={item.step} delay={0.08 * (i + 1)}>
+                <div className="relative">
+                  {/* Step number */}
+                  <span className="text-[11px] font-semibold text-gray-300 tracking-widest uppercase">{item.step}</span>
+                  {/* Connector line (not on last) */}
+                  {i < 2 && (
+                    <div className="hidden sm:block absolute top-[5px] left-[36px] right-[-32px] h-px bg-gray-200" />
+                  )}
+                  <div className="mt-4 flex h-10 w-10 items-center justify-center rounded-xl bg-gray-900 text-white mb-4">
+                    <item.icon size={18} strokeWidth={2} />
+                  </div>
+                  <h3 className="text-[17px] font-semibold text-gray-950">{item.title}</h3>
+                  <p className="mt-2 text-[14px] leading-relaxed text-gray-500">{item.desc}</p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Bento Feature Grid ──────────────────── */}
+      <section id="features" className="px-6 py-20 sm:py-28">
+        <div className="mx-auto max-w-6xl">
+          <Reveal>
+            <p className="text-[13px] font-medium text-gray-400 tracking-wide uppercase mb-3">Capabilities</p>
+            <h2 className="text-[clamp(1.75rem,4vw,2.5rem)] font-bold tracking-[-0.03em] text-gray-950 max-w-lg">
+              Everything happens in{' '}
+              <span className="font-serif italic font-normal">one call.</span>
+            </h2>
+          </Reveal>
+
+          <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Reveal delay={0.05} className="sm:col-span-2 lg:col-span-2">
+              <div className="group h-full rounded-2xl border border-gray-100 bg-gray-50/50 p-6 sm:p-8 transition-all duration-200 hover:border-gray-200 hover:shadow-card hover:bg-white">
+                <div className="flex items-center gap-2 mb-1"><Phone size={14} className="text-gray-400" /><span className="text-[12px] font-semibold text-gray-400 uppercase tracking-wider">Real Calls</span></div>
+                <h3 className="text-[18px] font-semibold text-gray-950 mt-2">Not a chatbot. An actual phone call.</h3>
+                <p className="mt-2 text-[14px] leading-relaxed text-gray-500 max-w-md">
+                  <Kiru className="text-gray-700" /> dials the number, navigates phone trees, waits on hold, and speaks to a real person — all while you do something else.
+                </p>
+                <BentoCallVisual />
+              </div>
+            </Reveal>
+            <Reveal delay={0.1}>
+              <div className="group h-full rounded-2xl border border-gray-100 bg-gray-50/50 p-6 sm:p-8 transition-all duration-200 hover:border-gray-200 hover:shadow-card hover:bg-white">
+                <div className="flex items-center gap-2 mb-1"><Sparkles size={14} className="text-gray-400" /><span className="text-[12px] font-semibold text-gray-400 uppercase tracking-wider">Strategy</span></div>
+                <h3 className="text-[18px] font-semibold text-gray-950 mt-2">Adapts mid-conversation</h3>
+                <p className="mt-2 text-[14px] leading-relaxed text-gray-500">Selects and shifts tactics in real-time based on what&apos;s working.</p>
+                <BentoTacticsVisual />
+              </div>
+            </Reveal>
+            <Reveal delay={0.15}>
+              <div className="group h-full rounded-2xl border border-gray-100 bg-gray-50/50 p-6 sm:p-8 transition-all duration-200 hover:border-gray-200 hover:shadow-card hover:bg-white">
+                <div className="flex items-center gap-2 mb-1"><BarChart3 size={14} className="text-gray-400" /><span className="text-[12px] font-semibold text-gray-400 uppercase tracking-wider">Analysis</span></div>
+                <h3 className="text-[18px] font-semibold text-gray-950 mt-2">Scored and summarized</h3>
+                <p className="mt-2 text-[14px] leading-relaxed text-gray-500">Every negotiation gets a performance score with a detailed breakdown.</p>
+                <BentoScoreVisual />
+              </div>
+            </Reveal>
+            <Reveal delay={0.2}>
+              <div className="group h-full rounded-2xl border border-gray-100 bg-gray-50/50 p-6 sm:p-8 transition-all duration-200 hover:border-gray-200 hover:shadow-card hover:bg-white">
+                <div className="flex items-center gap-2 mb-1"><Shield size={14} className="text-gray-400" /><span className="text-[12px] font-semibold text-gray-400 uppercase tracking-wider">Privacy</span></div>
+                <h3 className="text-[18px] font-semibold text-gray-950 mt-2">Your data stays yours</h3>
+                <p className="mt-2 text-[14px] leading-relaxed text-gray-500">Calls are processed securely. No training on your conversations. Delete anytime.</p>
+                <BentoPrivacyVisual />
+              </div>
+            </Reveal>
+            <Reveal delay={0.25}>
+              <div className="group h-full rounded-2xl border border-gray-100 bg-gray-50/50 p-6 sm:p-8 transition-all duration-200 hover:border-gray-200 hover:shadow-card hover:bg-white">
+                <div className="flex items-center gap-2 mb-1"><Mic size={14} className="text-gray-400" /><span className="text-[12px] font-semibold text-gray-400 uppercase tracking-wider">Transcript</span></div>
+                <h3 className="text-[18px] font-semibold text-gray-950 mt-2">Every word recorded</h3>
+                <p className="mt-2 text-[14px] leading-relaxed text-gray-500">Full transcript and audio recording of every negotiation.</p>
+                <BentoTranscriptVisual />
+              </div>
+            </Reveal>
+            <Reveal delay={0.3} className="sm:col-span-2 lg:col-span-3">
+              <div className="group rounded-2xl border border-gray-100 bg-gradient-to-br from-gray-50/80 via-white to-gray-50/50 p-6 sm:p-8 transition-all duration-200 hover:border-gray-200 hover:shadow-card">
+                <div className="lg:flex lg:items-center lg:justify-between lg:gap-12">
+                  <div className="lg:max-w-md">
+                    <div className="flex items-center gap-2 mb-1"><Zap size={14} className="text-gray-400" /><span className="text-[12px] font-semibold text-gray-400 uppercase tracking-wider">Automation</span></div>
+                    <h3 className="text-[18px] font-semibold text-gray-950 mt-2">Handles hold times, phone trees, and transfers</h3>
+                    <p className="mt-2 text-[14px] leading-relaxed text-gray-500">No more pressing 1 for English, waiting 45 minutes, or being transferred three times. <Kiru className="text-gray-700" /> does the tedious parts so you don&apos;t have to.</p>
+                  </div>
+                  <div className="lg:flex-1 lg:max-w-lg">
+                    <BentoAutomationVisual />
+                  </div>
+                </div>
+              </div>
+            </Reveal>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Use Cases ───────────────────────────── */}
+      <section className="px-6 py-20 sm:py-28 bg-gray-50/60">
+        <div className="mx-auto max-w-6xl">
+          <div className="grid gap-12 lg:grid-cols-5 lg:gap-16 items-start">
+            <Reveal className="lg:col-span-2">
+              <p className="text-[13px] font-medium text-gray-400 tracking-wide uppercase mb-3">Use cases</p>
+              <h2 className="text-[clamp(1.75rem,4vw,2.5rem)] font-bold tracking-[-0.03em] text-gray-950">
+                Bills. Contracts.{' '}<span className="font-serif italic font-normal">Subscriptions.</span>
+              </h2>
+              <p className="mt-3 text-[15px] text-gray-500 leading-relaxed">Whatever you&apos;re overpaying for, <Kiru className="text-gray-700" /> can negotiate it down. Here&apos;s what our users have saved.</p>
+            </Reveal>
+
+            <Reveal delay={0.1} className="lg:col-span-3">
+              <div className="rounded-2xl border border-gray-100 bg-white overflow-hidden">
+                {[
+                  { icon: CreditCard, title: 'Cable & Internet', before: '$120/mo', after: '$85/mo', saved: '$420/yr', desc: 'Comcast, Spectrum, AT&T — loyalty discounts they don\'t advertise.' },
+                  { icon: FileText, title: 'Medical Bills', before: '$2,400', after: '$960', saved: '$1,440', desc: 'Hospital bills, lab fees, out-of-network charges.' },
+                  { icon: TrendingDown, title: 'Subscriptions', before: '$89/mo', after: '$59/mo', saved: '$360/yr', desc: 'SaaS, insurance, memberships — cancel and renegotiate.' },
+                  { icon: Phone, title: 'Phone & Wireless', before: '$95/mo', after: '$65/mo', saved: '$360/yr', desc: 'Carrier retention deals, plan downgrades, fee waivers.' },
+                ].map((c, i) => (
+                  <div key={c.title} className={`flex items-center gap-5 px-6 py-5 ${i > 0 ? 'border-t border-gray-100' : ''}`}>
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-50 text-gray-400">
+                      <c.icon size={18} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-[14px] font-semibold text-gray-950">{c.title}</h3>
+                        <span className="text-[12px] text-gray-400">{c.desc}</span>
+                      </div>
+                      <div className="mt-1 flex items-baseline gap-2">
+                        <span className="text-[13px] text-gray-400 line-through">{c.before}</span>
+                        <ArrowRight size={10} className="text-gray-300" />
+                        <span className="text-[13px] font-semibold text-gray-950">{c.after}</span>
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <span className="text-[16px] font-bold text-emerald-600 tracking-tight">{c.saved}</span>
+                      <p className="text-[11px] text-gray-400">saved</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Reveal>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Testimonials ──────────────────────────── */}
+      <section className="px-6 py-20 sm:py-28">
+        <div className="mx-auto max-w-5xl">
+          <Reveal>
+            <p className="text-[13px] font-medium text-gray-400 tracking-wide uppercase mb-3">What people are saying</p>
+          </Reveal>
+
+          <div className="mt-6 grid gap-4 lg:grid-cols-5">
+            {/* Featured testimonial — large */}
+            <Reveal delay={0.05} className="lg:col-span-3">
+              <div className="h-full rounded-2xl border border-gray-100 bg-gray-50/50 p-8 sm:p-10 flex flex-col justify-between">
+                <p className="text-[clamp(1.25rem,2.5vw,1.5rem)] font-serif italic leading-[1.4] text-gray-900">
+                  &ldquo;I saved $420 a year on my internet bill while eating lunch. The whole thing took three minutes on my end.&rdquo;
+                </p>
+                <div className="mt-8 flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-full bg-gray-200 flex items-center justify-center text-[13px] font-semibold text-gray-500">SK</div>
+                  <div>
+                    <p className="text-[14px] font-semibold text-gray-950">Sarah K.</p>
+                    <p className="text-[12px] text-emerald-600 font-medium">Comcast &mdash; $35/mo saved</p>
+                  </div>
+                </div>
+              </div>
+            </Reveal>
+
+            {/* Two stacked smaller testimonials */}
+            <div className="lg:col-span-2 flex flex-col gap-4">
+              <Reveal delay={0.12}>
+                <div className="rounded-2xl border border-gray-100 bg-gray-50/50 p-6">
+                  <p className="text-[14px] leading-relaxed text-gray-700">&ldquo;I had a $2,400 ER bill I thought was non-negotiable. Kiru got it down to $960.&rdquo;</p>
+                  <div className="mt-4 flex items-center gap-2">
+                    <div className="h-7 w-7 rounded-full bg-gray-200 flex items-center justify-center text-[11px] font-semibold text-gray-500">MT</div>
+                    <div>
+                      <p className="text-[13px] font-semibold text-gray-950">Marcus T.</p>
+                      <p className="text-[11px] text-emerald-600 font-medium">Medical &mdash; $1,440 saved</p>
+                    </div>
+                  </div>
+                </div>
+              </Reveal>
+              <Reveal delay={0.18}>
+                <div className="rounded-2xl border border-gray-100 bg-gray-50/50 p-6">
+                  <p className="text-[14px] leading-relaxed text-gray-700">&ldquo;It called my insurance company, sat on hold for 40 minutes, and negotiated my premium down. I didn&apos;t do a thing.&rdquo;</p>
+                  <div className="mt-4 flex items-center gap-2">
+                    <div className="h-7 w-7 rounded-full bg-gray-200 flex items-center justify-center text-[11px] font-semibold text-gray-500">PR</div>
+                    <div>
+                      <p className="text-[13px] font-semibold text-gray-950">Priya R.</p>
+                      <p className="text-[11px] text-emerald-600 font-medium">Insurance &mdash; $28/mo saved</p>
+                    </div>
+                  </div>
+                </div>
+              </Reveal>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Smooth white → dark transition ─────────── */}
+      <div
+        className="h-48 sm:h-64 -mb-px"
+        style={{
+          background: 'linear-gradient(180deg, #ffffff 0%, #f4f4f5 20%, #a1a1aa 45%, #3f3f46 65%, #18181b 82%, #09090b 100%)',
+        }}
+      />
+
+      {/* ── Bottom CTA + Gradient ─────────────────── */}
+      <section className="relative px-6 pt-16 sm:pt-24 pb-0 overflow-hidden bg-gray-950">
+
+        {/* Animated aurora gradient orbs */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute bottom-0 left-[5%] h-[70%] w-[55%] translate-y-[40%] rounded-full bg-violet-600/30 blur-[120px] animate-aurora-drift" />
+          <div className="absolute bottom-0 right-[0%] h-[65%] w-[50%] translate-y-[35%] rounded-full bg-blue-500/45 blur-[100px] animate-aurora-drift-2" />
+          <div className="absolute bottom-0 left-[20%] h-[55%] w-[45%] translate-y-[25%] rounded-full bg-rose-500/30 blur-[100px] animate-aurora-drift" />
+          <div className="absolute bottom-0 right-[10%] h-[75%] w-[50%] translate-y-[50%] rounded-full bg-indigo-600/40 blur-[140px] animate-aurora-drift-2" />
+          <div className="absolute bottom-0 left-[40%] h-[50%] w-[35%] translate-y-[40%] rounded-full bg-fuchsia-500/25 blur-[90px] animate-aurora-drift" />
+          <div className="absolute bottom-0 left-[-5%] h-[60%] w-[40%] translate-y-[55%] rounded-full bg-amber-500/20 blur-[120px] animate-aurora-drift-2" />
+        </div>
+
+        {/* Grain texture */}
+        <div className="absolute inset-0 grain" />
+
+        <Reveal>
+          <div className="mx-auto max-w-6xl relative z-10">
+            <h2 className="text-[clamp(2rem,5vw,3.75rem)] font-bold tracking-[-0.04em] leading-[1.08] text-white max-w-xl">
+              Stop leaving money{' '}<br className="hidden sm:block" />
+              <span className="font-serif italic font-normal">on the table.</span>
+            </h2>
+            <p className="mt-5 text-[16px] text-gray-400 max-w-md leading-relaxed">
+              One message. One call. Real savings — delivered to you while you wait.
+            </p>
+            <div className="mt-10 flex items-center gap-4 pb-24">
+              <Link href="/chat" className="group inline-flex items-center gap-2 rounded-full bg-white pl-6 pr-5 py-3 text-[14px] font-semibold text-gray-950 transition-all hover:bg-gray-100 hover:shadow-elevated active:scale-[0.98]">
+                Start your first negotiation <ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" />
+              </Link>
+              <span className="text-[13px] text-gray-500">No credit card required</span>
+            </div>
+          </div>
+        </Reveal>
+
+        {/* Spacer for gradient to breathe */}
+        <div className="h-[280px] sm:h-[340px]" aria-hidden="true" />
+      </section>
+
+      {/* ── Footer ──────────────────────────────── */}
+      <footer className="relative bg-gray-950 px-6 py-8 border-t border-white/5">
+        <div className="mx-auto max-w-6xl">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-6">
+              <span className="text-[15px] text-gray-500"><Kiru /></span>
+              <span className="text-[12px] text-gray-600">AI-powered phone negotiation</span>
+            </div>
+            <div className="flex items-center gap-6">
+              <Link href="/chat" className="text-[13px] text-gray-500 transition hover:text-gray-300">Launch App</Link>
+              <span className="text-[12px] text-gray-600">Built at TreeHacks 2026</span>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
   );
 }
