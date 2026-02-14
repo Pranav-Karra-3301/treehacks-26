@@ -198,7 +198,7 @@ def build_negotiation_prompt(
     ]
     if walkaway and walkaway != "No hard walkaway configured":
         guardrail_lines.append(
-            f"11. HARD BUDGET LIMIT: {walkaway}. You MUST NOT exceed this under any circumstances."
+            f"12. HARD BUDGET LIMIT: {walkaway}. You MUST NOT exceed this under any circumstances."
         )
     parts.append("\n".join(guardrail_lines))
 
@@ -244,7 +244,36 @@ def build_greeting(task: Dict[str, Any]) -> str:
     if opening:
         return opening.strip()
 
+<<<<<<< HEAD
     # Use a natural, generic greeting — the system prompt already has the
     # full objective context, so the agent will steer the conversation
     # toward it after the initial pleasantries.
     return "Hi, yea, I was hoping you could help me out with something."
+=======
+    import random
+
+    # Pool of natural greetings — vary so repeat calls don't sound identical
+    bill_greetings = [
+        "Hi there, thanks for taking my call. I'm calling about my account.",
+        "Hey, appreciate you picking up. I wanted to ask about my account.",
+        "Hi, thanks for answering. I had a quick question about my bill.",
+    ]
+    price_greetings = [
+        "Hey, thanks for picking up. I wanted to chat about pricing.",
+        "Hi there, appreciate your time. I had a question about your rates.",
+        "Hey, thanks for answering. I was looking into your pricing.",
+    ]
+    general_greetings = [
+        "Hi, thanks for taking my call. I was hoping you could help me with something.",
+        "Hey, appreciate you picking up. I had something I wanted to run by you.",
+        "Hi there, thanks for answering. I was hoping to chat real quick.",
+    ]
+
+    task_type = task.get("task_type", "custom")
+    if task_type == "bill_reduction":
+        return random.choice(bill_greetings)
+    elif task_type == "price_negotiation":
+        return random.choice(price_greetings)
+    else:
+        return random.choice(general_greetings)
+>>>>>>> f4eba8d (Overhaul voice agent prompting for hyper-realistic calls)
