@@ -57,6 +57,11 @@ python scripts/smoke_api.py --base-url http://127.0.0.1:3001 --no-websocket
   2. run `./scripts/run-tests.sh` before handing off
   3. run one smoke command to validate end-to-end behavior (`smoke_api.py`) when the backend is up.
 
+## Workflow Rules
+
+- **Always commit after every prompt.** Each commit should describe the goal and outcome of the work done in that prompt. Break work into logical commits — don't batch unrelated changes.
+- **Never skip commits.** Even small changes get committed before moving on.
+
 ## Architecture
 
 ### Backend (`backend/app/`)
