@@ -26,6 +26,13 @@ This repo is a two-service app.
 - `cd frontend && npm run build` — production build sanity check.
 - `cd frontend && npm run lint` — run frontend linting.
 - `docker-compose up --build` — start both services together.
+- `cd backend && ./scripts/run-tests.sh` — run backend test suite and grouped targets (`unit`, `integration`, `ws`, `benchmark`).
+- `cd backend && pytest -q -m unit` — fast unit regression set.
+- `cd backend && pytest -q -m integration` — API/integration tests with mocked providers.
+- `cd backend && pytest -q -m ws` — websocket lifecycle tests.
+- `cd backend && pytest -q -m benchmark` — timing sanity checks.
+- `cd backend && python scripts/smoke_api.py --base-url http://127.0.0.1:3001` — one-shot API + websocket smoke flow.
+- `cd backend && python scripts/smoke_api.py --base-url http://127.0.0.1:3001 --no-websocket` — REST-only smoke path.
 
 ## Coding Style & Naming Conventions
 - Python: follow existing style (`snake_case` for funcs/vars, `CamelCase` classes, 4-space indent, type hints where practical).
@@ -35,9 +42,16 @@ This repo is a two-service app.
 
 ## Testing Guidelines
 - Backend test dependency is present (`pytest` in `backend/requirements.txt`).
-- No dedicated test suite exists yet; when adding tests use:
-  - Backend: `cd backend && pytest`.
-  - Frontend: `cd frontend && npm run lint` and `npm run build` as minimum quality gates.
+- Default workflow for backend behavior checks while building:
+  - Backend: `cd backend && ./scripts/run-tests.sh`
+  - Focused checks while iterating:
+    - `pytest -q -m unit`
+    - `pytest -q -m integration`
+    - `pytest -q -m ws`
+    - `pytest -q -m benchmark`
+  - Endpoint smoke test (no UI): `python scripts/smoke_api.py --base-url http://127.0.0.1:3001`
+  - Use `--no-websocket` when WS endpoint is not available.
+- Frontend: `cd frontend && npm run lint` and `npm run build` as minimum quality gates.
 - Place new tests under `backend/tests/` and `frontend/__tests__/` (or equivalent) and include naming like `test_*.py` / `*.test.tsx`.
 
 ## Commit & Pull Request Guidelines

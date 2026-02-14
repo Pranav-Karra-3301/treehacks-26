@@ -13,7 +13,15 @@ NegotiateAI is an AI voice negotiation agent with a FastAPI backend orchestrator
 cd backend
 source .venv/bin/activate
 pip install -r requirements.txt
+./scripts/run-tests.sh           # unit + integration + ws + benchmark
+pytest -q                        # full suite
+pytest -q -m unit                # unit tests only
+pytest -q -m integration         # task lifecycle / API tests
+pytest -q -m ws                  # websocket tests
+pytest -q -m benchmark           # timing smoke checks
 uvicorn app.main:app --reload --host 0.0.0.0 --port 3001
+python scripts/smoke_api.py --base-url http://127.0.0.1:3001
+python scripts/smoke_api.py --base-url http://127.0.0.1:3001 --no-websocket
 ```
 
 ### Frontend
@@ -32,8 +40,22 @@ docker-compose up --build
 
 ### Tests
 ```bash
-cd backend && pytest    # pytest is in requirements.txt but no test files exist yet
+cd backend
+pytest                          # full suite
+./scripts/run-tests.sh
+pytest -q -m unit               # unit tests only
+pytest -q -m integration        # task lifecycle / API tests
+pytest -q -m ws                 # websocket tests
+pytest -q -m benchmark          # timing checks
+python scripts/smoke_api.py --base-url http://127.0.0.1:3001
+python scripts/smoke_api.py --base-url http://127.0.0.1:3001 --no-websocket
 ```
+
+### Testing expectations while building
+- Prefer this loop for backend changes:
+  1. run affected tests with marker (`unit`, `integration`, `ws`)  
+  2. run `./scripts/run-tests.sh` before handing off
+  3. run one smoke command to validate end-to-end behavior (`smoke_api.py`) when the backend is up.
 
 ## Architecture
 
