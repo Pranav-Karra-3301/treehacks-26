@@ -33,23 +33,61 @@ def _format_stream_url(request: Request, task_id: str) -> str:
 
 
 def _extract_task_id_from_start_payload(start_payload: Dict[str, Any]) -> Optional[str]:
-    custom_parameters = start_payload.get("customParameters")
-    if not isinstance(custom_parameters, dict):
+    if not isinstance(start_payload, dict):
         return None
 
-    task_id = custom_parameters.get("task_id")
-    if isinstance(task_id, str) and task_id.strip():
-        return task_id.strip()
+    custom_parameters = start_payload.get("customParameters") or start_payload.get("custom_parameters")
+    if isinstance(custom_parameters, dict):
+        for key in ("task_id", "taskId", "TaskId", "task", "Task"):
+            task_id = custom_parameters.get(key)
+            if isinstance(task_id, str) and task_id.strip():
+                return task_id.strip()
 
-    task_id = custom_parameters.get("taskId")
-    if isinstance(task_id, str) and task_id.strip():
-        return task_id.strip()
-
-    task_id = custom_parameters.get("TaskId")
-    if isinstance(task_id, str) and task_id.strip():
-        return task_id.strip()
-
+    for key in ("task_id", "taskId", "TaskId", "task", "Task"):
+        task_id = start_payload.get(key)
+        if isinstance(task_id, str) and task_id.strip():
+            return task_id.strip()
     return None
+
+
+def _coerce_id(value: Any) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    return value or None
+
+
+def _extract_media_context(message: Dict[str, Any]) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    start = message.get("start")
+    start_payload = start if isinstance(start, dict) else {}
+
+    stream_sid = _coerce_id(
+        message.get("streamSid")
+        or message.get("stream_sid")
+        or message.get("streamId")
+        or message.get("stream_id")
+        or start_payload.get("streamSid")
+        or start_payload.get("stream_sid")
+        or start_payload.get("stream_id")
+    )
+    call_sid = _coerce_id(
+        message.get("callSid")
+        or message.get("call_sid")
+        or message.get("CallSid")
+        or start_payload.get("callSid")
+        or start_payload.get("call_sid")
+        or start_payload.get("CallSid")
+    )
+    task_id = _extract_task_id_from_start_payload(start_payload)
+    if not task_id:
+        task_id = _coerce_id(
+            message.get("task_id")
+            or message.get("taskId")
+            or message.get("TaskId")
+            or message.get("task")
+            or message.get("Task")
+        )
+    return task_id, call_sid, stream_sid
 
 
 def get_routes(orchestrator: CallOrchestrator, ws_manager: ConnectionManager):
@@ -58,7 +96,11 @@ def get_routes(orchestrator: CallOrchestrator, ws_manager: ConnectionManager):
     @router.post("/voice")
     async def voice_webhook(request: Request):
         params = dict((await request.form()).items())
-        task_id = params.get("task_id", "unknown")
+        query_params = dict(request.query_params.items())
+        task_id = params.get("task_id") or query_params.get("task_id", "unknown")
+        if not task_id:
+            task_id = "unknown"
+
         with timed_step(
             "twilio",
             "voice_webhook",
@@ -106,27 +148,24 @@ def get_routes(orchestrator: CallOrchestrator, ws_manager: ConnectionManager):
                     events_received += 1
                     message = json.loads(raw)
                     event = message.get("event")
+                    context_task_id, context_call_sid, context_stream_sid = _extract_media_context(message)
+
+                    if context_call_sid:
+                        call_sid = context_call_sid
+                    if context_stream_sid:
+                        stream_sid = context_stream_sid
+                    if context_task_id:
+                        if task_id == "unknown":
+                            task_id = context_task_id
 
                     if event == "start":
                         with timed_step("twilio", "media_event", task_id=task_id, details={"event": event, "task_id": task_id}):
-                            start = message.get("start")
-                            start_task_id = None
-                            if isinstance(start, dict):
-                                stream_sid = start.get("streamSid")
-                                call_sid = start.get("callSid")
-                                start_task_id = _extract_task_id_from_start_payload(start)
-                                candidate_task_id = start_task_id or task_id
-                                task_id = orchestrator.resolve_task_for_media_event(
-                                    candidate_task_id,
-                                    stream_sid=stream_sid,
-                                    call_sid=call_sid,
-                                )
-                            else:
-                                task_id = orchestrator.resolve_task_for_media_event(
-                                    task_id,
-                                    stream_sid=stream_sid,
-                                    call_sid=call_sid,
-                                )
+                            candidate_task_id = context_task_id or task_id
+                            task_id = orchestrator.resolve_task_for_media_event(
+                                candidate_task_id,
+                                stream_sid=stream_sid,
+                                call_sid=call_sid,
+                            )
 
                             if task_id != query_task_id:
                                 await orchestrator.unregister_media_stream(query_task_id)
@@ -141,7 +180,7 @@ def get_routes(orchestrator: CallOrchestrator, ws_manager: ConnectionManager):
                                     details={
                                         "stream_sid": stream_sid,
                                         "call_sid": call_sid,
-                                        "start_task_id": start_task_id,
+                                        "start_task_id": context_task_id,
                                         "events_received": events_received,
                                     },
                                 )
@@ -163,9 +202,34 @@ def get_routes(orchestrator: CallOrchestrator, ws_manager: ConnectionManager):
                             )
                         continue
 
+                    if task_id == "unknown" and (context_task_id or call_sid or stream_sid):
+                        resolved_task_id = orchestrator.resolve_task_for_media_event(
+                            context_task_id or task_id,
+                            stream_sid=stream_sid,
+                            call_sid=call_sid,
+                        )
+                        if resolved_task_id != task_id:
+                            task_id = resolved_task_id
+                            if task_id != query_task_id:
+                                await orchestrator.unregister_media_stream(query_task_id)
+                                query_task_id = task_id
+                            if task_id != "unknown":
+                                await orchestrator.register_media_stream(
+                                    task_id,
+                                    websocket,
+                                    stream_sid=stream_sid,
+                                    call_sid=call_sid,
+                                )
+                                if stream_sid:
+                                    await orchestrator.set_media_stream_sid(task_id, stream_sid)
+                                if call_sid:
+                                    await orchestrator.set_media_call_sid(task_id, call_sid)
+
                     with timed_step("twilio", "media_event", task_id=task_id, details={"event": event}):
                         if event == "media":
                             if task_id == "unknown":
+                                media_payload = message.get("media", {})
+                                media_data = media_payload.get("payload", "") if isinstance(media_payload, dict) else ""
                                 log_event(
                                     "twilio",
                                     "media_stream_media_dropped_no_task",
@@ -175,6 +239,8 @@ def get_routes(orchestrator: CallOrchestrator, ws_manager: ConnectionManager):
                                         "events_received": events_received,
                                         "stream_sid": stream_sid,
                                         "call_sid": call_sid,
+                                        "raw_task_id": context_task_id,
+                                        "payload_len": len(media_data) if isinstance(media_data, str) else 0,
                                     },
                                 )
                                 continue

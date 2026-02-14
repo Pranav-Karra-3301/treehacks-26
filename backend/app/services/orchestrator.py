@@ -408,6 +408,22 @@ class CallOrchestrator:
     async def _send_agent_audio_to_twilio(self, task_id: str, payload: bytes) -> None:
         websocket = self._task_to_media_ws.get(task_id)
         if not websocket or not payload:
+            if task_id != "unknown" and not websocket:
+                log_event(
+                    "orchestrator",
+                    "agent_audio_send_skipped",
+                    status="warning",
+                    task_id=task_id,
+                    details={"reason": "media_stream_missing", "bytes": len(payload)},
+                )
+            elif task_id == "unknown":
+                log_event(
+                    "orchestrator",
+                    "agent_audio_send_skipped",
+                    status="warning",
+                    task_id=task_id,
+                    details={"reason": "invalid_task_id", "bytes": len(payload)},
+                )
             return
 
         stream_sid = self._task_to_stream_sid.get(task_id)

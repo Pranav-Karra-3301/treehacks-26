@@ -116,6 +116,45 @@ def test_twilio_media_stream_resolves_task_from_call_sid_when_query_missing(clie
         assert "ended" in status_values
 
 
+def test_twilio_media_stream_resolves_task_from_start_payload_task_id_when_query_missing(client) -> None:
+    task_id = _create_task(client)
+
+    with client.websocket_connect(f"/ws/call/{task_id}") as ws:
+        connection = ws.receive_json()
+        assert connection["type"] == "call_status"
+
+        start_call = client.post(f"/api/tasks/{task_id}/call")
+        assert start_call.status_code == 200
+        assert start_call.json()["ok"] is True
+
+        with client.websocket_connect("/twilio/media-stream") as media_ws:
+            media_ws.send_json(
+                {
+                    "event": "start",
+                    "start": {
+                        "streamSid": "stream_task_resolver",
+                        "customParameters": {"task_id": task_id},
+                    },
+                }
+            )
+            media_ws.send_json(
+                {
+                    "event": "media",
+                    "media": {"payload": base64.b64encode(b"test").decode("ascii")},
+                }
+            )
+            media_ws.send_json({"event": "stop"})
+
+            status_values = {
+                item["data"]["status"]
+                for item in [ws.receive_json() for _ in range(6)]
+                if item["type"] == "call_status"
+            }
+
+        assert "media_connected" in status_values
+        assert "ended" in status_values
+
+
 def test_twilio_status_callback_without_task_id_can_end_call(client) -> None:
     task_id = _create_task(client)
 
