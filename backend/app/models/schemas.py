@@ -6,14 +6,13 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 
-TaskType = Literal["bill_reduction", "price_negotiation", "custom"]
 NegotiationStyle = Literal["collaborative", "assertive", "empathetic"]
 CallStatus = Literal["pending", "dialing", "active", "ended", "failed"]
 CallOutcome = Literal["unknown", "success", "partial", "failed", "walkaway"]
 
 
 class NegotiationTaskCreate(BaseModel):
-    task_type: TaskType = "custom"
+    task_type: str = "custom"
     target_phone: str
     objective: str
     context: str = ""
@@ -32,7 +31,7 @@ class TranscriptTurn(BaseModel):
 
 class TaskSummary(BaseModel):
     id: str
-    task_type: TaskType
+    task_type: str = "custom"
     target_phone: str
     objective: str
     status: CallStatus

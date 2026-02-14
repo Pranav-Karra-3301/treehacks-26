@@ -1,6 +1,5 @@
 export type CallStatus = 'pending' | 'dialing' | 'active' | 'ended' | 'failed';
 export type CallOutcome = 'unknown' | 'success' | 'partial' | 'failed' | 'walkaway';
-export type TaskType = 'bill_reduction' | 'price_negotiation' | 'custom';
 export type NegotiationStyle = 'collaborative' | 'assertive' | 'empathetic';
 
 export type TranscriptEntry = {
@@ -11,7 +10,7 @@ export type TranscriptEntry = {
 
 export type TaskSummary = {
   id: string;
-  task_type: TaskType;
+  task_type: string;
   target_phone: string;
   objective: string;
   status: CallStatus;
