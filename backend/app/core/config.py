@@ -86,6 +86,16 @@ class Settings:
         LOG_NOISY_EVENTS_EVERY_N = 120
     if LOG_NOISY_EVENTS_EVERY_N < 0:
         LOG_NOISY_EVENTS_EVERY_N = 0
+    LOG_PRETTY = (
+        (os.getenv("LOG_PRETTY", "true") or "true").strip().lower() not in {"0", "false", "no", "off"}
+    )
+    _log_color = (os.getenv("LOG_COLOR", "auto") or "auto").strip().lower()
+    if _log_color in {"1", "true", "yes", "on", "always"}:
+        LOG_COLOR = True
+    elif _log_color in {"0", "false", "no", "off", "never"}:
+        LOG_COLOR = False
+    else:
+        LOG_COLOR = None
 
     LOG_NOISY_ACTIONS = tuple(
         action.strip()

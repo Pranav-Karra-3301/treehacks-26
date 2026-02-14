@@ -8,6 +8,7 @@ import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Iterable
 from typing import Any, Dict, Optional, Sequence
 from collections import deque
 
@@ -18,6 +19,16 @@ _LOGGER = logging.getLogger("negotiateai")
 _METRICS_LOCK = threading.Lock()
 _NOISY_METRIC_COUNTERS: Dict[str, int] = {}
 _NOISY_ACTIONS = set(settings.LOG_NOISY_ACTIONS or [])
+_PRETTY_ENABLED = bool(settings.LOG_PRETTY)
+_PRETTY_COLOR_ENABLED = False
+
+_ANSI_RESET = "\033[0m"
+_ANSI_BOLD = "\033[1m"
+_ANSI_YELLOW = "\033[33m"
+_ANSI_RED = "\033[31m"
+_ANSI_GREEN = "\033[32m"
+_ANSI_CYAN = "\033[36m"
+_ANSI_LIGHT_BLACK = "\033[90m"
 
 
 def _metric_file() -> Path:
@@ -57,6 +68,79 @@ def _timestamp() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _should_colorize() -> bool:
+    return _PRETTY_ENABLED and _PRETTY_COLOR_ENABLED
+
+
+def _trim_text(value: Any, *, max_length: int = 140) -> str:
+    if value is None:
+        return "n/a"
+    if isinstance(value, (dict, list, tuple)):
+        value = json.dumps(value, default=str)
+    text = str(value)
+    if len(text) <= max_length:
+        return text
+    return f"{text[: max_length - 1]}…"
+
+
+def _render_console_entry(entry: Dict[str, Any]) -> str:
+    component = entry.get("component", "unknown")
+    action = entry.get("action", "event")
+    status = str(entry.get("status", "ok"))
+    task_id = entry.get("task_id")
+    session_id = entry.get("session_id")
+    duration_ms = entry.get("duration_ms")
+    error = entry.get("error")
+    details = entry.get("details")
+
+    if status == "error":
+        status_token = f"{_ANSI_RED}ERR{_ANSI_RESET} "
+    elif status == "warning":
+        status_token = f"{_ANSI_YELLOW}WARN{_ANSI_RESET} "
+    else:
+        status_token = "INFO "
+        if _should_colorize():
+            status_token = f"{_ANSI_GREEN}OK{_ANSI_RESET} "
+
+    chunks = [
+        f"{_ANSI_BOLD}{component}{_ANSI_RESET}/{_ANSI_CYAN}{action}{_ANSI_RESET}",
+        status_token.strip(),
+    ]
+
+    if task_id:
+        chunks.append(f"task={_trim_text(task_id, max_length=24)}")
+    if session_id:
+        chunks.append(f"session={_trim_text(session_id, max_length=24)}")
+    if duration_ms is not None:
+        chunks.append(f"dur={duration_ms}ms")
+    if error is not None:
+        chunks.append(f"{_ANSI_RED}error={_trim_text(error, max_length=220)}{_ANSI_RESET}")
+
+    detail_items: Iterable[tuple[str, Any]]
+    if isinstance(details, dict):
+        detail_items = details.items()
+    else:
+        detail_items = []
+    detail_chunks: list[str] = []
+    for key, value in detail_items:
+        if key in {"task_id", "session_id", "duration_ms", "status"}:
+            continue
+        detail_chunks.append(f"{key}={_trim_text(value, max_length=80)}")
+        if len(detail_chunks) >= 8:
+            detail_chunks.append("...")
+            break
+
+    if detail_chunks:
+        chunks.append(" | ".join(detail_chunks))
+
+    timestamp = entry.get("timestamp", _timestamp())[:19]
+    if _should_colorize():
+        return (
+            f"{_ANSI_LIGHT_BLACK}{timestamp}{_ANSI_RESET} " + " ".join(chunks)
+        )
+    return f"{timestamp} | " + " | ".join(chunks)
+
+
 def configure_logging() -> None:
     if getattr(_LOGGER, "_negotiateai_configured", False):
         return
@@ -72,6 +156,16 @@ def configure_logging() -> None:
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(fmt)
     stream_handler.setLevel(log_level)
+    global _PRETTY_COLOR_ENABLED
+    if settings.LOG_COLOR is True:
+        _PRETTY_COLOR_ENABLED = True
+    elif settings.LOG_COLOR is False:
+        _PRETTY_COLOR_ENABLED = False
+    else:
+        _PRETTY_COLOR_ENABLED = bool(
+            getattr(stream_handler.stream, "isatty", lambda: False)()
+            and settings.LOG_PRETTY
+        )
     _LOGGER.addHandler(stream_handler)
 
     log_path = _log_file()
@@ -264,16 +358,13 @@ def log_event(
 
     _append_jsonl(entry)
     if _should_emit_console_log(action, status):
-        _LOGGER.info(
-            "%s | %s | status=%s | duration_ms=%s | task_id=%s | session_id=%s | details=%s",
-            component,
-            action,
-            status,
-            round(duration_ms, 3) if duration_ms is not None else "n/a",
-            task_id or "n/a",
-            session_id or "n/a",
-            details or {},
-        )
+        msg = _render_console_entry(entry)
+        if status == "error":
+            _LOGGER.error(msg)
+        elif status == "warning":
+            _LOGGER.warning(msg)
+        else:
+            _LOGGER.info(msg)
 
 
 @contextmanager
@@ -311,13 +402,11 @@ def timed_step(
             event["error"] = caught_error
         _append_jsonl(event)
     if _should_emit_console_log(action, status):
-        _LOGGER.info(
-            "%s | %s | %s | %.3f ms | task_id=%s session_id=%s | %s",
-            component,
-            action,
-            status,
-            elapsed_ms,
-            task_id or "n/a",
-            session_id or "n/a",
-            details or {},
-        )
+        event["duration_ms"] = round(elapsed_ms, 3)
+        msg = _render_console_entry(event)
+        if status == "error":
+            _LOGGER.error(msg)
+        elif status == "warning":
+            _LOGGER.warning(msg)
+        else:
+            _LOGGER.info(msg)

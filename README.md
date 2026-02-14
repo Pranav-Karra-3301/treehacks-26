@@ -89,6 +89,8 @@ Optional tuning:
 - `LOG_NOISY_EVENTS_EVERY_N=120`
 - `LOG_NOISY_ACTIONS=media_event,save_audio_chunk,media_mark_received`
 - `LOG_SKIP_REQUEST_PATHS=/health`
+- `LOG_PRETTY=true`
+- `LOG_COLOR=auto`
 
 ### LLM provider examples
 
@@ -149,6 +151,9 @@ Telemetry output lives under `backend/data/service.log` and `backend/data/teleme
 - `twilio.media_mark_received`
 
 Set `LOG_NOISY_EVENTS_EVERY_N=0` to suppress all noisy ok-status events while keeping warnings/errors.
+
+`LOG_PRETTY` enables compact structured console output.
+`LOG_COLOR=auto` auto-detects color support (TTY-based). Use `true` or `false` to force.
 
 Run this before starting the stack to catch missing call keys:
 
