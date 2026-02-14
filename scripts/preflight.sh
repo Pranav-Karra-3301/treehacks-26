@@ -65,7 +65,9 @@ mask_secret() {
 }
 
 is_truthy() {
-  case "${1,,}" in
+  local val
+  val="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  case "${val}" in
     1 | true | yes | on | y)
       return 0
       ;;
@@ -140,7 +142,7 @@ info "  TWILIO_AUTH_TOKEN=$(mask_secret "${TWILIO_TOKEN}")"
 info "  TWILIO_PHONE_NUMBER=$(mask_secret "${TWILIO_FROM}")"
 info "  TWILIO_WEBHOOK_HOST=${TWILIO_WEBHOOK_HOST:-<missing>}"
 
-for warning in "${warn_only[@]}"; do
+for warning in "${warn_only[@]+"${warn_only[@]}"}"; do
   warn "${warning}"
 done
 

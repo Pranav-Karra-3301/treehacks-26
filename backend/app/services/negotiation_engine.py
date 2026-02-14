@@ -84,6 +84,26 @@ class NegotiationEngine:
     ) -> Dict[str, Any]:
         """LLM-powered post-call analysis with keyword fallback."""
         with timed_step("negotiation", "summarize_turn", details={"transcript_lines": len(transcript)}):
+            # If transcript is empty or too short, the call never connected
+            real_turns = [t for t in transcript if (t.content or "").strip()]
+            if len(real_turns) < 2:
+                return {
+                    "turn_count": len(transcript),
+                    "generated_at": datetime.utcnow().isoformat(),
+                    "summary": "The call failed to connect or ended before any meaningful conversation took place.",
+                    "outcome": "failed",
+                    "outcome_reasoning": "No substantive dialogue occurred — the call either did not connect or was dropped immediately.",
+                    "concessions": [],
+                    "tactics_used": [],
+                    "tactics": [],
+                    "score": 0,
+                    "score_reasoning": "No negotiation took place.",
+                    "rapport_quality": "poor",
+                    "key_moments": [],
+                    "improvement_suggestions": ["Verify the phone number and try again."],
+                    "details": {"failed_to_connect": True},
+                }
+
             # Try LLM-powered analysis first
             try:
                 return await self._llm_analysis(transcript, task)

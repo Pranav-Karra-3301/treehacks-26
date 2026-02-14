@@ -17,6 +17,7 @@ from app.services.storage import DataStore
 from app.services.twilio_client import TwilioClient
 from app.services.ws_manager import ConnectionManager
 from app.core.telemetry import log_event, timed_step
+from app.models.schemas import TranscriptTurn
 
 
 class CallOrchestrator:
@@ -552,34 +553,107 @@ class CallOrchestrator:
         if side_key not in {"caller", "agent"}:
             side_key = "agent"
 
-        with timed_step(
-            "audio",
-            "save_audio_chunk",
-            session_id=session_id,
-            task_id=session.task_id,
-            details={"side": side, "bytes": len(chunk)},
-        ):
-            with open(call_dir / filename, "ab") as f:
-                f.write(chunk)
-            with open(call_dir / "mixed.wav", "ab") as f:
-                f.write(chunk)
+        # Write to individual track file only (mixed is created at call end)
+        with open(call_dir / filename, "ab") as f:
+            f.write(chunk)
 
-            stats = self._audio_stats.setdefault(
-                session_id,
-                {
-                    "task_id": session.task_id,
-                    "created_at": datetime.utcnow().isoformat(),
-                    "started_at": datetime.utcnow().isoformat(),
-                    "bytes_by_side": {"caller": 0, "agent": 0, "mixed": 0},
-                    "chunks_by_side": {"caller": 0, "agent": 0},
-                    "last_chunk_at": None,
-                },
-            )
-            if side_key in {"caller", "agent"}:
-                stats["chunks_by_side"][side_key] = stats["chunks_by_side"].get(side_key, 0) + 1
-                stats["bytes_by_side"][side_key] = stats["bytes_by_side"].get(side_key, 0) + len(chunk)
-            stats["bytes_by_side"]["mixed"] = stats["bytes_by_side"].get("mixed", 0) + len(chunk)
-            stats["last_chunk_at"] = datetime.utcnow().isoformat()
+        stats = self._audio_stats.setdefault(
+            session_id,
+            {
+                "task_id": session.task_id,
+                "created_at": datetime.utcnow().isoformat(),
+                "started_at": datetime.utcnow().isoformat(),
+                "bytes_by_side": {"caller": 0, "agent": 0, "mixed": 0},
+                "chunks_by_side": {"caller": 0, "agent": 0},
+                "last_chunk_at": None,
+            },
+        )
+        if side_key in {"caller", "agent"}:
+            stats["chunks_by_side"][side_key] = stats["chunks_by_side"].get(side_key, 0) + 1
+            stats["bytes_by_side"][side_key] = stats["bytes_by_side"].get(side_key, 0) + len(chunk)
+        stats["last_chunk_at"] = datetime.utcnow().isoformat()
+
+    def _create_mixed_audio(self, task_id: str) -> None:
+        """Mix inbound and outbound mulaw streams into a single mixed.wav file.
+
+        Decodes both streams from mulaw to 16-bit linear PCM, sums them
+        sample-by-sample (with clipping), then re-encodes to mulaw.
+        This produces a proper two-party mix instead of concatenating chunks.
+        """
+        call_dir = self._store.get_task_dir(task_id)
+        inbound_path = call_dir / "inbound.wav"
+        outbound_path = call_dir / "outbound.wav"
+        mixed_path = call_dir / "mixed.wav"
+
+        inbound_raw = inbound_path.read_bytes() if inbound_path.exists() else b""
+        outbound_raw = outbound_path.read_bytes() if outbound_path.exists() else b""
+
+        # Strip any existing RIFF header (shouldn't be there, but be safe)
+        if inbound_raw[:4] == b"RIFF":
+            inbound_raw = inbound_raw[44:]  # skip standard WAV header
+        if outbound_raw[:4] == b"RIFF":
+            outbound_raw = outbound_raw[44:]
+
+        if not inbound_raw and not outbound_raw:
+            return
+
+        # Mulaw decode table (ITU G.711)
+        def _build_mulaw_decode_table():
+            table = []
+            for byte_val in range(256):
+                complement = ~byte_val & 0xFF
+                sign = (complement & 0x80) >> 7
+                exponent = (complement & 0x70) >> 4
+                mantissa = complement & 0x0F
+                magnitude = ((mantissa << 1) + 33) << (exponent + 2)
+                magnitude -= 132
+                sample = -magnitude if sign else magnitude
+                table.append(max(-32768, min(32767, sample)))
+            return table
+
+        decode_table = _build_mulaw_decode_table()
+
+        # Mulaw encode: linear 16-bit → mulaw byte
+        _MULAW_BIAS = 132
+        _MULAW_CLIP = 32635
+
+        def _encode_mulaw_sample(sample: int) -> int:
+            sign = 0
+            if sample < 0:
+                sign = 0x80
+                sample = -sample
+            sample = min(sample, _MULAW_CLIP)
+            sample += _MULAW_BIAS
+            exponent = 7
+            exp_mask = 0x4000
+            while exponent > 0 and not (sample & exp_mask):
+                exponent -= 1
+                exp_mask >>= 1
+            mantissa = (sample >> (exponent + 3)) & 0x0F
+            return ~(sign | (exponent << 4) | mantissa) & 0xFF
+
+        # Pad shorter stream with mulaw silence (0xFF)
+        max_len = max(len(inbound_raw), len(outbound_raw))
+        if len(inbound_raw) < max_len:
+            inbound_raw += b"\xff" * (max_len - len(inbound_raw))
+        if len(outbound_raw) < max_len:
+            outbound_raw += b"\xff" * (max_len - len(outbound_raw))
+
+        # Mix: decode → sum → clip → encode
+        mixed = bytearray(max_len)
+        for i in range(max_len):
+            pcm_in = decode_table[inbound_raw[i]]
+            pcm_out = decode_table[outbound_raw[i]]
+            combined = max(-32768, min(32767, pcm_in + pcm_out))
+            mixed[i] = _encode_mulaw_sample(combined)
+
+        mixed_path.write_bytes(bytes(mixed))
+
+        # Update mixed byte count in stats
+        for sid, stats in self._audio_stats.items():
+            if stats.get("task_id") == task_id:
+                stats["bytes_by_side"]["mixed"] = max_len
+                break
 
     async def stop_session(self, session_id: str) -> None:
         session = await self._sessions.get(session_id)
@@ -595,6 +669,7 @@ class CallOrchestrator:
             self._store.update_status(task_id, "ended")
             self._store.update_ended_at(task_id)
             await self._persist_recording_stats(session_id)
+            self._create_mixed_audio(task_id)
             await self._ws.broadcast(
                 task_id,
                 {"type": "call_status", "data": {"status": "ended", "session_id": session_id}},
@@ -605,6 +680,35 @@ class CallOrchestrator:
         self._task_to_session.pop(task_id, None)
         self._clear_task_call_sid(task_id)
         self._audio_stats.pop(session_id, None)
+
+        # Auto-generate analysis in background so outcome is always set
+        asyncio.create_task(self._auto_analyze(task_id))
+
+    async def _auto_analyze(self, task_id: str) -> None:
+        """Generate analysis and persist outcome immediately after call ends."""
+        try:
+            with timed_step("orchestrator", "auto_analyze", task_id=task_id):
+                call_dir = self._store.get_task_dir(task_id)
+                transcript_file = call_dir / "transcript.json"
+                transcript = []
+                if transcript_file.exists():
+                    with open(transcript_file, "r", encoding="utf-8") as f:
+                        transcript = [TranscriptTurn(**entry) for entry in json.load(f)]
+
+                task = self._store.get_task(task_id)
+                analysis = await self._engine.summarize_turn(transcript, task)
+
+                analysis_path = call_dir / "analysis.json"
+                with open(analysis_path, "w", encoding="utf-8") as f:
+                    json.dump(analysis, f, indent=2)
+
+                outcome = analysis.get("outcome", "unknown")
+                valid = {"unknown", "success", "partial", "failed", "walkaway"}
+                outcome = outcome if outcome in valid else "unknown"
+                self._store.update_status(task_id, "ended", outcome=outcome)
+                log_event("orchestrator", "auto_analyze_done", task_id=task_id, details={"outcome": outcome})
+        except Exception as exc:
+            log_event("orchestrator", "auto_analyze_error", task_id=task_id, details={"error": str(exc)})
 
     async def _persist_recording_stats(self, session_id: str) -> None:
         session = await self._sessions.get(session_id)
