@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import json
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 from app.core.config import settings
 from app.main import app
 
 
-def test_voice_readiness_endpoint(monkeypatch) -> None:
+def test_voice_readiness_endpoint(monkeypatch, client) -> None:
     monkeypatch.setattr(settings, "TWILIO_ACCOUNT_SID", "AC123")
     monkeypatch.setattr(settings, "TWILIO_AUTH_TOKEN", "token")
     monkeypatch.setattr(settings, "TWILIO_PHONE_NUMBER", "+15550000001")
@@ -20,7 +18,7 @@ def test_voice_readiness_endpoint(monkeypatch) -> None:
     monkeypatch.setattr(settings, "EXA_SEARCH_ENABLED", True)
     monkeypatch.setattr(settings, "EXA_API_KEY", "exa-test")
 
-    response = TestClient(app).get("/api/system/voice-readiness")
+    response = client.get("/api/system/voice-readiness")
 
     assert response.status_code == 200
     body = response.json()
@@ -31,11 +29,11 @@ def test_voice_readiness_endpoint(monkeypatch) -> None:
     assert body["exa_search_enabled"] is True
 
 
-def test_research_route_disabled(monkeypatch) -> None:
+def test_research_route_disabled(monkeypatch, client) -> None:
     monkeypatch.setattr(settings, "EXA_SEARCH_ENABLED", False)
     monkeypatch.setattr(settings, "EXA_API_KEY", "")
 
-    response = TestClient(app).post("/api/research", json={"query": "airport lounge"})
+    response = client.post("/api/research", json={"query": "airport lounge"})
 
     assert response.status_code == 200
     body = response.json()
@@ -44,7 +42,7 @@ def test_research_route_disabled(monkeypatch) -> None:
     assert body["reason"] == "exasearch_disabled_or_missing_api_key"
 
 
-def test_research_route_uses_service_result(monkeypatch) -> None:
+def test_research_route_uses_service_result(monkeypatch, client) -> None:
     async def _mock_search(self, _query, limit=None):  # noqa: ARG001
         return {
             "enabled": True,
@@ -65,7 +63,7 @@ def test_research_route_uses_service_result(monkeypatch) -> None:
     monkeypatch.setattr(settings, "EXA_API_KEY", "exa-test")
     monkeypatch.setattr("app.routes.research.ExaSearchService.search", _mock_search)
 
-    response = TestClient(app).post("/api/research", json={"query": "restaurant nyc", "limit": 3})
+    response = client.post("/api/research", json={"query": "restaurant nyc", "limit": 3})
 
     assert response.status_code == 200
     body = response.json()

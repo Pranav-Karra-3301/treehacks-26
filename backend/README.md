@@ -61,6 +61,30 @@ Both endpoints support query-based filtering on recent events when using the raw
 
 - `GET /api/telemetry/recent?limit=200&component=audio&action=save_audio_chunk`
 
+## CLI verification
+
+```bash
+cd backend
+source .venv/bin/activate
+
+# Run all tests and grouped suites in one command
+./scripts/run-tests.sh
+
+# Run test subsets directly
+pytest -q -m unit
+pytest -q -m integration
+pytest -q -m ws
+pytest -q -m benchmark
+```
+
+```bash
+# Run live REST + websocket smoke checks
+python scripts/smoke_api.py --base-url http://127.0.0.1:3001
+python scripts/smoke_api.py --base-url http://127.0.0.1:3001 --no-websocket
+```
+
+Both scripts print endpoint timing and task lifecycle transitions so you can confirm behavior without opening the dashboard.
+
 ## Deepgram Voice Agent Settings
 
 Live calls use Deepgram when these are enabled:

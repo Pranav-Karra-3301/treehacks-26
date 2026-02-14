@@ -16,7 +16,7 @@ class SentenceBuffer:
             return ""
 
         self.buffer += text
-        boundaries = [". ", "! ", "? ", ".\n", "!\n", "?\n"]
+        boundaries = [". ", "! ", "? ", ".\n", "!\n", "?\n", ".", "!", "?"]
 
         for boundary in boundaries:
             if boundary in self.buffer:

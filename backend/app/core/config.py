@@ -82,5 +82,15 @@ class Settings:
     EXA_SEARCH_URL = os.getenv("EXA_SEARCH_URL", "https://api.exa.ai/search")
     EXA_SEARCH_RESULTS_LIMIT = int(os.getenv("EXA_SEARCH_RESULTS_LIMIT", "5"))
 
+    # Redis / caching
+    UPSTASH_REDIS_URL = os.getenv("UPSTASH_REDIS_URL", "").strip()
+    REDIS_URL = os.getenv("REDIS_URL", "").strip() or UPSTASH_REDIS_URL
+    CACHE_ENABLED = os.getenv("CACHE_ENABLED", "false").strip().lower() == "true"
+    CACHE_DEFAULT_TTL_SECONDS = int(os.getenv("CACHE_DEFAULT_TTL_SECONDS", "300"))
+    CACHE_RESEARCH_TTL_SECONDS = int(os.getenv("CACHE_RESEARCH_TTL_SECONDS", "300"))
+    CACHE_TASK_TTL_SECONDS = int(os.getenv("CACHE_TASK_TTL_SECONDS", "120"))
+    CACHE_ANALYSIS_TTL_SECONDS = int(os.getenv("CACHE_ANALYSIS_TTL_SECONDS", "300"))
+    CACHE_KEY_PREFIX = os.getenv("CACHE_KEY_PREFIX", "negotiatai")
+
 
 settings = Settings()

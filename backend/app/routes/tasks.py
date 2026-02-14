@@ -15,10 +15,9 @@ from app.services.storage import DataStore
 from app.core.telemetry import timed_step
 
 
-router = APIRouter(prefix="/api/tasks", tags=["tasks"])
-
-
 def get_routes(store: DataStore, orchestrator: CallOrchestrator):
+    router = APIRouter(prefix="/api/tasks", tags=["tasks"])
+
     def _build_recording_files(call_dir: Path) -> dict[str, object]:
         file_stats = {}
         for name in ("inbound.wav", "outbound.wav", "mixed.wav", "recording_stats.json"):
@@ -151,10 +150,8 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator):
             with open(analysis_path, "w", encoding="utf-8") as f:
                 json.dump(analysis, f, indent=2)
             outcome_value = analysis.get("outcome", "unknown")
-            try:
-                outcome = CallOutcome(outcome_value)
-            except Exception:
-                outcome = "unknown"
+            valid_outcomes = {"unknown", "success", "partial", "failed", "walkaway"}
+            outcome = outcome_value if outcome_value in valid_outcomes else "unknown"
             return AnalysisPayload(
                 summary=analysis["summary"],
                 outcome=outcome,

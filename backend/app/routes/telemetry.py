@@ -5,10 +5,9 @@ from fastapi import APIRouter
 from app.core.telemetry import get_metric_events, summarize_events, timed_step
 
 
-router = APIRouter(prefix="/api/telemetry", tags=["telemetry"])
-
-
 def get_routes():
+    router = APIRouter(prefix="/api/telemetry", tags=["telemetry"])
+
     @router.get("/recent")
     async def recent_events(
         limit: int = 200,

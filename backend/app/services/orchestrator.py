@@ -29,13 +29,16 @@ class CallOrchestrator:
         store: DataStore,
         sessions: SessionManager,
         ws_manager: ConnectionManager,
+        *,
+        llm_client: Optional[LLMClient] = None,
+        twilio_client: Optional[TwilioClient] = None,
     ) -> None:
         self._store = store
         self._sessions = sessions
         self._ws = ws_manager
-        self._llm = LLMClient()
+        self._llm = llm_client or LLMClient()
         self._engine = NegotiationEngine(self._llm)
-        self._twilio = TwilioClient()
+        self._twilio = twilio_client or TwilioClient()
 
         self._task_to_session: dict[str, str] = {}
         self._task_to_media_ws: dict[str, Any] = {}
@@ -146,6 +149,7 @@ class CallOrchestrator:
 
     async def stop_task_call(self, task_id: str, *, from_status_callback: bool = False) -> None:
         with timed_step("orchestrator", "stop_task_call", task_id=task_id):
+            call_sid = self._task_to_call_sid.get(task_id)
             session_id = self._task_to_session.get(task_id)
             if session_id:
                 await self.stop_session(session_id)
@@ -154,8 +158,7 @@ class CallOrchestrator:
                 self._store.update_ended_at(task_id)
 
             if not from_status_callback:
-                call_sid = self._task_to_call_sid.get(task_id)
-                if call_sid and call_sid != "mock_call_sid":
+                if call_sid:
                     await self._twilio.end_call(call_sid)
             self._clear_task_call_sid(task_id)
 
@@ -463,7 +466,6 @@ class CallOrchestrator:
         self._task_to_media_ws.pop(task_id, None)
         self._task_to_stream_sid.pop(task_id, None)
         self._audio_stats.pop(session_id, None)
-        self._clear_task_call_sid(task_id)
 
     async def _persist_recording_stats(self, session_id: str) -> None:
         session = await self._sessions.get(session_id)

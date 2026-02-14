@@ -15,9 +15,10 @@ from app.models.schemas import CallOutcome, CallStatus
 class DataStore:
     """SQLite metadata + filesystem session artifacts."""
 
-    def __init__(self) -> None:
-        settings.DATA_ROOT.mkdir(parents=True, exist_ok=True)
-        self._path = settings.SQLITE_PATH
+    def __init__(self, data_root: str | Path | None = None, sqlite_path: str | Path | None = None) -> None:
+        self._data_root = Path(data_root) if data_root is not None else settings.DATA_ROOT
+        self._path = Path(sqlite_path) if sqlite_path is not None else self._data_root / "calls.db"
+        self._data_root.mkdir(parents=True, exist_ok=True)
         with self._connect() as conn:
             conn.execute(
                 """
@@ -80,7 +81,7 @@ class DataStore:
                     ),
                 )
 
-            call_dir = settings.DATA_ROOT / task_id
+            call_dir = self._data_root / task_id
             call_dir.mkdir(parents=True, exist_ok=True)
             with open(call_dir / "task.json", "w", encoding="utf-8") as f:
                 json.dump(payload, f, indent=2)
@@ -117,4 +118,4 @@ class DataStore:
             return dict(row) if row else None
 
     def get_task_dir(self, task_id: str) -> Path:
-        return settings.DATA_ROOT / task_id
+        return self._data_root / task_id

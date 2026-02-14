@@ -6,10 +6,9 @@ from app.services.ws_manager import ConnectionManager
 from app.core.telemetry import log_event, timed_step
 from app.services.orchestrator import CallOrchestrator
 
-router = APIRouter(tags=["websocket"])
-
-
 def get_routes(connection_manager: ConnectionManager, orchestrator: CallOrchestrator):
+    router = APIRouter(tags=["websocket"])
+
     async def _resolve_topic(identifier: str) -> str:
         task_id = orchestrator.get_session_id_for_task(identifier)
         if task_id:

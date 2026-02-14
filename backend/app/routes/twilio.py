@@ -13,9 +13,6 @@ from app.services.ws_manager import ConnectionManager
 from app.core.telemetry import log_event, timed_step
 
 
-router = APIRouter(prefix="/twilio", tags=["twilio"])
-
-
 def _format_stream_url(request: Request, task_id: str) -> str:
     host = (settings.TWILIO_WEBHOOK_HOST or "").strip() or str(request.base_url)
     parsed = urlparse(host)
@@ -35,6 +32,8 @@ def _format_stream_url(request: Request, task_id: str) -> str:
 
 
 def get_routes(orchestrator: CallOrchestrator, ws_manager: ConnectionManager):
+    router = APIRouter(prefix="/twilio", tags=["twilio"])
+
     @router.post("/voice")
     async def voice_webhook(request: Request):
         params = dict((await request.form()).items())

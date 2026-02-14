@@ -120,3 +120,32 @@ Logs are written in:
 
 - `backend/data/service.log`
 - `backend/data/telemetry_events.jsonl`
+
+## 9) CLI-first verification
+
+```bash
+cd backend
+source .venv/bin/activate
+
+# Run grouped test suites from terminal
+./scripts/run-tests.sh
+
+# Or run specific markers
+pytest -q -m unit
+pytest -q -m integration
+pytest -q -m ws
+pytest -q -m benchmark
+```
+
+```bash
+# Run API + websocket smoke checks with timing output
+python scripts/smoke_api.py --base-url http://127.0.0.1:3001
+python scripts/smoke_api.py --base-url http://127.0.0.1:3001 --no-websocket
+```
+
+Useful smoke outputs:
+- `/health` latency
+- Task create/list/read
+- websocket call status event timing
+- call start/stop and task state transitions
+- `/api/tasks/{id}/analysis` and `/api/telemetry/summary`

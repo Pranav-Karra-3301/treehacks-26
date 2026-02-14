@@ -31,10 +31,9 @@ class ResearchResponse(BaseModel):
     reason: Optional[str] = None
 
 
-router = APIRouter(prefix="/api/research", tags=["research"])
-
-
 def get_routes():
+    router = APIRouter(prefix="/api/research", tags=["research"])
+
     @router.post("", response_model=ResearchResponse)
     async def search_businesses(request: ResearchRequest):
         with timed_step("api", "search_businesses", details={"query": request.query, "limit": request.limit}):

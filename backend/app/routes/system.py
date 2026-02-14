@@ -6,10 +6,9 @@ from app.core.config import settings
 from app.core.telemetry import timed_step
 
 
-router = APIRouter(prefix="/api/system", tags=["system"])
-
-
 def get_routes():
+    router = APIRouter(prefix="/api/system", tags=["system"])
+
     @router.get("/voice-readiness")
     async def voice_readiness():
         with timed_step("system", "voice_readiness"):
