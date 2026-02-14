@@ -43,7 +43,7 @@ def _build_think_payload(task: Dict[str, Any], endpoint_url: str) -> Dict[str, A
             model = settings.OPENAI_MODEL
         if not endpoint_url:
             endpoint_url = _normalize_openai_endpoint(settings.OPENAI_BASE_URL)
-        if not endpoint_url and settings.OPENAI_API_KEY:
+        if settings.OPENAI_API_KEY:
             think_headers["Authorization"] = f"Bearer {settings.OPENAI_API_KEY}"
     elif provider == "anthropic":
         if not model:

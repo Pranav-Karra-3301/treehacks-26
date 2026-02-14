@@ -81,9 +81,9 @@ class Settings:
     if LOG_LEVEL not in {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"}:
         LOG_LEVEL = "INFO"
     try:
-        LOG_NOISY_EVENTS_EVERY_N = int(os.getenv("LOG_NOISY_EVENTS_EVERY_N", "40"))
+        LOG_NOISY_EVENTS_EVERY_N = int(os.getenv("LOG_NOISY_EVENTS_EVERY_N", "120"))
     except ValueError:
-        LOG_NOISY_EVENTS_EVERY_N = 40
+        LOG_NOISY_EVENTS_EVERY_N = 120
 
     # Exa / web lookup
     EXA_SEARCH_ENABLED = (

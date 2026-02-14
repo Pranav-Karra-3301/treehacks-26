@@ -86,7 +86,7 @@ Optional tuning:
 - `CACHE_TASK_TTL_SECONDS`
 - `CACHE_ANALYSIS_TTL_SECONDS`
 - `LOG_LEVEL=INFO|DEBUG|WARNING|ERROR`
-- `LOG_NOISY_EVENTS_EVERY_N=40`
+- `LOG_NOISY_EVENTS_EVERY_N=120`
 
 ### LLM provider examples
 
@@ -143,9 +143,16 @@ Troubleshooting:
 Telemetry output lives under `backend/data/service.log` and `backend/data/telemetry_events.jsonl`.
 `LOG_NOISY_EVENTS_EVERY_N` controls how often chatty events are logged to stdout/file:
 - `media_event`
-- `audio.save_audio_chunk`
-- `twilio.send_media`
+- `save_audio_chunk`
 - `twilio.media_mark_received`
+
+Run this before starting the stack to catch missing call keys:
+
+```bash
+./scripts/preflight.sh
+```
+
+Skip checks with `SKIP_PREFLIGHT=1` and continue in warn-only mode with `PRECHECK_STRICT=0`.
 
 ## CLI-first validation
 

@@ -42,7 +42,7 @@ class TwilioClient:
                     "From": settings.TWILIO_PHONE_NUMBER,
                     "Url": twiml_url,
                     "StatusCallback": callback,
-                    "StatusCallbackEvent": "initiated ringing answered completed",
+                    "StatusCallbackEvent": "completed",
                     "StatusCallbackMethod": "POST",
                 }
 

@@ -135,6 +135,11 @@ resolve_or_reassign_port() {
   if [ "${AUTO_FIX_PORTS}" = "1" ]; then
     local new_port
     if new_port="$(find_free_port "${request_port}")"; then
+      if ! [[ "${new_port}" =~ ^[0-9]+$ ]]; then
+        warn "Could not parse auto-assigned port '${new_port}' for ${service_name}; using ${request_port}."
+        printf '%s' "${request_port}"
+        return 0
+      fi
       warn "${service_name} port ${request_port} is in use; auto-assigned ${new_port}."
       info "Active listener(s) for ${request_port}:"
       printf '%s\n' "${listeners}" >&2
@@ -177,10 +182,6 @@ if ! docker info >/dev/null 2>&1; then
   exit 1
 fi
 
-if [ "${AUTO_FIX_PORTS}" = "1" ]; then
-  info "AUTO_FIX_PORTS is enabled. If default host ports are in use, free alternatives are selected automatically."
-fi
-
 for pair in "backend/.env backend/.env.example" "frontend/.env.local frontend/.env.example"; do
   IFS=' ' read -r target source <<<"${pair}"
   if [ ! -f "${target}" ]; then
@@ -192,6 +193,16 @@ for pair in "backend/.env backend/.env.example" "frontend/.env.local frontend/.e
     fi
   fi
 done
+
+if [ "${AUTO_FIX_PORTS}" = "1" ]; then
+  info "AUTO_FIX_PORTS is enabled. If default host ports are in use, free alternatives are selected automatically."
+fi
+
+if [ "${SKIP_PREFLIGHT:-0}" != "1" ]; then
+  if ! "${PROJECT_ROOT}/scripts/preflight.sh" "${PRECHECK_STRICT-1}" ; then
+    exit 1
+  fi
+fi
 
 BACKEND_HOST_PORT="$(resolve_host_port "BACKEND_HOST_PORT" "3001")"
 FRONTEND_HOST_PORT="$(resolve_host_port "FRONTEND_HOST_PORT" "3000")"

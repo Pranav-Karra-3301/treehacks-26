@@ -47,6 +47,9 @@ class CallOrchestrator:
         self._stream_sid_to_task: dict[str, str] = {}
         self._call_sid_to_task: dict[str, str] = {}
         self._deepgram_sessions: dict[str, DeepgramVoiceAgentSession] = {}
+        self._pending_agent_audio: dict[str, list[bytes]] = {}
+        self._max_pending_audio_chunks = 12
+        self._max_pending_audio_bytes = 960 * 24
 
         self._audio_stats: Dict[str, Dict[str, Any]] = {}
         self._voice_session_lock = asyncio.Lock()
@@ -78,6 +81,29 @@ class CallOrchestrator:
         call_sid = self._task_to_call_sid.pop(task_id, None)
         if call_sid:
             self._call_sid_to_task.pop(call_sid, None)
+
+    def _buffer_agent_audio(self, task_id: str, payload: bytes) -> None:
+        if not payload:
+            return
+
+        queue = self._pending_agent_audio.setdefault(task_id, [])
+        queue.append(payload)
+
+        while len(queue) > self._max_pending_audio_chunks:
+            queue.pop(0)
+
+        total_bytes = sum(len(chunk) for chunk in queue)
+        while total_bytes > self._max_pending_audio_bytes and queue:
+            removed = queue.pop(0)
+            total_bytes -= len(removed)
+
+    async def _flush_pending_agent_audio(self, task_id: str) -> None:
+        queue = self._pending_agent_audio.pop(task_id, None)
+        if not queue:
+            return
+
+        for chunk in queue:
+            await self._send_agent_audio_to_twilio(task_id, chunk)
 
     async def start_task_call(self, task_id: str, task: Dict[str, Any]) -> Dict[str, Any]:
         with timed_step("orchestrator", "start_task_call", task_id=task_id):
@@ -188,7 +214,9 @@ class CallOrchestrator:
                             status="warning",
                             details={"call_sid": call_sid, "error": f"{type(exc).__name__}: {exc}"},
                         )
-            self._clear_task_call_sid(task_id)
+            self._pending_agent_audio.pop(task_id, None)
+            if not from_status_callback:
+                self._clear_task_call_sid(task_id)
 
     async def get_task_id_for_call_sid(self, call_sid: str) -> Optional[str]:
         return self._call_sid_to_task.get(call_sid)
@@ -270,6 +298,7 @@ class CallOrchestrator:
         self._task_to_media_ws[task_id] = websocket
         self._link_stream_sid(task_id, stream_sid)
         self._link_call_sid(task_id, call_sid)
+        await self._flush_pending_agent_audio(task_id)
 
     async def unregister_media_stream(self, task_id: str) -> None:
         self._task_to_media_ws.pop(task_id, None)
@@ -277,6 +306,7 @@ class CallOrchestrator:
 
     async def set_media_stream_sid(self, task_id: str, stream_sid: str) -> None:
         self._link_stream_sid(task_id, stream_sid)
+        await self._flush_pending_agent_audio(task_id)
 
     async def set_media_call_sid(self, task_id: str, call_sid: str) -> None:
         self._link_call_sid(task_id, call_sid)
@@ -409,12 +439,13 @@ class CallOrchestrator:
         websocket = self._task_to_media_ws.get(task_id)
         if not websocket or not payload:
             if task_id != "unknown" and not websocket:
+                self._buffer_agent_audio(task_id, payload)
                 log_event(
                     "orchestrator",
-                    "agent_audio_send_skipped",
+                    "agent_audio_queued",
                     status="warning",
                     task_id=task_id,
-                    details={"reason": "media_stream_missing", "bytes": len(payload)},
+                    details={"reason": "media_stream_missing", "bytes": len(payload), "queued_chunks": len(self._pending_agent_audio.get(task_id, []))},
                 )
             elif task_id == "unknown":
                 log_event(

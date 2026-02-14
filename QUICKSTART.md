@@ -124,8 +124,16 @@ Optional logging throttles:
 
 ```bash
 LOG_LEVEL=INFO
-LOG_NOISY_EVENTS_EVERY_N=40
+LOG_NOISY_EVENTS_EVERY_N=120
 ```
+
+Validate call-stack environment before dialing:
+
+```bash
+./scripts/preflight.sh
+```
+
+You can run it in strict mode (default) or skip with `SKIP_PREFLIGHT=1`.
 
 ## 7) Sanity checks
 

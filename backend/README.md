@@ -104,6 +104,6 @@ The `DEEPGRAM_API_KEY` must be set when the voice pipeline is enabled.
 ## Logging controls
 
 - `LOG_LEVEL=INFO|DEBUG|WARNING|ERROR`
-- `LOG_NOISY_EVENTS_EVERY_N=40`
+- `LOG_NOISY_EVENTS_EVERY_N=120`
 
-`LOG_NOISY_EVENTS_EVERY_N` samples very frequent events (`media_event`, `save_audio_chunk`, `send_media`, `media_mark_received`) to keep logs readable.
+`LOG_NOISY_EVENTS_EVERY_N` samples very frequent events (`media_event`, `save_audio_chunk`, `media_mark_received`) to keep logs readable.

@@ -17,7 +17,7 @@ from app.core.config import settings
 _LOGGER = logging.getLogger("negotiateai")
 _METRICS_LOCK = threading.Lock()
 _NOISY_METRIC_COUNTERS: Dict[str, int] = {}
-_NOISY_ACTIONS = {"media_event", "save_audio_chunk", "send_media", "media_mark_received"}
+_NOISY_ACTIONS = {"media_event", "save_audio_chunk", "media_mark_received"}
 
 
 def _metric_file() -> Path:

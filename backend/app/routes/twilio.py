@@ -127,7 +127,13 @@ def get_routes(orchestrator: CallOrchestrator, ws_manager: ConnectionManager):
     @router.websocket("/media-stream")
     async def media_stream(websocket: WebSocket):
         await websocket.accept()
-        query_task_id = websocket.query_params.get("task_id", "unknown")
+        query_task_id = (
+            websocket.query_params.get("task_id")
+            or websocket.query_params.get("TaskId")
+            or websocket.query_params.get("TaskID")
+            or websocket.query_params.get("task")
+            or "unknown"
+        )
         task_id = query_task_id
         stream_sid = None
         call_sid = None
@@ -167,8 +173,21 @@ def get_routes(orchestrator: CallOrchestrator, ws_manager: ConnectionManager):
                                 call_sid=call_sid,
                             )
 
+                            log_event(
+                                "twilio",
+                                "media_stream_start_context",
+                                task_id=task_id if task_id != "unknown" else query_task_id,
+                                details={
+                                    "raw_task_id": context_task_id,
+                                    "candidate_task_id": candidate_task_id,
+                                    "stream_sid": stream_sid,
+                                    "call_sid": call_sid,
+                                },
+                            )
+
                             if task_id != query_task_id:
-                                await orchestrator.unregister_media_stream(query_task_id)
+                                if query_task_id != "unknown":
+                                    await orchestrator.unregister_media_stream(query_task_id)
                                 query_task_id = task_id
 
                             if task_id == "unknown":
@@ -207,6 +226,17 @@ def get_routes(orchestrator: CallOrchestrator, ws_manager: ConnectionManager):
                             context_task_id or task_id,
                             stream_sid=stream_sid,
                             call_sid=call_sid,
+                        )
+                        log_event(
+                            "twilio",
+                            "media_stream_resolution",
+                            task_id=resolved_task_id if resolved_task_id != "unknown" else query_task_id,
+                            status="ok" if resolved_task_id != "unknown" else "warning",
+                            details={
+                                "raw_task_id": context_task_id,
+                                "stream_sid": stream_sid,
+                                "call_sid": call_sid,
+                            },
                         )
                         if resolved_task_id != task_id:
                             task_id = resolved_task_id
