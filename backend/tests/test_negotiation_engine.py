@@ -37,8 +37,8 @@ def test_negotiation_engine_response_uses_system_prompt_and_messages() -> None:
     response, system_prompt = asyncio.run(engine.respond(session, task, "Can you reduce my rate?"))
 
     assert response == "Thank you for calling."
-    assert "Task style: collaborative" in system_prompt
-    assert "Opening line" in system_prompt
+    assert "Collaborative" in system_prompt
+    assert "lower my bill" in system_prompt
     assert fake_llm.calls
     assert fake_llm.calls[0][0][0]["role"] == "system"
     assert fake_llm.calls[0][0][-1]["content"] == "Can you reduce my rate?"

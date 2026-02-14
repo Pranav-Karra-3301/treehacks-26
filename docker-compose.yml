@@ -4,6 +4,9 @@ services:
     working_dir: /app
     env_file:
       - ./backend/.env
+      - ./backend/.env.docker-overrides
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - .:/app
     command: sh -c "cd backend && pip install -r requirements.txt && uvicorn app.main:app --host 0.0.0.0 --port 3001 --reload"

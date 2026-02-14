@@ -85,10 +85,30 @@ def create_app(
     app.include_router(system_routes.get_routes(local_cache))
     app.include_router(llm_proxy_routes.get_routes())
 
+    cors_origins = list(allowed_origins or settings.ALLOWED_ORIGINS)
+    if not cors_origins:
+        cors_origins = ["*"]
+
+    allow_credentials = True
+    allow_origin_regex = None
+
+    # Browser-origin wildcard with credentials is blocked by CORS spec.
+    # In dev we allow wildcard origins without credentials to avoid missing headers.
+    if len(cors_origins) == 1 and cors_origins[0] == "*":
+        allow_credentials = False
+    else:
+        has_local_host = any(
+            "localhost" in origin or "127.0.0.1" in origin
+            for origin in cors_origins
+        )
+        if has_local_host:
+            allow_origin_regex = r"https?://(?:localhost|127\.0\.0\.1):[0-9]+"
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=allowed_origins or settings.ALLOWED_ORIGINS,
-        allow_credentials=True,
+        allow_origins=cors_origins,
+        allow_origin_regex=allow_origin_regex,
+        allow_credentials=allow_credentials,
         allow_methods=["*"],
         allow_headers=["*"],
     )

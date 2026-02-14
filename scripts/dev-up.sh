@@ -212,6 +212,140 @@ FRONTEND_HOST_PORT="$(resolve_or_reassign_port "frontend" "${FRONTEND_HOST_PORT}
 
 export BACKEND_HOST_PORT FRONTEND_HOST_PORT
 
+# ---------------------------------------------------------------------------
+# ngrok tunnel management
+# ---------------------------------------------------------------------------
+NGROK_PID=""
+
+_cleanup_ngrok() {
+  if [ -n "${NGROK_PID}" ] && kill -0 "${NGROK_PID}" 2>/dev/null; then
+    info "Stopping ngrok (pid ${NGROK_PID})…"
+    kill "${NGROK_PID}" 2>/dev/null || true
+    wait "${NGROK_PID}" 2>/dev/null || true
+  fi
+}
+
+trap '_cleanup_ngrok' EXIT INT TERM
+
+_start_ngrok() {
+  # Opt-out: NGROK_ENABLED=0
+  if [ "${NGROK_ENABLED:-1}" = "0" ]; then
+    info "ngrok: skipped (NGROK_ENABLED=0)"
+    return 0
+  fi
+
+  # Skip if ngrok binary is missing
+  if ! command -v ngrok >/dev/null 2>&1; then
+    warn "ngrok binary not found in PATH — skipping tunnel. Install: https://ngrok.com/download"
+    return 0
+  fi
+
+  # Reuse if ngrok is already running (API on :4040)
+  if curl -sf http://127.0.0.1:4040/api/tunnels >/dev/null 2>&1; then
+    local existing_url
+    existing_url="$(curl -sf http://127.0.0.1:4040/api/tunnels | python3 -c \
+      "import sys,json; ts=json.load(sys.stdin)['tunnels']; print(ts[0]['public_url'] if ts else '')" 2>/dev/null || true)"
+    if [ -n "${existing_url}" ]; then
+      info "ngrok: reusing running tunnel → ${existing_url}"
+      return 0
+    fi
+  fi
+
+  # Read TWILIO_WEBHOOK_HOST from backend/.env
+  local webhook_host
+  webhook_host="$(get_env_value "backend/.env" "TWILIO_WEBHOOK_HOST" 2>/dev/null || true)"
+
+  local ngrok_args=("http" "${BACKEND_HOST_PORT}")
+
+  # If the configured host is a static ngrok domain, pin to it
+  if [[ "${webhook_host}" == *".ngrok"* ]]; then
+    local domain="${webhook_host#https://}"
+    domain="${domain#http://}"
+    domain="${domain%%/*}"
+    ngrok_args+=("--url" "${domain}")
+    info "ngrok: starting with static domain ${domain}…"
+  else
+    info "ngrok: starting with dynamic URL…"
+  fi
+
+  ngrok "${ngrok_args[@]}" >/dev/null 2>&1 &
+  NGROK_PID=$!
+
+  # Wait for the ngrok API to become available (up to 10 s)
+  local waited=0
+  while ! curl -sf http://127.0.0.1:4040/api/tunnels >/dev/null 2>&1; do
+    if [ "${waited}" -ge 10 ]; then
+      warn "ngrok: API at localhost:4040 did not respond within 10 s"
+      return 0
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+
+  # Fetch the tunnel URL
+  local tunnel_url
+  tunnel_url="$(curl -sf http://127.0.0.1:4040/api/tunnels | python3 -c \
+    "import sys,json; ts=json.load(sys.stdin)['tunnels']; print(ts[0]['public_url'] if ts else '')" 2>/dev/null || true)"
+
+  if [ -z "${tunnel_url}" ]; then
+    warn "ngrok: could not determine tunnel URL from API"
+    return 0
+  fi
+
+  info "ngrok: tunnel active → ${tunnel_url}"
+
+  # If the webhook host was a placeholder or missing, update backend/.env
+  if [ -z "${webhook_host}" ] \
+    || [ "${webhook_host}" = "https://your-public-url" ] \
+    || [ "${webhook_host}" = "https://your-public-ngrok-url" ]; then
+    if [ -f "backend/.env" ]; then
+      sed -i "s|^TWILIO_WEBHOOK_HOST=.*|TWILIO_WEBHOOK_HOST=${tunnel_url}|" "backend/.env"
+      info "ngrok: updated TWILIO_WEBHOOK_HOST in backend/.env → ${tunnel_url}"
+    fi
+  fi
+}
+
+_ensure_docker_host_url() {
+  # When running in Docker, localhost URLs for Ollama won't work because the
+  # container's localhost is itself. We write overrides to a separate file
+  # that docker-compose.yml loads AFTER backend/.env, so the user's .env
+  # is never mutated and native runs are unaffected.
+  local override_file="backend/.env.docker-overrides"
+  : > "${override_file}"  # truncate / create
+
+  if [ ! -f "backend/.env" ]; then
+    return 0
+  fi
+
+  local ollama_url
+  ollama_url="$(get_env_value "backend/.env" "OLLAMA_BASE_URL" 2>/dev/null || true)"
+  local vllm_url
+  vllm_url="$(get_env_value "backend/.env" "VLLM_BASE_URL" 2>/dev/null || true)"
+
+  local changed=0
+
+  if [[ "${ollama_url}" == *"localhost"* || "${ollama_url}" == *"127.0.0.1"* ]]; then
+    local new_ollama="${ollama_url//localhost/host.docker.internal}"
+    new_ollama="${new_ollama//127.0.0.1/host.docker.internal}"
+    printf 'OLLAMA_BASE_URL=%s\n' "${new_ollama}" >> "${override_file}"
+    printf 'VLLM_BASE_URL=%s\n' "${new_ollama}" >> "${override_file}"
+    changed=1
+  elif [[ "${vllm_url}" == *"localhost"* || "${vllm_url}" == *"127.0.0.1"* ]]; then
+    local new_vllm="${vllm_url//localhost/host.docker.internal}"
+    new_vllm="${new_vllm//127.0.0.1/host.docker.internal}"
+    printf 'VLLM_BASE_URL=%s\n' "${new_vllm}" >> "${override_file}"
+    changed=1
+  fi
+
+  if [ "${changed}" -eq 1 ]; then
+    warn "Wrote host.docker.internal overrides to ${override_file} so the container can reach host Ollama."
+    info "  (backend/.env is NOT modified — native runs still use localhost)"
+  fi
+}
+
+_start_ngrok
+_ensure_docker_host_url
+
 if [ "${BACKEND_HOST_PORT}" = "${FRONTEND_HOST_PORT}" ]; then
   if [ "${AUTO_FIX_PORTS}" = "1" ]; then
     warn "Backend and frontend resolved to same host port (${BACKEND_HOST_PORT}). Auto-adjusting frontend."

@@ -160,3 +160,57 @@ export type TelemetrySummaryResponse = {
   components: Record<string, ComponentStats>;
   actions: Record<string, ComponentStats>;
 };
+
+// Feat-branch recording types (detailed metadata for local LLM data explorer)
+export type RecordingFileStat = {
+  exists: boolean;
+  size_bytes: number;
+};
+
+export type CallRecordingMetadata = {
+  task_id: string;
+  status?: string;
+  started_at?: string | null;
+  created_at?: string | null;
+  ended_at?: string | null;
+  duration_seconds?: number;
+  bytes_by_side: {
+    caller: number;
+    agent: number;
+    mixed: number;
+  };
+  chunks_by_side: {
+    caller: number;
+    agent: number;
+  };
+  last_chunk_at: string | null;
+  transcript_turns?: number;
+  last_turn_at?: string | null;
+  call_sid?: string | null;
+  stream_sid?: string | null;
+  stop_reason?: string;
+  deepgram?: {
+    audio_chunks_sent?: number;
+    audio_bytes_sent?: number;
+    audio_chunks_received?: number;
+    audio_bytes_received?: number;
+    messages_received?: number;
+  };
+  files?: Record<string, RecordingFileStat>;
+};
+
+export type CallRecordingFiles = {
+  task_id: string;
+  files: Record<string, RecordingFileStat>;
+};
+
+export type TaskTranscriptPayload = {
+  task_id: string;
+  turns: TranscriptEntry[];
+  count: number;
+};
+
+export type TelemetryEventsPayload = {
+  count: number;
+  events: TelemetryEvent[];
+};

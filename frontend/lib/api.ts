@@ -1,5 +1,5 @@
 import { BACKEND_API_URL, BACKEND_WS_URL } from './config';
-import type { TaskDetail, TaskSummary, CallEvent, AnalysisPayload, ActionResponse, VoiceReadiness, ResearchResponse, RecordingMetadata, TelemetryRecentResponse, TelemetrySummaryResponse, TranscriptResponse } from './types';
+import type { TaskDetail, TaskSummary, CallEvent, AnalysisPayload, ActionResponse, VoiceReadiness, ResearchResponse, RecordingMetadata, TelemetryRecentResponse, TelemetrySummaryResponse, TranscriptResponse, TelemetryEventsPayload, CallRecordingMetadata, CallRecordingFiles, TaskTranscriptPayload } from './types';
 
 export async function createTask(payload: unknown): Promise<TaskSummary> {
   const res = await fetch(`${BACKEND_API_URL}/api/tasks`, {
@@ -77,6 +77,18 @@ export async function getRecordingMetadata(taskId: string): Promise<RecordingMet
   return res.json();
 }
 
+export async function getTaskRecordingMetadata(id: string): Promise<CallRecordingMetadata> {
+  const res = await fetch(`${BACKEND_API_URL}/api/tasks/${id}/recording-metadata`);
+  if (!res.ok) throw new Error(`Failed to load recording metadata: ${res.status}`);
+  return res.json();
+}
+
+export async function getTaskRecordingFiles(id: string): Promise<CallRecordingFiles> {
+  const res = await fetch(`${BACKEND_API_URL}/api/tasks/${id}/recording-files`);
+  if (!res.ok) throw new Error(`Failed to load recording files: ${res.status}`);
+  return res.json();
+}
+
 export async function getTaskTranscript(id: string): Promise<TranscriptResponse> {
   const res = await fetch(`${BACKEND_API_URL}/api/tasks/${id}/transcript`);
   if (!res.ok) throw new Error(`Failed to load transcript: ${res.status}`);
@@ -92,6 +104,25 @@ export async function fetchTelemetryRecent(limit = 50): Promise<TelemetryRecentR
 export async function fetchTelemetrySummary(): Promise<TelemetrySummaryResponse> {
   const res = await fetch(`${BACKEND_API_URL}/api/telemetry/summary`);
   if (!res.ok) throw new Error(`Failed to fetch telemetry summary: ${res.status}`);
+  return res.json();
+}
+
+export async function getRecentTelemetry(params: {
+  limit?: number;
+  component?: string;
+  action?: string;
+  task_id?: string;
+  session_id?: string;
+}): Promise<TelemetryEventsPayload> {
+  const query = new URLSearchParams();
+  if (params.limit !== undefined) query.set('limit', String(params.limit));
+  if (params.component) query.set('component', params.component);
+  if (params.action) query.set('action', params.action);
+  if (params.task_id) query.set('task_id', params.task_id);
+  if (params.session_id) query.set('session_id', params.session_id);
+
+  const res = await fetch(`${BACKEND_API_URL}/api/telemetry/recent?${query.toString()}`);
+  if (!res.ok) throw new Error(`Failed to load telemetry: ${res.status}`);
   return res.json();
 }
 

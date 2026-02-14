@@ -5,6 +5,7 @@ __pycache__/
 .venv/
 .env
 *.env.local
+*.env.docker-overrides
 .coverage
 .coverage.*
 .pytest_cache/

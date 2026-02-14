@@ -189,10 +189,13 @@ def build_negotiation_prompt(
         "7. Use contractions always. Sound natural. Speak like a real person on the phone.",
         "8. NEVER agree to a deal that is obviously bad. Use common sense about prices and values.",
         "9. NEVER offer or accept amounts wildly below or above market value.",
+        "10. Output ONLY your spoken words. No internal thoughts, reasoning, analysis, "
+        "checklists, self-evaluation, or metacommentary. Everything you output will be "
+        "spoken aloud on a phone call.",
     ]
     if walkaway and walkaway != "No hard walkaway configured":
         guardrail_lines.append(
-            f"10. HARD BUDGET LIMIT: {walkaway}. You MUST NOT exceed this under any circumstances."
+            f"11. HARD BUDGET LIMIT: {walkaway}. You MUST NOT exceed this under any circumstances."
         )
     parts.append("\n".join(guardrail_lines))
 
