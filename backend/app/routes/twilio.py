@@ -114,13 +114,11 @@ def get_routes(orchestrator: CallOrchestrator, ws_manager: ConnectionManager):
 
             twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Start>
+    <Connect>
         <Stream url="{stream_url}">
             <Parameter name="task_id" value="{task_id}" />
         </Stream>
-    </Start>
-    <Say voice="alice">Connecting to negotiation agent.</Say>
-    <Pause length="60" />
+    </Connect>
 </Response>"""
             return Response(content=twiml, media_type="application/xml")
 

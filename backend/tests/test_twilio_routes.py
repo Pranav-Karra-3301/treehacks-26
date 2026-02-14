@@ -27,9 +27,8 @@ def test_twilio_voice_webhook_returns_twiml(client) -> None:
     body = response.text
     assert body.startswith('<?xml version="1.0" encoding="UTF-8"?>')
     assert "<Response>" in body
-    assert "<Start>" in body
+    assert "<Connect>" in body
     assert "<Parameter name=\"task_id\" value=\"task_for_voice_webhook\" />" in body
-    assert "<Pause length=\"60\" />" in body
     assert "task_id=task_for_voice_webhook" in body
 
 

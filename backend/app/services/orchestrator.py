@@ -48,8 +48,8 @@ class CallOrchestrator:
         self._call_sid_to_task: dict[str, str] = {}
         self._deepgram_sessions: dict[str, DeepgramVoiceAgentSession] = {}
         self._pending_agent_audio: dict[str, list[bytes]] = {}
-        self._max_pending_audio_chunks = 12
-        self._max_pending_audio_bytes = 960 * 24
+        self._max_pending_audio_chunks = 100
+        self._max_pending_audio_bytes = 960 * 100  # ~12 seconds at mulaw 8kHz
 
         self._audio_stats: Dict[str, Dict[str, Any]] = {}
         self._voice_session_lock = asyncio.Lock()
@@ -160,16 +160,9 @@ class CallOrchestrator:
             )
 
             if self._voice_mode_enabled():
-                try:
-                    await self._start_voice_session(task_id, session.session_id, task)
-                except Exception as exc:
-                    log_event(
-                        "orchestrator",
-                        "start_voice_session_failed",
-                        task_id=task_id,
-                        status="warning",
-                        details={"error": f"{type(exc).__name__}: {exc}"},
-                    )
+                log_event("orchestrator", "voice_session_deferred", task_id=task_id,
+                          session_id=session.session_id,
+                          details={"reason": "waiting_for_media_stream"})
 
             with timed_step("session", "set_status_active", session_id=session.session_id, task_id=task_id):
                 await self._sessions.set_status(session.session_id, "active")
@@ -298,7 +291,6 @@ class CallOrchestrator:
         self._task_to_media_ws[task_id] = websocket
         self._link_stream_sid(task_id, stream_sid)
         self._link_call_sid(task_id, call_sid)
-        await self._flush_pending_agent_audio(task_id)
 
     async def unregister_media_stream(self, task_id: str) -> None:
         self._task_to_media_ws.pop(task_id, None)
@@ -307,6 +299,17 @@ class CallOrchestrator:
     async def set_media_stream_sid(self, task_id: str, stream_sid: str) -> None:
         self._link_stream_sid(task_id, stream_sid)
         await self._flush_pending_agent_audio(task_id)
+        # Start Deepgram now that Twilio media stream is fully ready
+        if self._voice_mode_enabled():
+            session_id = self._task_to_session.get(task_id)
+            if session_id and session_id not in self._deepgram_sessions:
+                task = self._store.get_task(task_id) or {}
+                try:
+                    await self._start_voice_session(task_id, session_id, task)
+                except Exception as exc:
+                    log_event("orchestrator", "start_voice_session_failed",
+                              task_id=task_id, status="warning",
+                              details={"error": f"{type(exc).__name__}: {exc}"})
 
     async def set_media_call_sid(self, task_id: str, call_sid: str) -> None:
         self._link_call_sid(task_id, call_sid)
@@ -335,7 +338,13 @@ class CallOrchestrator:
         await self.save_audio_chunk(session_id, "caller", chunk)
         deepgram_session = self._deepgram_sessions.get(session_id)
         if deepgram_session is not None:
-            await deepgram_session.send_audio(chunk)
+            try:
+                await deepgram_session.send_audio(chunk)
+            except Exception as exc:
+                log_event("orchestrator", "deepgram_send_audio_error",
+                          task_id=task_id, session_id=session_id, status="error",
+                          details={"error": f"{type(exc).__name__}: {exc}"})
+                self._deepgram_sessions.pop(session_id, None)
 
     async def handle_user_utterance(self, session_id: str, utterance: str) -> Optional[str]:
         session = await self._sessions.get(session_id)
@@ -458,12 +467,14 @@ class CallOrchestrator:
             return
 
         stream_sid = self._task_to_stream_sid.get(task_id)
+        if not stream_sid:
+            self._buffer_agent_audio(task_id, payload)
+            return
         message = {
             "event": "media",
+            "streamSid": stream_sid,
             "media": {"payload": base64.b64encode(payload).decode("ascii")},
         }
-        if stream_sid:
-            message["streamSid"] = stream_sid
 
         with timed_step("twilio", "send_media", task_id=task_id, details={"bytes": len(payload)}):
             await websocket.send_text(json.dumps(message))

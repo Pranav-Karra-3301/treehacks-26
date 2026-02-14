@@ -123,6 +123,7 @@ class DeepgramVoiceAgentSession:
                 await asyncio.wait_for(self._connected.wait(), timeout=2.5)
                 await self._send_settings()
                 await asyncio.wait_for(self._settings_applied.wait(), timeout=5.0)
+                self._is_ready.set()
             except asyncio.TimeoutError:
                 log_event(
                     "deepgram",
@@ -131,7 +132,12 @@ class DeepgramVoiceAgentSession:
                     status="warning",
                     details={"reason": "agent_did_not_ready"},
                 )
-            self._is_ready.set()
+                self._closed = True
+                if self._receive_task:
+                    self._receive_task.cancel()
+                if self._ws:
+                    await self._ws.close()
+                raise RuntimeError("Deepgram voice agent did not become ready")
 
     async def stop(self) -> None:
         if self._closed:
@@ -149,8 +155,16 @@ class DeepgramVoiceAgentSession:
         if self._closed or self._ws is None:
             return
         if not self._is_ready.is_set():
-            await asyncio.wait_for(self._is_ready.wait(), timeout=8.0)
-        await self._ws.send(data)
+            try:
+                await asyncio.wait_for(self._is_ready.wait(), timeout=8.0)
+            except asyncio.TimeoutError:
+                self._closed = True
+                return
+        try:
+            await self._ws.send(data)
+        except Exception:
+            self._closed = True
+            raise
 
     async def _send_settings(self) -> None:
         if self._ws is None:
