@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "kiru",
+    "slug": "kiru",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "scheme": "kiru",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#fafaf9"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kiru.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Kiru uses your location to find nearby businesses for negotiation."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#fafaf9"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.kiru.app",
+      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Kiru uses your location to find nearby businesses for negotiation."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "52ca07f6-96c9-4738-b0f1-468fdaa9c604"
+      }
+    }
+  }
+}
