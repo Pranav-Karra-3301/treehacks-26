@@ -614,6 +614,18 @@ class CallOrchestrator:
         inbound_raw = inbound_path.read_bytes() if inbound_path.exists() else b""
         outbound_raw = outbound_path.read_bytes() if outbound_path.exists() else b""
 
+        log_event(
+            "orchestrator",
+            "create_mixed_audio",
+            task_id=task_id,
+            details={
+                "inbound_bytes": len(inbound_raw),
+                "outbound_bytes": len(outbound_raw),
+                "inbound_exists": inbound_path.exists(),
+                "outbound_exists": outbound_path.exists(),
+            },
+        )
+
         # Strip any existing RIFF header (shouldn't be there, but be safe)
         if inbound_raw[:4] == b"RIFF":
             inbound_raw = inbound_raw[44:]  # skip standard WAV header
@@ -688,6 +700,9 @@ class CallOrchestrator:
 
         task_id = session.task_id
         with timed_step("orchestrator", "stop_session", session_id=session_id, task_id=task_id):
+            await self._stop_voice_session(session_id)
+            # Allow any in-flight audio writes to flush before mixing
+            await asyncio.sleep(0.5)
             await self._sessions.set_status(session_id, "ended")
             duration = await self._sessions.get_duration_seconds(session_id)
             self._store.update_duration(task_id, duration)
@@ -697,7 +712,6 @@ class CallOrchestrator:
             if stats is not None:
                 stats["stop_reason"] = stop_reason
             await self._persist_recording_stats(session_id)
-            await self._stop_voice_session(session_id)
             self._create_mixed_audio(task_id)
             await self._ws.broadcast(
                 task_id,

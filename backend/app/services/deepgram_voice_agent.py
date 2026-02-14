@@ -164,12 +164,17 @@ class DeepgramVoiceAgentSession:
         if self._closed:
             return
         self._closed = True
-        if self._receive_task is not None:
-            self._receive_task.cancel()
-            self._receive_task = None
+        # Close the WebSocket first so _receive_loop exits its async-for naturally
         if self._ws is not None:
             await self._ws.close()
             self._ws = None
+        # Give the receive loop a moment to drain any final audio chunks
+        if self._receive_task is not None:
+            try:
+                await asyncio.wait_for(asyncio.shield(self._receive_task), timeout=1.0)
+            except (asyncio.TimeoutError, asyncio.CancelledError, Exception):
+                self._receive_task.cancel()
+            self._receive_task = None
 
         session_dur_ms = None
         if self._session_start_time is not None:
