@@ -400,7 +400,33 @@ export default function ChatPage() {
     if (phase === 'objective') {
       setObjective(text);
 
-      // Show typing while researching
+      // If the user already included a phone number, skip discovery and use it directly.
+      // Still fire Exa in the background for research context.
+      if (looksLikePhone(text)) {
+        // Extract the phone number from the text
+        const digits = text.replace(/[^\d+]/g, '');
+        const phone = digits.length >= 10 ? digits : text;
+        setPhoneNumber(phone);
+
+        // Fire research in the background for context (don't block the call)
+        const searchQuery = userLocation ? `${text} near ${userLocation}` : text;
+        searchResearch(searchQuery)
+          .then((res) => {
+            if (res.ok && res.count > 0) {
+              const snippets = res.results
+                .filter((r) => r.snippet)
+                .map((r) => `${r.title ?? ''}: ${r.snippet}`)
+                .join('\n');
+              setResearchContext(snippets);
+            }
+          })
+          .catch(() => {}); // Research is best-effort
+
+        startNegotiation(phone);
+        return;
+      }
+
+      // No phone number — show typing while researching
       setTyping(true);
 
       const searchQuery = userLocation ? `${text} near ${userLocation}` : text;
