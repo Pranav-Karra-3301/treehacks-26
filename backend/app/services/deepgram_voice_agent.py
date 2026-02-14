@@ -93,6 +93,31 @@ def _build_think_payload(task: Dict[str, Any], endpoint_url: str) -> Dict[str, A
     return think
 
 
+def _build_function_definitions() -> list[Dict[str, Any]]:
+    """Build function definitions for Deepgram voice agent tool use."""
+    return [
+        {
+            "name": "web_research",
+            "description": (
+                "Search the web for real-time information during the call. "
+                "Use this when you need current pricing, competitor rates, market data, "
+                "company policies, promotions, or any factual information to strengthen "
+                "your negotiation position. Also use it to verify claims the other party makes."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Concise search query for finding relevant information",
+                    }
+                },
+                "required": ["query"],
+            },
+        },
+    ]
+
+
 class DeepgramVoiceAgentSession:
     """Manages one Deepgram Voice Agent websocket session."""
 
@@ -104,6 +129,7 @@ class DeepgramVoiceAgentSession:
         on_agent_audio: Callable[[bytes], Awaitable[None]],
         on_thinking: Callable[[str], Awaitable[None]],
         on_event: Callable[[Dict[str, Any]], Awaitable[None]],
+        on_research: Optional[Callable[[str], Awaitable[Dict[str, Any]]]] = None,
     ) -> None:
         self._task_id = task_id
         self._task = task
@@ -111,6 +137,7 @@ class DeepgramVoiceAgentSession:
         self._on_agent_audio = on_agent_audio
         self._on_thinking = on_thinking
         self._on_event = on_event
+        self._on_research = on_research
 
         self._ws: Optional[websockets.WebSocketClientProtocol] = None
         self._receive_task: Optional[asyncio.Task[None]] = None
@@ -225,6 +252,10 @@ class DeepgramVoiceAgentSession:
         think_endpoint = settings.DEEPGRAM_VOICE_AGENT_THINK_ENDPOINT_URL
         think = _build_think_payload(self._task, think_endpoint)
 
+        # Add function calling if research callback is available
+        if self._on_research is not None:
+            think["functions"] = _build_function_definitions()
+
         settings_message = {
             "type": "Settings",
             "audio": {
@@ -338,6 +369,15 @@ class DeepgramVoiceAgentSession:
                 await self._on_thinking(content)
             return
 
+        if message_type == "FunctionCalling":
+            log_event("deepgram", "function_calling", task_id=self._task_id,
+                      details={"function_name": payload.get("function_name")})
+            return
+
+        if message_type == "FunctionCallRequest":
+            asyncio.create_task(self._handle_function_call(payload))
+            return
+
         if message_type == "AgentStartedSpeaking":
             log_event("deepgram", "agent_started_speaking", task_id=self._task_id)
             return
@@ -375,3 +415,57 @@ class DeepgramVoiceAgentSession:
             task_id=self._task_id,
             details={"message_type": message_type},
         )
+
+    async def _handle_function_call(self, payload: Dict[str, Any]) -> None:
+        """Execute a function call from Deepgram and return the result."""
+        function_name = payload.get("function_name", "")
+        function_call_id = payload.get("function_call_id", "")
+        parameters = payload.get("input", {})
+
+        log_event(
+            "deepgram", "function_call_request", task_id=self._task_id,
+            details={"function": function_name, "params": parameters},
+        )
+
+        result: Dict[str, Any] = {}
+
+        if function_name == "web_research" and self._on_research is not None:
+            query = parameters.get("query", "")
+            try:
+                with timed_step("deepgram", "function_web_research", task_id=self._task_id,
+                                details={"query": query}):
+                    search_result = await self._on_research(query)
+                    # Flatten into concise text for the LLM
+                    snippets = []
+                    for r in search_result.get("results", []):
+                        title = r.get("title", "")
+                        snippet = r.get("snippet", "")
+                        if title or snippet:
+                            snippets.append(f"{title}: {snippet[:200]}")
+                    result = {
+                        "query": query,
+                        "findings": "\n".join(snippets[:5]) if snippets else "No results found.",
+                        "result_count": len(snippets),
+                    }
+            except Exception as exc:
+                log_event("deepgram", "function_call_error", task_id=self._task_id,
+                          status="error", details={"error": f"{type(exc).__name__}: {exc}"})
+                result = {"query": query, "findings": "Search temporarily unavailable.", "result_count": 0}
+        else:
+            result = {"error": f"Unknown function: {function_name}"}
+
+        # Send response back to Deepgram
+        response = {
+            "type": "FunctionCallResponse",
+            "function_call_id": function_call_id,
+            "output": json.dumps(result),
+        }
+        if self._ws and not self._closed:
+            try:
+                await self._ws.send(json.dumps(response))
+                log_event("deepgram", "function_call_response", task_id=self._task_id,
+                          details={"function": function_name, "result_count": result.get("result_count", 0)})
+            except Exception as exc:
+                log_event("deepgram", "function_call_response_error", task_id=self._task_id,
+                          status="error", details={"error": f"{type(exc).__name__}: {exc}"})
+

@@ -180,7 +180,22 @@ def build_negotiation_prompt(
             f"{phase_instruction}"
         )
 
-    # 5. Guardrails
+    # 5. Web research tool
+    parts.append(
+        "--- WEB RESEARCH TOOL ---\n"
+        "You have access to a 'web_research' function that searches the web in real-time.\n"
+        "Use it when you need facts to strengthen your position:\n"
+        "- Verify a claim the other party makes ('Let me check on that...')\n"
+        "- Look up current pricing, competitor rates, or promotions\n"
+        "- Find company policies, cancellation fees, or contract terms\n"
+        "- Get market data to justify your ask\n"
+        "Call it with a concise search query. While waiting, use a natural filler like "
+        "'Give me one second...' or 'Let me look into that...'\n"
+        "Do NOT mention searching, googling, or looking things up online. "
+        "Frame it as personal knowledge: 'From what I've seen...' or 'I recall that...'"
+    )
+
+    # 6. Guardrails
     guardrail_lines = [
         "--- GUARDRAILS ---",
         "Keep these in mind at all times.",
@@ -244,36 +259,7 @@ def build_greeting(task: Dict[str, Any]) -> str:
     if opening:
         return opening.strip()
 
-<<<<<<< HEAD
     # Use a natural, generic greeting — the system prompt already has the
     # full objective context, so the agent will steer the conversation
     # toward it after the initial pleasantries.
     return "Hi, yea, I was hoping you could help me out with something."
-=======
-    import random
-
-    # Pool of natural greetings — vary so repeat calls don't sound identical
-    bill_greetings = [
-        "Hi there, thanks for taking my call. I'm calling about my account.",
-        "Hey, appreciate you picking up. I wanted to ask about my account.",
-        "Hi, thanks for answering. I had a quick question about my bill.",
-    ]
-    price_greetings = [
-        "Hey, thanks for picking up. I wanted to chat about pricing.",
-        "Hi there, appreciate your time. I had a question about your rates.",
-        "Hey, thanks for answering. I was looking into your pricing.",
-    ]
-    general_greetings = [
-        "Hi, thanks for taking my call. I was hoping you could help me with something.",
-        "Hey, appreciate you picking up. I had something I wanted to run by you.",
-        "Hi there, thanks for answering. I was hoping to chat real quick.",
-    ]
-
-    task_type = task.get("task_type", "custom")
-    if task_type == "bill_reduction":
-        return random.choice(bill_greetings)
-    elif task_type == "price_negotiation":
-        return random.choice(price_greetings)
-    else:
-        return random.choice(general_greetings)
->>>>>>> f4eba8d (Overhaul voice agent prompting for hyper-realistic calls)

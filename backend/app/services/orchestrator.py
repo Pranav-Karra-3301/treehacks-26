@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.services.deepgram_voice_agent import DeepgramVoiceAgentSession
 from app.services.llm_client import LLMClient
 from app.services.negotiation_engine import NegotiationEngine
+from app.services.research import ExaSearchService
 from app.services.session_manager import SessionManager
 from app.services.storage import DataStore
 from app.services.twilio_client import TwilioClient
@@ -535,6 +536,10 @@ class CallOrchestrator:
                 event_type = event.get("type")
                 log_event("deepgram", "event", task_id=task_id, details={"type": event_type, "event": event})
 
+            async def on_research(query: str) -> Dict[str, Any]:
+                exa = ExaSearchService()
+                return await exa.search(query, limit=3)
+
             session = DeepgramVoiceAgentSession(
                 task_id=task_id,
                 task=task,
@@ -542,6 +547,7 @@ class CallOrchestrator:
                 on_agent_audio=on_agent_audio,
                 on_thinking=on_thinking,
                 on_event=on_event,
+                on_research=on_research,
             )
             self._deepgram_sessions[session_id] = session
 
