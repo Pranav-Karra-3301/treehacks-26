@@ -137,16 +137,16 @@ resolve_or_reassign_port() {
     if new_port="$(find_free_port "${request_port}")"; then
       warn "${service_name} port ${request_port} is in use; auto-assigned ${new_port}."
       info "Active listener(s) for ${request_port}:"
-      echo "${listeners}"
+      printf '%s\n' "${listeners}" >&2
       printf '%s' "${new_port}"
       return 0
     fi
   fi
 
   error "Host port ${request_port} needed by ${service_name} is already in use."
-  echo "Active listener(s):"
-  echo "${listeners}"
-  echo
+  printf '%s\n' "Active listener(s):" >&2
+  printf '%s\n' "${listeners}" >&2
+  printf '\n' >&2
   info "Fix by running one of the following:"
   info "  - Stop the conflicting process and retry."
   info "  - Set explicit ports: BACKEND_HOST_PORT=3001 FRONTEND_HOST_PORT=3000 ${COMPOSE_CMD[*]} up --build"
