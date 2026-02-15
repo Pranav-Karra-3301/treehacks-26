@@ -154,7 +154,7 @@ if [ "${#missing_required[@]}" -gt 0 ]; then
     error "  - ${key}"
   done
   error ""
-  error "Update backend/.env then rerun: required example in backend/.env.example"
+  error "Update backend/.env then rerun: base template is .env.example at repo root"
   error "You can continue anyway with PRECHECK_STRICT=0 (debug mode only)."
   if [ "${STRICT_MODE}" = "0" ]; then
     info "Preflight found issues but is running in non-strict mode (PRECHECK_STRICT=0)."

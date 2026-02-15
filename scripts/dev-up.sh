@@ -8,6 +8,7 @@ AUTO_FIX_PORTS="${AUTO_FIX_PORTS:-1}"
 USE_NGROK="${USE_NGROK:-${NGROK_ENABLED:-0}}"
 COMPOSE_UP_ARGS=()
 TWILIO_WEBHOOK_HOST_CHANGED=0
+CREATED_TEMP_ENV_FILE=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -64,6 +65,26 @@ normalize_webhook_host() {
   normalized="$(printf '%s' "${raw}" | tr -d '\r' | sed -E 's/[[:space:]]+$//')"
   normalized="${normalized%/}"
   printf '%s' "${normalized}"
+}
+
+compose_supports_env_file() {
+  # shellcheck disable=SC2145
+  if "${COMPOSE_CMD[@]}" --help 2>&1 | grep -Fq -- "--env-file"; then
+    return 0
+  fi
+  return 1
+}
+
+compose_env_file_arg() {
+  if [ -f "backend/.env" ]; then
+    printf '%s' "backend/.env"
+    return 0
+  fi
+  if [ -f ".env" ]; then
+    printf '%s' ".env"
+    return 0
+  fi
+  return 1
 }
 
 get_env_value() {
@@ -254,9 +275,14 @@ if ! docker info >/dev/null 2>&1; then
   exit 1
 fi
 
-for pair in "backend/.env backend/.env.example" "frontend/.env.local frontend/.env.example"; do
+for pair in "backend/.env .env.example" "frontend/.env.local frontend/.env.example"; do
   IFS=' ' read -r target source <<<"${pair}"
   if [ ! -f "${target}" ]; then
+    if [ "${target}" = "backend/.env" ] && [ -f ".env" ]; then
+      cp ".env" "${target}"
+      warn "Created ${target} from root .env."
+      continue
+    fi
     if [ -f "${source}" ]; then
       cp "${source}" "${target}"
       warn "Created ${target} from ${source}."
@@ -273,6 +299,24 @@ for pair in "backend/.env backend/.env.example" "frontend/.env.local frontend/.e
     fi
   fi
 done
+
+COMPOSE_ENV_ARGS=()
+if compose_supports_env_file; then
+  if env_file="$(compose_env_file_arg)"; then
+    COMPOSE_ENV_ARGS=(--env-file "${env_file}")
+    info "Using docker compose env file: ${env_file}"
+  else
+    COMPOSE_ENV_ARGS=()
+    info "No .env or backend/.env found; running docker compose without --env-file."
+  fi
+else
+  warn "docker compose option --env-file is unavailable; proceeding with default compose env behavior."
+  if [ ! -f ".env" ]; then
+    : > ".env"
+    CREATED_TEMP_ENV_FILE=1
+    warn "Created temporary root .env (empty) for this run because docker compose --env-file is unsupported."
+  fi
+fi
 
 if [ "${AUTO_FIX_PORTS}" = "1" ]; then
   info "AUTO_FIX_PORTS is enabled. If default host ports are in use, free alternatives are selected automatically."
@@ -366,7 +410,14 @@ _cleanup_ngrok() {
   fi
 }
 
-trap '_cleanup_ngrok' EXIT INT TERM
+_cleanup_dev_up() {
+  _cleanup_ngrok
+  if [ "${CREATED_TEMP_ENV_FILE}" = "1" ] && [ -f ".env" ]; then
+    rm -f ".env"
+  fi
+}
+
+trap '_cleanup_dev_up' EXIT INT TERM
 
 _extract_ngrok_url_from_log() {
   local ngrok_log_file="$1"
@@ -532,6 +583,28 @@ _ensure_docker_host_url() {
   vllm_url="$(get_env_value "backend/.env" "VLLM_BASE_URL" 2>/dev/null || true)"
 
   local changed=0
+  local root_supabase_url
+  local root_supabase_anon_key
+  local root_supabase_table
+  local root_supabase_calls_table
+  local root_supabase_enabled
+  local root_supabase_calls_enabled
+  local root_supabase_artifacts_table
+  local root_supabase_artifacts_enabled
+  local root_supabase_artifact_audio_limit
+  local root_supabase_verbose_sync_logging
+  local root_auto_ivr_navigation_enabled
+  local backend_supabase_url
+  local backend_supabase_anon_key
+  local backend_supabase_table
+  local backend_supabase_calls_table
+  local backend_supabase_enabled
+  local backend_supabase_calls_enabled
+  local backend_supabase_artifacts_table
+  local backend_supabase_artifacts_enabled
+  local backend_supabase_artifact_audio_limit
+  local backend_supabase_verbose_sync_logging
+  local backend_auto_ivr_navigation_enabled
 
   if [[ "${ollama_url}" == *"localhost"* || "${ollama_url}" == *"127.0.0.1"* ]]; then
     local new_ollama="${ollama_url//localhost/host.docker.internal}"
@@ -543,6 +616,77 @@ _ensure_docker_host_url() {
     local new_vllm="${vllm_url//localhost/host.docker.internal}"
     new_vllm="${new_vllm//127.0.0.1/host.docker.internal}"
     printf 'VLLM_BASE_URL=%s\n' "${new_vllm}" >> "${override_file}"
+    changed=1
+  fi
+
+  # Optional Supabase fallbacks: if root-level values are set and backend/.env
+  # has them empty, inject only those keys into overrides so shared env works.
+  root_supabase_url="$(get_env_value ".env" "SUPABASE_URL" 2>/dev/null || true)"
+  root_supabase_anon_key="$(get_env_value ".env" "SUPABASE_ANON_KEY" 2>/dev/null || true)"
+  root_supabase_table="$(get_env_value ".env" "SUPABASE_CHAT_SESSIONS_TABLE" 2>/dev/null || true)"
+  root_supabase_calls_table="$(get_env_value ".env" "SUPABASE_CALLS_TABLE" 2>/dev/null || true)"
+  root_supabase_enabled="$(get_env_value ".env" "SUPABASE_CHAT_SESSIONS_ENABLED" 2>/dev/null || true)"
+  root_supabase_calls_enabled="$(get_env_value ".env" "SUPABASE_CALLS_ENABLED" 2>/dev/null || true)"
+  root_supabase_artifacts_table="$(get_env_value ".env" "SUPABASE_CALL_ARTIFACTS_TABLE" 2>/dev/null || true)"
+  root_supabase_artifacts_enabled="$(get_env_value ".env" "SUPABASE_CALL_ARTIFACTS_ENABLED" 2>/dev/null || true)"
+  root_supabase_artifact_audio_limit="$(get_env_value ".env" "SUPABASE_CALL_ARTIFACT_MAX_AUDIO_BYTES" 2>/dev/null || true)"
+  root_supabase_verbose_sync_logging="$(get_env_value ".env" "SUPABASE_VERBOSE_SYNC_LOGGING" 2>/dev/null || true)"
+  root_auto_ivr_navigation_enabled="$(get_env_value ".env" "AUTO_IVR_NAVIGATION_ENABLED" 2>/dev/null || true)"
+
+  backend_supabase_url="$(get_env_value "backend/.env" "SUPABASE_URL" 2>/dev/null || true)"
+  backend_supabase_anon_key="$(get_env_value "backend/.env" "SUPABASE_ANON_KEY" 2>/dev/null || true)"
+  backend_supabase_table="$(get_env_value "backend/.env" "SUPABASE_CHAT_SESSIONS_TABLE" 2>/dev/null || true)"
+  backend_supabase_calls_table="$(get_env_value "backend/.env" "SUPABASE_CALLS_TABLE" 2>/dev/null || true)"
+  backend_supabase_enabled="$(get_env_value "backend/.env" "SUPABASE_CHAT_SESSIONS_ENABLED" 2>/dev/null || true)"
+  backend_supabase_calls_enabled="$(get_env_value "backend/.env" "SUPABASE_CALLS_ENABLED" 2>/dev/null || true)"
+  backend_supabase_artifacts_table="$(get_env_value "backend/.env" "SUPABASE_CALL_ARTIFACTS_TABLE" 2>/dev/null || true)"
+  backend_supabase_artifacts_enabled="$(get_env_value "backend/.env" "SUPABASE_CALL_ARTIFACTS_ENABLED" 2>/dev/null || true)"
+  backend_supabase_artifact_audio_limit="$(get_env_value "backend/.env" "SUPABASE_CALL_ARTIFACT_MAX_AUDIO_BYTES" 2>/dev/null || true)"
+  backend_supabase_verbose_sync_logging="$(get_env_value "backend/.env" "SUPABASE_VERBOSE_SYNC_LOGGING" 2>/dev/null || true)"
+  backend_auto_ivr_navigation_enabled="$(get_env_value "backend/.env" "AUTO_IVR_NAVIGATION_ENABLED" 2>/dev/null || true)"
+
+  if [ -z "${backend_supabase_url}" ] && [ -n "${root_supabase_url}" ]; then
+    printf 'SUPABASE_URL=%s\n' "${root_supabase_url}" >> "${override_file}"
+    changed=1
+  fi
+  if [ -z "${backend_supabase_anon_key}" ] && [ -n "${root_supabase_anon_key}" ]; then
+    printf 'SUPABASE_ANON_KEY=%s\n' "${root_supabase_anon_key}" >> "${override_file}"
+    changed=1
+  fi
+  if [ -z "${backend_supabase_table}" ] && [ -n "${root_supabase_table}" ]; then
+    printf 'SUPABASE_CHAT_SESSIONS_TABLE=%s\n' "${root_supabase_table}" >> "${override_file}"
+    changed=1
+  fi
+  if [ -z "${backend_supabase_calls_table}" ] && [ -n "${root_supabase_calls_table}" ]; then
+    printf 'SUPABASE_CALLS_TABLE=%s\n' "${root_supabase_calls_table}" >> "${override_file}"
+    changed=1
+  fi
+  if [ -z "${backend_supabase_enabled}" ] && [ -n "${root_supabase_enabled}" ]; then
+    printf 'SUPABASE_CHAT_SESSIONS_ENABLED=%s\n' "${root_supabase_enabled}" >> "${override_file}"
+    changed=1
+  fi
+  if [ -z "${backend_supabase_calls_enabled}" ] && [ -n "${root_supabase_calls_enabled}" ]; then
+    printf 'SUPABASE_CALLS_ENABLED=%s\n' "${root_supabase_calls_enabled}" >> "${override_file}"
+    changed=1
+  fi
+  if [ -z "${backend_supabase_artifacts_table}" ] && [ -n "${root_supabase_artifacts_table}" ]; then
+    printf 'SUPABASE_CALL_ARTIFACTS_TABLE=%s\n' "${root_supabase_artifacts_table}" >> "${override_file}"
+    changed=1
+  fi
+  if [ -z "${backend_supabase_artifacts_enabled}" ] && [ -n "${root_supabase_artifacts_enabled}" ]; then
+    printf 'SUPABASE_CALL_ARTIFACTS_ENABLED=%s\n' "${root_supabase_artifacts_enabled}" >> "${override_file}"
+    changed=1
+  fi
+  if [ -z "${backend_supabase_artifact_audio_limit}" ] && [ -n "${root_supabase_artifact_audio_limit}" ]; then
+    printf 'SUPABASE_CALL_ARTIFACT_MAX_AUDIO_BYTES=%s\n' "${root_supabase_artifact_audio_limit}" >> "${override_file}"
+    changed=1
+  fi
+  if [ -z "${backend_supabase_verbose_sync_logging}" ] && [ -n "${root_supabase_verbose_sync_logging}" ]; then
+    printf 'SUPABASE_VERBOSE_SYNC_LOGGING=%s\n' "${root_supabase_verbose_sync_logging}" >> "${override_file}"
+    changed=1
+  fi
+  if [ -z "${backend_auto_ivr_navigation_enabled}" ] && [ -n "${root_auto_ivr_navigation_enabled}" ]; then
+    printf 'AUTO_IVR_NAVIGATION_ENABLED=%s\n' "${root_auto_ivr_navigation_enabled}" >> "${override_file}"
     changed=1
   fi
 
@@ -592,9 +736,9 @@ for _arg in "${COMPOSE_EFFECTIVE_ARGS[@]+"${COMPOSE_EFFECTIVE_ARGS[@]}"}"; do
 done
 
 if [ "${HAS_COMPOSE_ARGS}" = "1" ]; then
-  info "Starting services with: ${COMPOSE_CMD[*]} up --build ${COMPOSE_EFFECTIVE_ARGS[*]}"
-  "${COMPOSE_CMD[@]}" up --build "${COMPOSE_EFFECTIVE_ARGS[@]}"
+  info "Starting services with: ${COMPOSE_CMD[*]} ${COMPOSE_ENV_ARGS[*]} up --build ${COMPOSE_EFFECTIVE_ARGS[*]}"
+  "${COMPOSE_CMD[@]}" "${COMPOSE_ENV_ARGS[@]}" up --build "${COMPOSE_EFFECTIVE_ARGS[@]}"
 else
-  info "Starting services with: ${COMPOSE_CMD[*]} up --build"
-  "${COMPOSE_CMD[@]}" up --build
+  info "Starting services with: ${COMPOSE_CMD[*]} ${COMPOSE_ENV_ARGS[*]} up --build"
+  "${COMPOSE_CMD[@]}" "${COMPOSE_ENV_ARGS[@]}" up --build
 fi
