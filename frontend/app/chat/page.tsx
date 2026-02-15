@@ -2296,14 +2296,44 @@ export default function ChatPage() {
       const objectiveText = text.trim();
       setObjective(objectiveText);
 
-      // If the user already included a phone number, skip discovery and use it directly.
-      // Still fire Exa in the background for research context.
+      // If the user already included phone number(s), skip discovery and use them directly.
       if (looksLikePhone(text)) {
         const parsedPhones = parsePhonesFromText(text);
+        // Strip phone numbers from objective text so the agent gets a clean goal
+        const cleanObjective = text.replace(PHONE_CANDIDATE_RE, '').replace(/\s{2,}/g, ' ').trim();
+        const effectiveObjective = cleanObjective || objectiveText;
+
         if (parsedPhones.length > 1) {
-          setManualPhones((prev) => Array.from(new Set([...prev, ...parsedPhones])));
-          setPhase('phone');
-          addMessage({ role: 'ai', text: `I found ${parsedPhones.length} numbers. Pick one from the manual list below, or add more.` });
+          // Multiple phones → start concurrent calls directly
+          setConcurrentTestMode(true);
+          const targetDirectory: Record<string, MultiCallTargetMeta> = {};
+          parsedPhones.forEach((phone) => {
+            targetDirectory[phone] = {
+              phone,
+              source: 'manual',
+              title: null,
+              url: null,
+              snippet: null,
+            };
+          });
+          setObjective(effectiveObjective);
+
+          // Fire research in background for context
+          const searchQuery = userLocation ? `${effectiveObjective} near ${userLocation}` : effectiveObjective;
+          searchResearch(searchQuery)
+            .then((res) => {
+              if (res.ok && res.count > 0) {
+                const snippets = res.results
+                  .filter((r) => r.snippet)
+                  .map((r) => `${r.title ?? ''}: ${r.snippet}`)
+                  .join('\n');
+                setResearchContext(snippets);
+              }
+            })
+            .catch(() => {});
+
+          const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          void startConcurrentTestCalls(parsedPhones, effectiveObjective, 'real', runId, targetDirectory);
           return;
         }
         const phone = parsedPhones[0];
@@ -2312,9 +2342,10 @@ export default function ChatPage() {
           // Treat it as objective text and continue to discovery/phone flow.
         } else {
           setPhoneNumber(phone);
+          setObjective(effectiveObjective);
 
           // Fire research in the background for context (don't block the call)
-          const searchQuery = userLocation ? `${text} near ${userLocation}` : text;
+          const searchQuery = userLocation ? `${effectiveObjective} near ${userLocation}` : effectiveObjective;
           searchResearch(searchQuery)
             .then((res) => {
               if (res.ok && res.count > 0) {
@@ -2327,7 +2358,7 @@ export default function ChatPage() {
             })
             .catch(() => {}); // Research is best-effort
 
-          startNegotiation(phone, objectiveText);
+          startNegotiation(phone, effectiveObjective);
           return;
         }
       }
