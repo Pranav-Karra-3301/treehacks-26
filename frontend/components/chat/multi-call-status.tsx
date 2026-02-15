@@ -91,12 +91,45 @@ const MultiCallStatus = React.memo(function MultiCallStatus({
   onCallBackFromSummary,
   AudioPlayer,
 }: MultiCallStatusProps) {
+  const allCallsDone = multiCallEntries.every(
+    ([, s]) => s.status === 'ended' || s.status === 'failed',
+  );
+
   return (
     <div className="pt-3">
       <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-gray-500">
         Concurrent conversations
       </div>
-      {/* Call cards first */}
+      {/* Call Targets — above call cards */}
+      <div className="mb-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-soft">
+        <div className="text-[12px] font-semibold text-gray-900">Call Targets</div>
+        <div className="mt-2 grid gap-2 md:grid-cols-2">
+          {multiTargetEntries.map(({ phone, target }) => (
+            <div key={`target-${phone}`} className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="truncate text-[11.5px] font-semibold text-gray-800">
+                  {target.title ? target.title : formatPhone(phone)}
+                </div>
+                <span className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[10px] text-gray-600">
+                  {target.source === 'exa' ? 'Exa' : 'Manual'}
+                </span>
+              </div>
+              <div className="mt-0.5 text-[11px] text-gray-600">{formatPhone(phone)}</div>
+              {target.url ? (
+                <a
+                  href={target.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-0.5 block truncate text-[10.5px] text-blue-600 hover:text-blue-700"
+                >
+                  {target.url}
+                </a>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </div>
+      {/* Call cards */}
       <div className="grid gap-3 md:grid-cols-2 mb-3">
         {multiCallEntries.map(([phone, state]) => {
           const callTarget = multiCallTargets[phone];
@@ -218,36 +251,8 @@ const MultiCallStatus = React.memo(function MultiCallStatus({
           );
         })}
       </div>
-      {/* Call Targets */}
-      <div className="mb-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-soft">
-        <div className="text-[12px] font-semibold text-gray-900">Call Targets</div>
-        <div className="mt-2 grid gap-2 md:grid-cols-2">
-          {multiTargetEntries.map(({ phone, target }) => (
-            <div key={`target-${phone}`} className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-              <div className="flex items-center justify-between gap-2">
-                <div className="truncate text-[11.5px] font-semibold text-gray-800">
-                  {target.title ? target.title : formatPhone(phone)}
-                </div>
-                <span className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[10px] text-gray-600">
-                  {target.source === 'exa' ? 'Exa' : 'Manual'}
-                </span>
-              </div>
-              <div className="mt-0.5 text-[11px] text-gray-600">{formatPhone(phone)}</div>
-              {target.url ? (
-                <a
-                  href={target.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-0.5 block truncate text-[10.5px] text-blue-600 hover:text-blue-700"
-                >
-                  {target.url}
-                </a>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      </div>
-      {/* Combined Decision Summary — always at the bottom */}
+      {/* Combined Decision Summary — only shown after all calls complete */}
+      {allCallsDone ? (
       <div className="mb-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-soft">
         <div className="flex items-center justify-between gap-3">
           <div className="text-[12px] font-semibold text-gray-900">Combined Decision Summary</div>
@@ -351,6 +356,7 @@ const MultiCallStatus = React.memo(function MultiCallStatus({
           </div>
         ) : null}
       </div>
+      ) : null}
     </div>
   );
 });
