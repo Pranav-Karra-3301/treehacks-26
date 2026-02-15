@@ -32,13 +32,13 @@ export default function StatsSection() {
   return (
     <section className="px-6 py-16 sm:py-20">
       <div className="mx-auto max-w-5xl">
-        <div className="grid grid-cols-3 divide-x divide-gray-100">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 sm:gap-0 sm:divide-x divide-gray-100">
           {[
             { end: 8, prefix: '$', suffix: 'K+', label: 'Potential value saved', display: '$8K+' },
             { end: 300, prefix: '', suffix: '+', label: 'Calls' },
             { end: 83, prefix: '', suffix: '%', label: 'Success' },
           ].map((s) => (
-            <Reveal key={s.label} className="text-center px-4">
+            <Reveal key={s.label} className="text-center sm:px-4">
               <p className="text-[clamp(1.5rem,3.5vw,2.5rem)] font-bold tracking-tight text-gray-950 tabular-nums">
                 {s.display ? s.display : <Counter end={s.end} prefix={s.prefix} suffix={s.suffix} />}
               </p>

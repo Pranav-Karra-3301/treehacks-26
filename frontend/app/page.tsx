@@ -95,12 +95,12 @@ export default function LandingPage() {
     <div className="min-h-screen bg-white">
 
       {/* ── Nav ─────────────────────────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-50 flex justify-center px-4 pt-3">
-        <nav className="w-full max-w-5xl rounded-2xl flex items-center justify-between px-6 h-14 bg-white/95 backdrop-blur-sm border border-gray-200/60">
+      <div className="sticky top-0 z-50 flex justify-center px-3 sm:px-4 pt-3">
+        <nav className="w-full max-w-5xl rounded-2xl flex items-center justify-between px-4 sm:px-6 h-14 bg-white/95 backdrop-blur-sm border border-gray-200/60">
           <Link href="/" className="tracking-tight text-gray-950">
-            <span className="font-serif italic text-[28px]">kiru</span>
+            <span className="font-serif italic text-[24px] sm:text-[28px]">kiru</span>
           </Link>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3 sm:gap-6">
             <Link href="/how-it-works" className="hidden sm:block text-[13px] font-medium text-gray-500 transition hover:text-gray-900">
               How it works
             </Link>
@@ -110,7 +110,7 @@ export default function LandingPage() {
             <Link href="/dashboard" className="hidden sm:block text-[13px] font-medium text-gray-500 transition hover:text-gray-900">
               Dashboard
             </Link>
-            <Link href="/chat" className="group inline-flex items-center gap-1.5 rounded-full bg-gray-950 px-4 py-1.5 text-[13px] font-medium text-white transition hover:bg-gray-800">
+            <Link href="/chat" className="group inline-flex items-center gap-1.5 rounded-full bg-gray-950 px-3 sm:px-4 py-1.5 text-[12px] sm:text-[13px] font-medium text-white transition hover:bg-gray-800">
               Launch App <ArrowUpRight size={12} strokeWidth={2.5} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
             </Link>
           </div>
@@ -152,7 +152,7 @@ export default function LandingPage() {
               <motion.div
                 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.7, delay: 0.25, ease: [0.16, 1, 0.3, 1] }}
-                className="mt-8 flex items-center gap-3 justify-center lg:justify-start"
+                className="mt-8 flex flex-wrap items-center gap-3 justify-center lg:justify-start"
               >
                 <Link href="/chat" className="group inline-flex items-center gap-2 rounded-full bg-gray-950 pl-5 pr-4 py-2.5 text-[14px] font-medium text-white transition-all hover:bg-gray-800 hover:shadow-card active:scale-[0.98]">
                   Start negotiating <ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" />
@@ -196,7 +196,7 @@ export default function LandingPage() {
       <StatsSection />
 
       {/* ── Chat mockup showcase ────────────── */}
-      <section className="px-6 pb-20">
+      <section className="px-4 sm:px-6 pb-16 sm:pb-20">
         <div className="mx-auto max-w-5xl flex justify-center">
           <Reveal className="w-full">
             <ChatMockup />

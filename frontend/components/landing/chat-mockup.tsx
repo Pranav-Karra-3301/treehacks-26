@@ -41,7 +41,7 @@ export default function ChatMockup() {
 
   return (
     <div
-      className="relative w-full min-h-[520px] rounded-2xl flex items-center justify-center overflow-hidden"
+      className="relative w-full min-h-[420px] sm:min-h-[520px] rounded-2xl flex items-center justify-center overflow-hidden px-4 sm:px-0"
       style={{
         backgroundImage: "url('/bg.png')",
         backgroundSize: 'cover',
@@ -51,9 +51,9 @@ export default function ChatMockup() {
     >
       {/* Soft ambient glow over wallpaper */}
       <div className="absolute inset-0 bg-gradient-to-br from-violet-100/20 via-rose-50/10 to-amber-50/10 pointer-events-none" />
-      <div className="rounded-2xl border border-gray-200/60 bg-white/90 backdrop-blur-sm shadow-elevated overflow-hidden relative w-[520px] shrink-0">
+      <div className="rounded-2xl border border-gray-200/60 bg-white/90 backdrop-blur-sm shadow-elevated overflow-hidden relative w-full max-w-[520px]">
         {/* Title bar */}
-        <div className="flex items-center gap-2 border-b border-gray-100 px-5 py-3">
+        <div className="flex items-center gap-2 border-b border-gray-100 px-4 sm:px-5 py-2.5 sm:py-3">
           <div className="flex gap-1.5">
             <span className="h-[9px] w-[9px] rounded-full bg-[#FF5F57]" />
             <span className="h-[9px] w-[9px] rounded-full bg-[#FEBC2E]" />
@@ -63,7 +63,7 @@ export default function ChatMockup() {
           <div className="w-[42px]" />
         </div>
         {/* Messages */}
-        <div ref={ref} className="h-[260px] overflow-y-auto px-5 py-5 space-y-3">
+        <div ref={ref} className="h-[240px] sm:h-[260px] overflow-y-auto px-4 sm:px-5 py-4 sm:py-5 space-y-2.5 sm:space-y-3">
           {messages.map((msg, i) => (
             <motion.div key={`${cycle}-${i}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
               {msg.role === 'status' ? (
@@ -86,8 +86,8 @@ export default function ChatMockup() {
           ) : null}
         </div>
         {/* Input */}
-        <div className="border-t border-gray-100 px-5 py-3">
-          <div className="flex items-center rounded-xl bg-gray-50 px-4 py-2.5">
+        <div className="border-t border-gray-100 px-4 sm:px-5 py-2.5 sm:py-3">
+          <div className="flex items-center rounded-xl bg-gray-50 px-3 sm:px-4 py-2 sm:py-2.5">
             <span className="flex-1 text-[12px] text-gray-300">Message kiru...</span>
             <div className="h-6 w-6 rounded-full bg-gray-200 flex items-center justify-center"><ArrowUpRight size={11} className="text-gray-400" /></div>
           </div>
