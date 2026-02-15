@@ -66,6 +66,8 @@ export const fonts = {
   medium: 'Inter_500Medium',
   semibold: 'Inter_600SemiBold',
   bold: 'Inter_700Bold',
-  serif: 'InstrumentSerif_400Regular',
-  serifItalic: 'InstrumentSerif_400Regular_Italic',
+  serif: 'MartinaPl_Regular',
+  serifItalic: 'MartinaPl_Italic',
+  serifBold: 'MartinaPl_Bold',
+  serifBoldItalic: 'MartinaPl_BoldItalic',
 } as const;
