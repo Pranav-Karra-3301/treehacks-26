@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { View, TextInput, Pressable, Platform, KeyboardAvoidingView } from 'react-native';
+import { View, TextInput, Pressable, Platform } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -50,85 +50,80 @@ export default function ChatInput({
   }, [sendScale]);
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={0}
+    <View
+      style={{
+        backgroundColor: colors.bg,
+        borderTopWidth: 0.5,
+        borderTopColor: 'rgba(0,0,0,0.06)',
+        paddingHorizontal: 16,
+        paddingTop: 10,
+        paddingBottom: 8,
+      }}
     >
       <View
         style={{
-          backgroundColor: colors.bg,
-          borderTopWidth: 0.5,
-          borderTopColor: 'rgba(0,0,0,0.06)',
-          paddingHorizontal: 16,
-          paddingTop: 10,
-          paddingBottom: 8,
+          flexDirection: 'row',
+          alignItems: 'flex-end',
+          gap: 10,
+          borderRadius: 22,
+          borderWidth: 1,
+          borderColor: focused ? colors.gray300 : colors.gray200,
+          backgroundColor: colors.white,
+          paddingHorizontal: 14,
+          paddingVertical: 8,
         }}
       >
-        <View
+        <TextInput
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          placeholderTextColor={colors.gray400}
+          editable={!disabled}
+          multiline
+          maxLength={1000}
+          returnKeyType="send"
+          submitBehavior="submit"
+          onSubmitEditing={handleSend}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          accessibilityLabel="Message input"
+          accessibilityHint={placeholder}
           style={{
-            flexDirection: 'row',
-            alignItems: 'flex-end',
-            gap: 10,
-            borderRadius: 22,
-            borderWidth: 1,
-            borderColor: focused ? colors.gray300 : colors.gray200,
-            backgroundColor: colors.white,
-            paddingHorizontal: 14,
-            paddingVertical: 8,
+            flex: 1,
+            fontFamily: fonts.regular,
+            fontSize: 16,
+            lineHeight: 22,
+            color: disabled ? colors.gray400 : colors.gray900,
+            minHeight: 28,
+            maxHeight: 120,
+            paddingTop: Platform.OS === 'ios' ? 4 : 2,
+            paddingBottom: Platform.OS === 'ios' ? 4 : 2,
           }}
+        />
+        <AnimatedPressable
+          onPress={handleSend}
+          onPressIn={onPressIn}
+          onPressOut={onPressOut}
+          disabled={sendDisabled}
+          accessibilityRole="button"
+          accessibilityLabel="Send message"
+          accessibilityState={{ disabled: sendDisabled }}
+          style={[
+            {
+              height: 30,
+              width: 30,
+              borderRadius: 15,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: sendDisabled ? colors.gray200 : colors.gray900,
+              marginBottom: 1,
+            },
+            sendAnimStyle,
+          ]}
         >
-          <TextInput
-            value={value}
-            onChangeText={onChangeText}
-            placeholder={placeholder}
-            placeholderTextColor={colors.gray400}
-            editable={!disabled}
-            multiline
-            maxLength={1000}
-            returnKeyType="send"
-            submitBehavior="submit"
-            onSubmitEditing={handleSend}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            accessibilityLabel="Message input"
-            accessibilityHint={placeholder}
-            style={{
-              flex: 1,
-              fontFamily: fonts.regular,
-              fontSize: 16,
-              lineHeight: 22,
-              color: disabled ? colors.gray400 : colors.gray900,
-              minHeight: 28,
-              maxHeight: 120,
-              paddingTop: Platform.OS === 'ios' ? 4 : 2,
-              paddingBottom: Platform.OS === 'ios' ? 4 : 2,
-            }}
-          />
-          <AnimatedPressable
-            onPress={handleSend}
-            onPressIn={onPressIn}
-            onPressOut={onPressOut}
-            disabled={sendDisabled}
-            accessibilityRole="button"
-            accessibilityLabel="Send message"
-            accessibilityState={{ disabled: sendDisabled }}
-            style={[
-              {
-                height: 30,
-                width: 30,
-                borderRadius: 15,
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: sendDisabled ? colors.gray200 : colors.gray900,
-                marginBottom: 1,
-              },
-              sendAnimStyle,
-            ]}
-          >
-            <ArrowUp size={15} strokeWidth={2.5} color={sendDisabled ? colors.gray400 : '#fff'} />
-          </AnimatedPressable>
-        </View>
+          <ArrowUp size={15} strokeWidth={2.5} color={sendDisabled ? colors.gray400 : '#fff'} />
+        </AnimatedPressable>
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }

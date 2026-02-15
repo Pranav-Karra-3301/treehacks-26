@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Menu, SquarePen } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -136,36 +136,42 @@ export default function ChatScreen() {
       {/* Readiness banner */}
       {readinessWarning && <ReadinessBanner warning={readinessWarning} />}
 
-      {/* Messages */}
-      <View style={{ flex: 1 }}>
-        <MessageList
-          messages={messages}
-          typing={typing}
-          onCall={handleCallFromSearch}
-          onSkip={handleSkipDiscovery}
-          ListFooterComponent={
-            showPostCall ? (
-              <PostCallActions
-                canCallAgain={canCallAgain}
-                onCallAgain={handleCallAgain}
-                onNewNegotiation={handleNewNegotiation}
-              />
-            ) : undefined
-          }
-        />
-      </View>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
+      >
+        {/* Messages */}
+        <View style={{ flex: 1 }}>
+          <MessageList
+            messages={messages}
+            typing={typing}
+            onCall={handleCallFromSearch}
+            onSkip={handleSkipDiscovery}
+            ListFooterComponent={
+              showPostCall ? (
+                <PostCallActions
+                  canCallAgain={canCallAgain}
+                  onCallAgain={handleCallAgain}
+                  onNewNegotiation={handleNewNegotiation}
+                />
+              ) : undefined
+            }
+          />
+        </View>
 
-      {/* Input */}
-      {phase !== 'ended' && (
-        <ChatInput
-          value={input}
-          onChangeText={setInput}
-          onSend={handleSend}
-          placeholder={placeholderText}
-          disabled={inputDisabled}
-          sendDisabled={!input.trim() || inputDisabled || typing}
-        />
-      )}
+        {/* Input */}
+        {phase !== 'ended' && (
+          <ChatInput
+            value={input}
+            onChangeText={setInput}
+            onSend={handleSend}
+            placeholder={placeholderText}
+            disabled={inputDisabled}
+            sendDisabled={!input.trim() || inputDisabled || typing}
+          />
+        )}
+      </KeyboardAvoidingView>
 
       {/* Sidebar */}
       <Sidebar

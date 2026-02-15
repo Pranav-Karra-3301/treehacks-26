@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { AppState } from 'react-native';
 import {
   createTask,
   startCall,
@@ -59,13 +60,26 @@ export function useChatMachine() {
   const analysisLoadedRef = useRef(false);
   const thinkingBufferRef = useRef('');
   const endedProcessedRef = useRef(false);
+  const appActiveRef = useRef(AppState.currentState === 'active');
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      appActiveRef.current = state === 'active';
+    });
+    return () => sub.remove();
+  }, []);
 
   const userLocation = useLocation();
   const { tasks: pastTasks, loading: pastTasksLoading, refresh: refreshPastTasks } = usePastTasks();
 
   // ── Helpers ─────────────────────────────────────────────────
   const addMessage = useCallback((msg: Omit<Message, 'id'>) => {
-    setMessages((prev) => [...prev, { ...msg, id: genId() }]);
+    setMessages((prev) => [...prev, {
+      ...msg,
+      id: genId(),
+      // Skip typewriter for messages added while app is backgrounded (e.g. during a call with screen off)
+      ...(msg.role === 'ai' && !appActiveRef.current && { animate: false }),
+    }]);
   }, []);
 
   const aiReply = useCallback(
@@ -483,16 +497,16 @@ export function useChatMachine() {
   const canCallAgain = showPostCall && !!objective && !!phoneNumber;
 
   const placeholderText = inputDisabled
-    ? 'Setting up your negotiation...'
+    ? 'Setting up...'
     : phase === 'discovery'
-      ? 'Or type a phone number...'
+      ? 'Or type a number...'
       : phase === 'phone'
-        ? 'Enter the phone number...'
+        ? 'Enter phone number...'
         : phase === 'active'
           ? 'Send a note...'
           : phase === 'ended'
-            ? 'Negotiation complete'
-            : 'Describe what you want to negotiate...';
+            ? 'Done'
+            : 'What do you want to negotiate?';
 
   return {
     messages,
