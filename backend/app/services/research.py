@@ -78,9 +78,8 @@ class ExaSearchService:
             "type": settings.EXA_SEARCH_TYPE,
             "numResults": limit,
             "contents": {
-                "text": {"maxCharacters": 5000},
-                "summary": True,
-                "highlights": True,
+                "text": {"maxCharacters": 1000},
+                "highlights": {"numSentences": 3},
             },
             "includeDomains": [],
             "excludeDomains": [],
@@ -96,7 +95,7 @@ class ExaSearchService:
             details={"query": trimmed_query, "limit": limit},
         ):
             try:
-                async with httpx.AsyncClient(timeout=15.0, headers=headers) as client:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(8.0, connect=3.0), headers=headers) as client:
                     resp = await client.post(settings.EXA_SEARCH_URL, json=payload)
                     resp.raise_for_status()
                     data = resp.json()

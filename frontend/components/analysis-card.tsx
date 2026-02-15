@@ -152,7 +152,7 @@ export default function AnalysisCard({ analysis }: { analysis: AnalysisPayload }
             </div>
 
             {analysis.summary ? (
-              <p className="text-[13px] text-gray-600 leading-relaxed line-clamp-3">{analysis.summary}</p>
+              <p className="text-[13px] text-gray-600 leading-relaxed">{analysis.summary}</p>
             ) : (
               <p className="text-[13px] text-gray-400 italic">No summary available</p>
             )}

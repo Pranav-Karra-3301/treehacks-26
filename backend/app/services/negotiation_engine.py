@@ -123,11 +123,27 @@ class NegotiationEngine:
             messages.extend(conversation)
             messages.append({"role": "user", "content": user_utterance})
 
+            # === CALL DEBUG LOGGING ===
+            print(f"\n{'='*60}")
+            print(f"[NEGOTIATE] Task: {task.get('id')} | Turn: {turn_count}")
+            print(f"[NEGOTIATE] Objective: {task.get('objective', 'N/A')}")
+            print(f"[NEGOTIATE] Caller said: {user_utterance}")
+            print(f"[NEGOTIATE] System prompt ({len(system_prompt)} chars):")
+            print(f"  {system_prompt[:500]}{'...' if len(system_prompt) > 500 else ''}")
+            print(f"[NEGOTIATE] Conversation history: {len(conversation)} messages")
+            for msg in conversation[-4:]:
+                print(f"  [{msg.get('role')}]: {str(msg.get('content', ''))[:120]}")
+            print(f"{'='*60}")
+
             generated = []
             async for token in self._llm.stream_completion(messages, max_tokens=settings.LLM_MAX_TOKENS_VOICE):
                 generated.append(token)
 
             response = "".join(generated).strip()
+
+            print(f"[NEGOTIATE] Agent response: {response}")
+            print(f"{'='*60}\n")
+
             return response, system_prompt
 
     async def summarize_turn(
@@ -196,6 +212,12 @@ class NegotiationEngine:
             if style:
                 user_content += f"\nNEGOTIATION STYLE: {style}"
 
+        # === ANALYSIS DEBUG LOGGING ===
+        print(f"\n{'='*60}")
+        print(f"[ANALYSIS] Analyzing transcript ({len(transcript)} turns)")
+        print(f"[ANALYSIS] Transcript:\n{transcript_text[:800]}")
+        print(f"{'='*60}")
+
         messages = [
             {"role": "system", "content": ANALYSIS_SYSTEM_PROMPT},
             {"role": "user", "content": user_content},
@@ -237,8 +259,16 @@ class NegotiationEngine:
             "outcome": outcome,
             "outcome_reasoning": analysis.get("outcome_reasoning", ""),
             "concessions": analysis.get("concessions", []),
-            "tactics_used": analysis.get("tactics_used", []),
-            "tactics": [t.get("tactic", "") for t in analysis.get("tactics_used", [])],
+            "tactics_used": [
+                {
+                    "name": t.get("tactic") or t.get("name", ""),
+                    "description": t.get("example") or t.get("description", ""),
+                    "effectiveness": t.get("effectiveness", ""),
+                }
+                for t in analysis.get("tactics_used", [])
+                if (t.get("tactic") or t.get("name", "")).strip()
+            ],
+            "tactics": [t.get("tactic") or t.get("name", "") for t in analysis.get("tactics_used", [])],
             "score": score,
             "score_reasoning": analysis.get("score_reasoning", ""),
             "rapport_quality": analysis.get("rapport_quality", ""),

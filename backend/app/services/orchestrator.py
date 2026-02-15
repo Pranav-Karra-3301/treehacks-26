@@ -58,6 +58,9 @@ class CallOrchestrator:
         # Suppress per-chunk warning spam when Twilio keeps sending media after session teardown.
         self._media_no_session_log_at: dict[str, float] = {}
         self._media_after_end_log_at: dict[str, float] = {}
+        # Track inbound byte counts so outbound can be time-aligned
+        self._inbound_bytes: dict[str, int] = {}
+        self._outbound_bytes: dict[str, int] = {}
 
     def _session_recording_path(self, task_id: str) -> Path:
         return self._store.get_task_dir(task_id) / "recording_stats.json"
@@ -137,6 +140,16 @@ class CallOrchestrator:
             await self._send_agent_audio_to_twilio(task_id, chunk)
 
     async def start_task_call(self, task_id: str, task: Dict[str, Any]) -> Dict[str, Any]:
+        # === CALL START DEBUG LOGGING ===
+        print(f"\n{'='*60}")
+        print(f"[CALL START] Task: {task_id}")
+        print(f"[CALL START] Objective: {task.get('objective', 'N/A')}")
+        print(f"[CALL START] Target phone: {task.get('target_phone', 'N/A')}")
+        print(f"[CALL START] Style: {task.get('style', 'N/A')}")
+        print(f"[CALL START] Context: {task.get('context', 'N/A')}")
+        print(f"[CALL START] Walkaway: {task.get('walkaway_point', 'N/A')}")
+        print(f"[CALL START] Voice mode: {self._voice_mode_enabled()}")
+        print(f"{'='*60}\n")
         with timed_step("orchestrator", "start_task_call", task_id=task_id):
             session = await self._sessions.create_session(task_id)
             self._task_to_session[task_id] = session.session_id
@@ -672,9 +685,28 @@ class CallOrchestrator:
         if side_key not in {"caller", "agent"}:
             side_key = "agent"
 
-        # Write to individual track file only (mixed is created at call end)
+        # For outbound (agent) audio: pad with mulaw silence (0xFF) so
+        # the outbound track stays time-aligned with the continuous inbound
+        # stream.  The inbound stream is a steady 8 kHz clock from Twilio,
+        # so its byte count represents elapsed call time.
+        if side_key == "agent":
+            inbound_pos = self._inbound_bytes.get(session_id, 0)
+            outbound_pos = self._outbound_bytes.get(session_id, 0)
+            gap = inbound_pos - outbound_pos
+            if gap > 0:
+                with open(call_dir / filename, "ab") as f:
+                    f.write(b"\xff" * gap)
+                self._outbound_bytes[session_id] = outbound_pos + gap
+
+        # Write the actual audio data
         with open(call_dir / filename, "ab") as f:
             f.write(chunk)
+
+        # Track byte positions for time alignment
+        if side_key == "caller":
+            self._inbound_bytes[session_id] = self._inbound_bytes.get(session_id, 0) + len(chunk)
+        else:
+            self._outbound_bytes[session_id] = self._outbound_bytes.get(session_id, 0) + len(chunk)
 
         stats = self._audio_stats.setdefault(
             session_id,
@@ -788,8 +820,8 @@ class CallOrchestrator:
 
     async def stop_session(self, session_id: str, *, stop_reason: str = "unknown") -> None:
         session = await self._sessions.get(session_id)
-        if not session:
-            return
+        if not session or session.status == "ended":
+            return  # Already ended — skip duplicate
 
         task_id = session.task_id
         with timed_step("orchestrator", "stop_session", session_id=session_id, task_id=task_id):
@@ -816,6 +848,8 @@ class CallOrchestrator:
         self._task_to_session.pop(task_id, None)
         self._clear_task_call_sid(task_id)
         self._audio_stats.pop(session_id, None)
+        self._inbound_bytes.pop(session_id, None)
+        self._outbound_bytes.pop(session_id, None)
 
         # Auto-generate analysis in background so outcome is always set
         asyncio.create_task(self._auto_analyze(task_id))

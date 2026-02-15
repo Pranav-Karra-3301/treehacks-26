@@ -3,6 +3,10 @@ from __future__ import annotations
 import asyncio
 import json
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 
 class _FakeRedis:
     def __init__(self) -> None:

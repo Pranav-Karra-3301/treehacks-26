@@ -194,19 +194,26 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-[#fafaf9]">
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-50 flex items-center justify-between bg-white/80 backdrop-blur-xl border-b border-gray-200/60 px-6 py-3">
-        <div className="flex items-center gap-3">
-          <Link href="/" className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
-            <ArrowLeft size={16} />
+      <div className="sticky top-0 z-50 flex justify-center px-4 pt-3">
+        <header className="w-full max-w-5xl flex items-center justify-between rounded-2xl bg-white/80 backdrop-blur-xl border border-gray-200/60 shadow-soft px-6 py-3">
+          <div className="flex items-center gap-3">
+            <Link href="/" className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
+              <ArrowLeft size={16} />
+            </Link>
+            <div className="h-4 w-px bg-gray-200" />
+            <span
+              className="text-[28px] tracking-tight text-gray-950 italic"
+              style={{ fontFamily: '"Martina Plantijn", Georgia, serif' }}
+            >
+              kiru
+            </span>
+            <span className="text-[12px] text-gray-400 font-medium ml-0.5 mt-px">Dashboard</span>
+          </div>
+          <Link href="/chat" className="group inline-flex items-center gap-1.5 rounded-full bg-gray-950 px-4 py-1.5 text-[13px] font-medium text-white hover:bg-gray-800 transition">
+            Launch App <ArrowUpRight size={12} strokeWidth={2.5} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
           </Link>
-          <div className="h-4 w-px bg-gray-200" />
-          <span className="text-[17px] tracking-tight text-gray-950 font-serif italic">kiru</span>
-          <span className="text-[12px] text-gray-400 font-medium ml-0.5 mt-px">Dashboard</span>
-        </div>
-        <Link href="/chat" className="group inline-flex items-center gap-1.5 rounded-full bg-gray-950 px-4 py-1.5 text-[13px] font-medium text-white hover:bg-gray-800 transition">
-          Launch App <ArrowUpRight size={12} strokeWidth={2.5} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-        </Link>
-      </header>
+        </header>
+      </div>
 
       <div className="mx-auto max-w-6xl px-6 py-8">
         {/* ── Stats row ──────────────────────────────────────────────────── */}

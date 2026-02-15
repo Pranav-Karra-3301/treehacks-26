@@ -18,6 +18,7 @@ node_modules/
 # Data artifacts
 backend/data/
 backend/*.db
+backend/env.yaml
 
 # OS
 .DS_Store

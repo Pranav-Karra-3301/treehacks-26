@@ -2,3 +2,9 @@ __pycache__
 *.pyc
 .venv/
 .env
+.env.*
+env.yaml
+data/
+.pytest_cache/
+tests/
+scripts/
