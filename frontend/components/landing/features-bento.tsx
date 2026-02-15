@@ -128,7 +128,7 @@ export default function FeaturesBento() {
                 loop
                 muted
                 playsInline
-                className="absolute bottom-3 right-3 w-20 h-auto rounded-md opacity-90"
+                className="absolute bottom-3 right-3 w-28 h-auto rounded-md opacity-90"
               >
                 <source src="/2.mp4" type="video/mp4" />
               </video>
@@ -143,7 +143,7 @@ export default function FeaturesBento() {
             </div>
           </Reveal>
           <Reveal delay={0.15}>
-            <div className="group h-full rounded-2xl border border-gray-100 bg-gray-50/50 p-6 sm:p-8 transition-all duration-200 hover:border-gray-200 hover:shadow-card hover:bg-white relative">
+            <div className="group h-full rounded-2xl border border-gray-100 bg-gray-50/50 p-6 sm:p-8 transition-all duration-200 hover:border-gray-200 hover:shadow-card hover:bg-white relative overflow-hidden">
               <div className="flex items-center gap-2 mb-1"><BarChart3 size={14} className="text-gray-400" /><span className="text-[12px] font-semibold text-gray-400 uppercase tracking-wider">Analysis</span></div>
               <h3 className="text-[18px] font-semibold text-gray-950 mt-2">Post-call scorecard</h3>
               <p className="mt-2 text-[14px] leading-relaxed text-gray-500">After every call you get a performance score, tactic breakdown, and what you saved.</p>
@@ -153,7 +153,7 @@ export default function FeaturesBento() {
                 loop
                 muted
                 playsInline
-                className="mt-4 w-full max-w-[200px] h-auto rounded-md opacity-90"
+                className="absolute bottom-3 right-3 w-28 h-auto rounded-md opacity-90"
               >
                 <source src="/3.mp4" type="video/mp4" />
               </video>
