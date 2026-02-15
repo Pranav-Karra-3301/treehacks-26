@@ -55,6 +55,8 @@ class CallOrchestrator:
 
         self._audio_stats: Dict[str, Dict[str, Any]] = {}
         self._voice_session_lock = asyncio.Lock()
+        # Limit concurrent Twilio call placements to avoid rate-limiting
+        self._call_semaphore = asyncio.Semaphore(4)
         # Suppress per-chunk warning spam when Twilio keeps sending media after session teardown.
         self._media_no_session_log_at: dict[str, float] = {}
         self._media_after_end_log_at: dict[str, float] = {}
@@ -166,11 +168,12 @@ class CallOrchestrator:
                 await self._sessions.set_status(session.session_id, "dialing")
                 self._store.update_status(task_id, "dialing")
 
-            with timed_step("twilio", "place_call", task_id=task_id):
-                call = await self._twilio.place_call(task["target_phone"], task_id)
-                call_sid = call.get("sid")
-                if call_sid:
-                    self._link_call_sid(task_id, call_sid)
+            async with self._call_semaphore:
+                with timed_step("twilio", "place_call", task_id=task_id):
+                    call = await self._twilio.place_call(task["target_phone"], task_id)
+                    call_sid = call.get("sid")
+                    if call_sid:
+                        self._link_call_sid(task_id, call_sid)
 
             call_status = str(call.get("status") or "")
             if call_status == "failed":
@@ -394,6 +397,15 @@ class CallOrchestrator:
     ) -> None:
         if not task_id or task_id == "unknown":
             return
+        existing = self._task_to_media_ws.get(task_id)
+        if existing is not None and existing is not websocket:
+            log_event(
+                "orchestrator",
+                "media_stream_replaced",
+                task_id=task_id,
+                status="warning",
+                details={"stream_sid": stream_sid, "call_sid": call_sid},
+            )
         self._task_to_media_ws[task_id] = websocket
         self._link_stream_sid(task_id, stream_sid)
         self._link_call_sid(task_id, call_sid)

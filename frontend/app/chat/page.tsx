@@ -90,7 +90,7 @@ type PersistedSessionData = {
 };
 
 const ease = [0.16, 1, 0.3, 1] as const;
-const MAX_CONCURRENT_TEST_CALLS = 5;
+const MAX_CONCURRENT_TEST_CALLS = 4;
 const PHONE_CANDIDATE_RE = /(?:\+?1[\s().-]*)?(?:\(\s*[2-9]\d{2}\s*\)|[2-9]\d{2})[\s().-]*[2-9]\d{2}[\s.-]*\d{4}(?:\s*(?:#|x|ext\.?|extension)\s*\d{1,6})?/gi;
 const UNICODE_DASH_RE = /[‐‑‒–—―]/g;
 const PHONE_EXTENSION_RE = /(?:#|x|ext\.?|extension)\s*\d{1,6}$/i;
@@ -1561,7 +1561,10 @@ export default function ChatPage() {
       });
     }
 
-    const results = await Promise.all(phones.map(async (phone) => {
+    // Stagger call placement: create all tasks in parallel, then start calls
+    // sequentially with a short delay to avoid Twilio rate-limiting and
+    // backend race conditions that cause the last calls to fail.
+    const taskCreationResults = await Promise.all(phones.map(async (phone) => {
       try {
         const selectedTarget = resolvedTargetDirectory[phone];
         const targetHeader = selectedTarget?.title
@@ -1593,13 +1596,34 @@ export default function ChatPage() {
           ...(selectedTarget?.source && { target_source: selectedTarget.source }),
           ...(selectedTarget?.snippet && { target_snippet: selectedTarget.snippet }),
         });
-        const callResult = await startCall(task.id);
-        return { ok: true as const, phone, taskId: task.id, sessionId: callResult.session_id, callResult };
+        return { ok: true as const, phone, taskId: task.id };
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Unknown error';
         return { ok: false as const, phone, errorMsg };
       }
     }));
+
+    // Start calls sequentially with 500ms stagger to let each Twilio media
+    // stream register before the next call arrives.
+    const results: Array<
+      | { ok: true; phone: string; taskId: string; sessionId: string; callResult: any }
+      | { ok: false; phone: string; errorMsg: string }
+    > = [];
+    for (let i = 0; i < taskCreationResults.length; i++) {
+      const taskResult = taskCreationResults[i];
+      if (!taskResult.ok) {
+        results.push(taskResult);
+        continue;
+      }
+      try {
+        if (i > 0) await new Promise((r) => setTimeout(r, 500));
+        const callResult = await startCall(taskResult.taskId);
+        results.push({ ok: true, phone: taskResult.phone, taskId: taskResult.taskId, sessionId: callResult.session_id, callResult });
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+        results.push({ ok: false, phone: taskResult.phone, errorMsg });
+      }
+    }
 
     let startedCount = 0;
     const newState: Record<string, MultiCallState> = {};
