@@ -2222,7 +2222,7 @@ export default function ChatPage() {
         // Format transcript as dialogue
         if (transcript.turns && transcript.turns.length > 0) {
           const dialogueLines = transcript.turns.map((turn) =>
-            `${turn.role === 'agent' ? 'You' : 'Them'}: ${turn.content}`
+            `${turn.speaker === 'agent' ? 'You' : 'Them'}: ${turn.content}`
           );
           contextParts.push(dialogueLines.join('\n'));
         }
