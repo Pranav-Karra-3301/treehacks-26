@@ -307,7 +307,7 @@ export default function HowItWorksPage() {
                 <span>&middot;</span>
                 <a href="https://x.com/_eth0n" target="_blank" rel="noopener noreferrer" className="text-white/80 font-medium hover:text-white transition">Ethan</a>
                 <span>&middot;</span>
-                <span className="text-white/80 font-medium">Jayanth</span>
+                <a href="https://www.linkedin.com/in/jayanthsidamsety/" target="_blank" rel="noopener noreferrer" className="text-white/80 font-medium hover:text-white transition">Jayanth</a>
               </div>
               <div className="flex items-center gap-6">
                 <Link href="/chat" className="text-[13px] text-white/60 transition hover:text-white">Launch App</Link>
