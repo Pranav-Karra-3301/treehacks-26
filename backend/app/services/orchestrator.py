@@ -55,6 +55,9 @@ class CallOrchestrator:
 
         self._audio_stats: Dict[str, Dict[str, Any]] = {}
         self._voice_session_lock = asyncio.Lock()
+        # Suppress per-chunk warning spam when Twilio keeps sending media after session teardown.
+        self._media_no_session_log_at: dict[str, float] = {}
+        self._media_after_end_log_at: dict[str, float] = {}
 
     def _session_recording_path(self, task_id: str) -> Path:
         return self._store.get_task_dir(task_id) / "recording_stats.json"
@@ -239,6 +242,68 @@ class CallOrchestrator:
             if not from_status_callback:
                 self._clear_task_call_sid(task_id)
 
+    async def transfer_task_call(self, task_id: str, to_phone: str) -> Dict[str, Any]:
+        with timed_step("orchestrator", "transfer_task_call", task_id=task_id, details={"to_phone": to_phone}):
+            call_sid = self._task_to_call_sid.get(task_id)
+            if not call_sid:
+                raise LookupError("No active call is available to transfer for this task.")
+
+            task = self._store.get_task(task_id) or {}
+            status = str(task.get("status") or "")
+            if status in {"ended", "failed"}:
+                raise LookupError(f"Task call is already {status}.")
+
+            payload = await self._twilio.transfer_call(call_sid, to_phone)
+            await self._ws.broadcast(
+                task_id,
+                {
+                    "type": "call_status",
+                    "data": {
+                        "status": "active",
+                        "action": "transfer_requested",
+                        "target_phone": to_phone,
+                    },
+                },
+            )
+            log_event(
+                "orchestrator",
+                "transfer_task_call_requested",
+                task_id=task_id,
+                details={"call_sid": call_sid, "to_phone": to_phone},
+            )
+            return payload
+
+    async def send_task_dtmf(self, task_id: str, digits: str) -> Dict[str, Any]:
+        with timed_step("orchestrator", "send_task_dtmf", task_id=task_id, details={"digits": digits}):
+            call_sid = self._task_to_call_sid.get(task_id)
+            if not call_sid:
+                raise LookupError("No active call is available for keypad input on this task.")
+
+            task = self._store.get_task(task_id) or {}
+            status = str(task.get("status") or "")
+            if status in {"ended", "failed"}:
+                raise LookupError(f"Task call is already {status}.")
+
+            payload = await self._twilio.send_dtmf(call_sid, task_id, digits)
+            await self._ws.broadcast(
+                task_id,
+                {
+                    "type": "call_status",
+                    "data": {
+                        "status": "active",
+                        "action": "dtmf_sent",
+                        "digits": digits,
+                    },
+                },
+            )
+            log_event(
+                "orchestrator",
+                "task_dtmf_sent",
+                task_id=task_id,
+                details={"call_sid": call_sid, "digits": digits},
+            )
+            return payload
+
     async def get_task_id_for_call_sid(self, call_sid: str) -> Optional[str]:
         return self._call_sid_to_task.get(call_sid)
 
@@ -355,12 +420,30 @@ class CallOrchestrator:
         session_id = self._task_to_session.get(task_id)
         if not session_id or not chunk:
             if not session_id:
-                log_event(
-                    "orchestrator",
-                    "media_chunk_no_session",
-                    status="warning",
-                    task_id=task_id,
-                )
+                now = time.monotonic()
+                task_row = self._store.get_task(task_id) or {}
+                task_status = str(task_row.get("status") or "")
+                if task_status in {"ended", "failed"}:
+                    last_after_end = self._media_after_end_log_at.get(task_id, 0.0)
+                    if now - last_after_end >= 10.0:
+                        self._media_after_end_log_at[task_id] = now
+                        log_event(
+                            "orchestrator",
+                            "media_chunk_after_end",
+                            status="ok",
+                            task_id=task_id,
+                            details={"task_status": task_status},
+                        )
+                else:
+                    last_no_session = self._media_no_session_log_at.get(task_id, 0.0)
+                    if now - last_no_session >= 2.0:
+                        self._media_no_session_log_at[task_id] = now
+                        log_event(
+                            "orchestrator",
+                            "media_chunk_no_session",
+                            status="warning",
+                            task_id=task_id,
+                        )
             return
 
         await self.save_audio_chunk(session_id, "caller", chunk)
@@ -540,6 +623,9 @@ class CallOrchestrator:
                 exa = ExaSearchService()
                 return await exa.search(query, limit=3)
 
+            async def on_send_dtmf(digits: str) -> Dict[str, Any]:
+                return await self.send_task_dtmf(task_id, digits)
+
             session = DeepgramVoiceAgentSession(
                 task_id=task_id,
                 task=task,
@@ -548,6 +634,7 @@ class CallOrchestrator:
                 on_thinking=on_thinking,
                 on_event=on_event,
                 on_research=on_research,
+                on_send_dtmf=on_send_dtmf,
             )
             self._deepgram_sessions[session_id] = session
 

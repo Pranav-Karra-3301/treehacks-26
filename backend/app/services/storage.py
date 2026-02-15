@@ -5,7 +5,7 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from app.core.config import settings
 from app.core.telemetry import timed_step
@@ -28,7 +28,13 @@ class DataStore:
                     target_phone TEXT,
                     objective TEXT,
                     context TEXT,
+                    run_id TEXT,
+                    run_mode TEXT,
                     location TEXT,
+                    target_name TEXT,
+                    target_url TEXT,
+                    target_source TEXT,
+                    target_snippet TEXT,
                     target_outcome TEXT,
                     walkaway_point TEXT,
                     agent_persona TEXT,
@@ -42,6 +48,41 @@ class DataStore:
                 )
                 """
             )
+            self._ensure_column(conn, "calls", "run_id", "TEXT")
+            self._ensure_column(conn, "calls", "run_mode", "TEXT")
+            self._ensure_column(conn, "calls", "target_name", "TEXT")
+            self._ensure_column(conn, "calls", "target_url", "TEXT")
+            self._ensure_column(conn, "calls", "target_source", "TEXT")
+            self._ensure_column(conn, "calls", "target_snippet", "TEXT")
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS chat_sessions (
+                    id TEXT PRIMARY KEY,
+                    mode TEXT NOT NULL,
+                    revision INTEGER NOT NULL DEFAULT 0,
+                    run_id TEXT,
+                    task_ids_json TEXT NOT NULL DEFAULT '[]',
+                    payload_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_chat_sessions_mode_updated_at
+                ON chat_sessions (mode, updated_at DESC)
+                """
+            )
+
+    def _ensure_column(self, conn: sqlite3.Connection, table: str, column: str, ddl_type: str) -> None:
+        existing = {
+            row["name"]
+            for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        if column in existing:
+            return
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}")
 
     @contextmanager
     def _connect(self):
@@ -61,9 +102,11 @@ class DataStore:
                     """
                     INSERT INTO calls (
                         id, task_type, target_phone, objective, context,
-                        location, target_outcome, walkaway_point, agent_persona,
+                        run_id, run_mode,
+                        location, target_name, target_url, target_source, target_snippet,
+                        target_outcome, walkaway_point, agent_persona,
                         opening_line, style, status, outcome, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         task_id,
@@ -71,7 +114,13 @@ class DataStore:
                         payload["target_phone"],
                         payload["objective"],
                         payload.get("context", ""),
+                        payload.get("run_id"),
+                        payload.get("run_mode"),
                         payload.get("location"),
+                        payload.get("target_name"),
+                        payload.get("target_url"),
+                        payload.get("target_source"),
+                        payload.get("target_snippet"),
                         payload.get("target_outcome"),
                         payload.get("walkaway_point"),
                         payload.get("agent_persona"),
@@ -121,3 +170,144 @@ class DataStore:
 
     def get_task_dir(self, task_id: str) -> Path:
         return self._data_root / task_id
+
+    def upsert_chat_session(
+        self,
+        session_id: str,
+        *,
+        mode: str,
+        revision: int,
+        run_id: Optional[str],
+        task_ids: List[str],
+        data: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        with timed_step(
+            "storage",
+            "upsert_chat_session",
+            details={"session_id": session_id, "mode": mode, "revision": revision},
+        ):
+            now = datetime.utcnow().isoformat()
+            task_ids_json = json.dumps(task_ids or [])
+            payload_json = json.dumps(data or {})
+            with self._connect() as conn:
+                existing = conn.execute(
+                    "SELECT * FROM chat_sessions WHERE id = ?",
+                    (session_id,),
+                ).fetchone()
+                if existing is not None:
+                    existing_row = dict(existing)
+                    existing_revision = int(existing_row.get("revision") or 0)
+                    if revision < existing_revision:
+                        return self._decode_chat_session_row(existing_row)
+                    conn.execute(
+                        """
+                        UPDATE chat_sessions
+                        SET mode = ?, revision = ?, run_id = ?, task_ids_json = ?, payload_json = ?, updated_at = ?
+                        WHERE id = ?
+                        """,
+                        (mode, revision, run_id, task_ids_json, payload_json, now, session_id),
+                    )
+                else:
+                    conn.execute(
+                        """
+                        INSERT INTO chat_sessions (
+                            id, mode, revision, run_id, task_ids_json, payload_json, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (session_id, mode, revision, run_id, task_ids_json, payload_json, now, now),
+                    )
+            row = self.get_chat_session(session_id)
+            return row or {
+                "session_id": session_id,
+                "mode": mode,
+                "revision": revision,
+                "run_id": run_id,
+                "task_ids": task_ids or [],
+                "data": data or {},
+                "created_at": now,
+                "updated_at": now,
+            }
+
+    def patch_chat_session(
+        self,
+        session_id: str,
+        *,
+        revision: Optional[int] = None,
+        run_id: Optional[str] = None,
+        task_ids: Optional[List[str]] = None,
+        data: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        with timed_step("storage", "patch_chat_session", details={"session_id": session_id}):
+            current = self.get_chat_session(session_id)
+            if not current:
+                return None
+            next_revision = int(revision if revision is not None else current.get("revision", 0))
+            next_run_id = run_id if run_id is not None else current.get("run_id")
+            next_task_ids = task_ids if task_ids is not None else list(current.get("task_ids", []))
+            next_data = data if data is not None else dict(current.get("data", {}))
+            return self.upsert_chat_session(
+                session_id,
+                mode=str(current.get("mode") or "single"),
+                revision=next_revision,
+                run_id=next_run_id,
+                task_ids=next_task_ids,
+                data=next_data,
+            )
+
+    def get_chat_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        with timed_step("storage", "get_chat_session", details={"session_id": session_id}):
+            with self._connect() as conn:
+                row = conn.execute("SELECT * FROM chat_sessions WHERE id = ?", (session_id,)).fetchone()
+            if row is None:
+                return None
+            return self._decode_chat_session_row(dict(row))
+
+    def get_latest_chat_session(self, mode: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        with timed_step("storage", "get_latest_chat_session", details={"mode": mode}):
+            with self._connect() as conn:
+                if mode:
+                    row = conn.execute(
+                        "SELECT * FROM chat_sessions WHERE mode = ? ORDER BY updated_at DESC LIMIT 1",
+                        (mode,),
+                    ).fetchone()
+                else:
+                    row = conn.execute("SELECT * FROM chat_sessions ORDER BY updated_at DESC LIMIT 1").fetchone()
+            if row is None:
+                return None
+            return self._decode_chat_session_row(dict(row))
+
+    def touch_chat_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        with timed_step("storage", "touch_chat_session", details={"session_id": session_id}):
+            now = datetime.utcnow().isoformat()
+            with self._connect() as conn:
+                conn.execute(
+                    "UPDATE chat_sessions SET updated_at = ? WHERE id = ?",
+                    (now, session_id),
+                )
+            return self.get_chat_session(session_id)
+
+    def _decode_chat_session_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        task_ids_raw = row.get("task_ids_json")
+        payload_raw = row.get("payload_json")
+        try:
+            task_ids = json.loads(task_ids_raw) if isinstance(task_ids_raw, str) else []
+            if not isinstance(task_ids, list):
+                task_ids = []
+        except Exception:
+            task_ids = []
+        try:
+            payload = json.loads(payload_raw) if isinstance(payload_raw, str) else {}
+            if not isinstance(payload, dict):
+                payload = {}
+        except Exception:
+            payload = {}
+        return {
+            "session_id": row.get("id"),
+            "mode": row.get("mode"),
+            "revision": int(row.get("revision") or 0),
+            "run_id": row.get("run_id"),
+            "task_ids": task_ids,
+            "data": payload,
+            "created_at": row.get("created_at"),
+            "updated_at": row.get("updated_at"),
+        }

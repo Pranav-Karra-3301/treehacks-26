@@ -125,7 +125,7 @@ if is_truthy "${DEEPGRAM_ENABLED}"; then
     elif [[ "${TWILIO_WEBHOOK_HOST}" == *localhost* || "${TWILIO_WEBHOOK_HOST}" == *127.0.0.1* ]]; then
       missing_required+=("TWILIO_WEBHOOK_HOST (must be public and not localhost)")
     elif [[ "${TWILIO_WEBHOOK_HOST}" == *".ngrok"* ]]; then
-      info "TWILIO_WEBHOOK_HOST is an ngrok domain — ensure the tunnel is running (dev-up.sh starts it automatically)."
+      info "TWILIO_WEBHOOK_HOST is an ngrok domain — ensure the tunnel is running (use dev-up.sh --ngrok)."
     fi
   fi
 else

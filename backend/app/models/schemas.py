@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 NegotiationStyle = Literal["collaborative", "assertive", "empathetic"]
 CallStatus = Literal["pending", "dialing", "active", "ended", "failed"]
 CallOutcome = Literal["unknown", "success", "partial", "failed", "walkaway"]
+ChatSessionMode = Literal["single", "concurrent"]
 
 
 class NegotiationTaskCreate(BaseModel):
@@ -16,7 +17,13 @@ class NegotiationTaskCreate(BaseModel):
     target_phone: str
     objective: str
     context: str = ""
+    run_id: Optional[str] = None
+    run_mode: Optional[Literal["test", "real"]] = None
     location: Optional[str] = None
+    target_name: Optional[str] = None
+    target_url: Optional[str] = None
+    target_source: Optional[Literal["manual", "exa", "search"]] = None
+    target_snippet: Optional[str] = None
     target_outcome: Optional[str] = None
     walkaway_point: Optional[str] = None
     agent_persona: Optional[str] = None
@@ -35,6 +42,8 @@ class TaskSummary(BaseModel):
     task_type: str = "custom"
     target_phone: str
     objective: str
+    run_id: Optional[str] = None
+    run_mode: Optional[Literal["test", "real"]] = None
     status: CallStatus
     outcome: CallOutcome = "unknown"
     duration_seconds: int = 0
@@ -86,3 +95,30 @@ class ActionResponse(BaseModel):
     ok: bool
     message: str
     session_id: Optional[str] = None
+
+
+class ChatSessionUpsertRequest(BaseModel):
+    session_id: str
+    mode: ChatSessionMode
+    revision: int = 0
+    run_id: Optional[str] = None
+    task_ids: List[str] = Field(default_factory=list)
+    data: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ChatSessionPatchRequest(BaseModel):
+    revision: Optional[int] = None
+    run_id: Optional[str] = None
+    task_ids: Optional[List[str]] = None
+    data: Optional[Dict[str, Any]] = None
+
+
+class ChatSessionResponse(BaseModel):
+    session_id: str
+    mode: ChatSessionMode
+    revision: int
+    run_id: Optional[str] = None
+    task_ids: List[str] = Field(default_factory=list)
+    data: Dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime

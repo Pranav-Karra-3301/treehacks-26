@@ -124,6 +124,29 @@ def get_phase(turn_count: int) -> Tuple[str, str]:
     return "closing", PHASE_CONFIGS["closing"]["instruction"]
 
 
+def is_info_only_objective(objective: str) -> bool:
+    """Heuristic: objective is mainly one-shot factual lookup, not an execution flow."""
+    text = (objective or "").strip().lower()
+    if not text:
+        return False
+
+    execution_signals = (
+        "book", "reserve", "schedule", "cancel", "upgrade", "downgrade",
+        "switch", "sign up", "apply", "purchase", "order", "refund",
+        "waive", "negotiat", "deal", "contract", "commit", "follow up",
+        "follow-up", "email me", "written confirmation", "send confirmation",
+    )
+    if any(token in text for token in execution_signals):
+        return False
+
+    info_signals = (
+        "how much", "what is", "what's", "what are", "do you have",
+        "are you open", "hours", "price", "cost", "rate", "availability",
+        "menu", "where are you", "location", "phone number",
+    )
+    return "?" in text or any(token in text for token in info_signals)
+
+
 # ---------------------------------------------------------------------------
 # Main prompt builder
 # ---------------------------------------------------------------------------
@@ -144,8 +167,10 @@ def build_negotiation_prompt(
     objective = task.get("objective", "")
     context = task.get("context", "")
     location = task.get("location") or ""
+    target_phone = task.get("target_phone") or ""
     walkaway = task.get("walkaway_point") or "No hard walkaway configured"
     target = task.get("target_outcome") or ""
+    info_only_mode = is_info_only_objective(objective)
 
     style_instruction = STYLE_INSTRUCTIONS.get(style, STYLE_INSTRUCTIONS["collaborative"])
     phase_name, phase_instruction = get_phase(turn_count)
@@ -161,12 +186,28 @@ def build_negotiation_prompt(
         "--- YOUR ASSIGNMENT ---",
         f"Objective: {objective}",
     ]
+    if target_phone:
+        assignment_lines.append(f"Active call target phone: {target_phone}")
     if location:
         assignment_lines.append(f"Caller location: {location}")
     if context:
         assignment_lines.append(f"Background context: {context}")
     if target:
         assignment_lines.append(f"Target outcome: {target}")
+    assignment_lines.append(
+        "Conversation framing: treat this business as already selected for this call. "
+        "Ask for concrete availability, pricing, terms, and next steps."
+    )
+    if info_only_mode:
+        assignment_lines.append(
+            "Contact info policy: this is an info-only call. If the direct answer is obtained, "
+            "briefly confirm it and end the call. Do NOT ask for email."
+        )
+    else:
+        assignment_lines.append(
+            "Contact info policy: only ask for email/written confirmation if a concrete deal or "
+            "account change is actually agreed and confirmation is genuinely needed."
+        )
     assignment_lines.append(f"Walkaway point: {walkaway}")
     parts.append("\n".join(assignment_lines))
 
@@ -192,10 +233,24 @@ def build_negotiation_prompt(
         "Call it with a concise search query. While waiting, use a natural filler like "
         "'Give me one second...' or 'Let me look into that...'\n"
         "Do NOT mention searching, googling, or looking things up online. "
-        "Frame it as personal knowledge: 'From what I've seen...' or 'I recall that...'"
+        "Frame it as personal knowledge: 'From what I've seen...' or 'I recall that...'\n"
+        "Do NOT say you are still looking for nearby businesses or trying to find who to call; "
+        "this call is already connected to a specific business."
     )
 
-    # 6. Guardrails
+    # 6. IVR keypad navigation tool
+    parts.append(
+        "--- IVR KEYPAD TOOL ---\n"
+        "You have access to a 'send_keypad_tones' function for phone menu navigation.\n"
+        "Use it when the system asks for keypad input, such as:\n"
+        "- 'Press 1 for sales, 2 for support'\n"
+        "- 'Enter extension' or account digits\n"
+        "- 'Press # to confirm'\n"
+        "Send only the exact required digits. Use 'w' for a short pause when needed.\n"
+        "After using it, continue the conversation naturally without narrating tool mechanics."
+    )
+
+    # 7. Guardrails
     guardrail_lines = [
         "--- GUARDRAILS ---",
         "Keep these in mind at all times.",
@@ -210,10 +265,18 @@ def build_negotiation_prompt(
         "9. Output ONLY your spoken words. No internal thoughts, reasoning, or metacommentary. "
         "Everything you output will be converted to speech on a phone call.",
         "10. STAY ON MISSION. Every response must advance toward the objective. No tangents, no extended small talk, no filler.",
+        "11. You are already speaking with the selected provider on this line. "
+        "Never claim you are currently searching for nearby options.",
+        "12. Do not request email/contact info unless it is required to finalize or document an agreed change.",
+        "13. Use keypad navigation only when explicitly prompted by an IVR/menu or representative.",
     ]
+    if info_only_mode:
+        guardrail_lines.append(
+            "14. INFO-ONLY MODE: once the question is answered clearly, do a short recap and end the call; no email step."
+        )
     if walkaway and walkaway != "No hard walkaway configured":
         guardrail_lines.append(
-            f"12. HARD BUDGET LIMIT: {walkaway}. You MUST NOT exceed this under any circumstances."
+            f"15. HARD BUDGET LIMIT: {walkaway}. You MUST NOT exceed this under any circumstances."
         )
     parts.append("\n".join(guardrail_lines))
 
@@ -235,9 +298,8 @@ def build_negotiation_prompt(
         'THEM: "Let me check with my supervisor."\n'
         'YOU: "Yea of course, take your time!"\n\n'
         'THEM: "Okay we can do $85 a month for 12 months."\n'
-        "YOU: \"Oh that's way better, thank you. Yea I think that works. Hey could you send me "
-        "a confirmation of that? My email is pranavkarra001 at gmail dot com. Want me to "
-        'spell that out?"'
+        'YOU: "Oh that\'s way better, thank you. Yea I think that works. Could you confirm the '
+        'new total and start date one more time so I have it right?"'
     )
 
     return "\n\n".join(parts)

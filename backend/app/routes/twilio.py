@@ -332,6 +332,9 @@ def get_routes(orchestrator: CallOrchestrator, ws_manager: ConnectionManager):
                                 {"type": "call_status", "data": {"status": "ended", "reason": "stream_closed"}},
                             )
                             await orchestrator.stop_task_call(task_id, from_status_callback=True, stop_reason="stream_stop")
+                            # Twilio has signaled stream termination. Exit loop so trailing packets
+                            # don't keep hitting a torn-down session.
+                            break
             except WebSocketDisconnect:
                 await ws_manager.broadcast(task_id, {"type": "call_status", "data": {"status": "disconnected"}})
                 log_event(
