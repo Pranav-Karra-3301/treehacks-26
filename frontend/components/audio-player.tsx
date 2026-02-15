@@ -3,10 +3,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Play, Pause, Volume2 } from 'lucide-react';
-import { getAudioUrl } from '../lib/api';
+import { getAudioUrl, getRecordingMetadata } from '../lib/api';
 
 const ease = [0.16, 1, 0.3, 1] as const;
 const AUDIO_SIDES: Array<'mixed' | 'outbound' | 'inbound'> = ['mixed', 'outbound', 'inbound'];
+const MAX_RETRIES = 5;
 
 function formatTime(s: number): string {
   const m = Math.floor(s / 60);
@@ -22,11 +23,24 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
   const [sideIndex, setSideIndex] = useState(0);
   const [reloadTick, setReloadTick] = useState(0);
   const [retryCount, setRetryCount] = useState(0);
+  const [checkedMeta, setCheckedMeta] = useState(false);
+  const [audioExists, setAudioExists] = useState<boolean | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const mountedRef = useRef(true);
   const side = AUDIO_SIDES[sideIndex] ?? 'mixed';
   const src = getAudioUrl(taskId, side);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    };
+  }, []);
+
+  // Reset on taskId change
   useEffect(() => {
     if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     setError(null);
@@ -36,7 +50,32 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
     setRetryCount(0);
     setSideIndex(0);
     setReloadTick(0);
+    setCheckedMeta(false);
+    setAudioExists(null);
   }, [taskId]);
+
+  // Pre-check: does this recording actually have audio files?
+  useEffect(() => {
+    if (checkedMeta) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const meta = await getRecordingMetadata(taskId);
+        if (cancelled) return;
+        const files = meta.files ?? {};
+        const hasAudio = Object.values(files).some(
+          (f) => typeof f === 'object' && f !== null && 'exists' in f && (f as { exists: boolean; size_bytes: number }).exists && (f as { exists: boolean; size_bytes: number }).size_bytes > 100,
+        );
+        setAudioExists(hasAudio);
+      } catch {
+        // Metadata check failed — optimistically try loading audio
+        if (!cancelled) setAudioExists(true);
+      } finally {
+        if (!cancelled) setCheckedMeta(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [taskId, checkedMeta]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -53,16 +92,19 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
         return;
       }
       setRetryCount((prev) => {
-        if (prev >= 8) {
+        if (prev >= MAX_RETRIES) {
           setError('Recording unavailable.');
           return prev;
         }
         setError('Recording is still processing.');
+        // Add jitter (1-3s) to prevent synchronized retry storms across multiple players
+        const jitter = 1000 + Math.random() * 2000;
         retryTimerRef.current = setTimeout(() => {
+          if (!mountedRef.current) return;
           setSideIndex(0);
           setReloadTick((t) => t + 1);
           setError(null);
-        }, 3000);
+        }, jitter);
         return prev + 1;
       });
     };
@@ -105,8 +147,42 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
+  // Waiting for metadata check
+  if (!checkedMeta) {
+    return (
+      <div className="rounded-xl bg-gray-50 border border-gray-100 px-4 py-2.5">
+        <p className="text-[12px] text-gray-400">Checking recording...</p>
+      </div>
+    );
+  }
+
+  // No audio files exist — show immediately without retrying
+  if (audioExists === false) {
+    return (
+      <div className="rounded-xl bg-gray-50 border border-gray-100 px-4 py-2.5">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[12px] text-gray-500">No recording available.</p>
+          <button
+            type="button"
+            onClick={() => {
+              setCheckedMeta(false);
+              setAudioExists(null);
+              setRetryCount(0);
+              setSideIndex(0);
+              setReloadTick((prev) => prev + 1);
+              setError(null);
+            }}
+            className="rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-600 hover:text-gray-800"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (error) {
-    const gavUp = retryCount >= 8;
+    const gavUp = retryCount >= MAX_RETRIES;
     return (
       <div className="rounded-xl bg-gray-50 border border-gray-100 px-4 py-2.5">
         <div className="flex items-center justify-between gap-3">

@@ -2243,7 +2243,7 @@ export default function ChatPage() {
     setAutoSourceNumbers(true);
     setResearchContext('');
     setMultiSummary(null);
-    setMultiSummaryState('loading');
+    setMultiSummaryState('idle');
     setMultiSummaryError(null);
     setSingleDtmfInput('');
     setMultiDtmfInputs({});
@@ -2272,12 +2272,12 @@ export default function ChatPage() {
     multiCallsRef.current = initialStates;
     setMultiCalls(initialStates);
 
+    // Load task + transcript first (fast), then analysis separately (no retries for historical)
     await Promise.all(history.calls.map(async ({ phone, taskId: callTaskId }) => {
       try {
-        const [task, transcriptRes, analysis] = await Promise.all([
+        const [task, transcriptRes] = await Promise.all([
           getTask(callTaskId),
           getTaskTranscript(callTaskId).catch(() => null),
-          fetchAnalysisWithRetry(callTaskId),
         ]);
 
         const transcriptEntries: MultiCallTranscriptEntry[] = (transcriptRes?.turns || []).map((turn) => ({
@@ -2292,11 +2292,24 @@ export default function ChatPage() {
           transcript: transcriptEntries.length > 0
             ? transcriptEntries
             : [{ id: `${Date.now()}-${Math.random()}`, role: 'status', text: 'No transcript saved' }],
-          analysis: analysis ?? null,
-          analysisState: analysis ? 'ready' : 'error',
-          analysisError: analysis ? null : 'Summary unavailable',
           thinking: false,
         });
+
+        // Load analysis separately — single attempt only for historical calls
+        try {
+          const analysis = await getTaskAnalysis(callTaskId);
+          updateMultiCall(phone, {
+            analysis: analysis ?? null,
+            analysisState: analysis ? 'ready' : 'error',
+            analysisError: analysis ? null : 'Summary unavailable',
+          });
+        } catch {
+          updateMultiCall(phone, {
+            analysis: null,
+            analysisState: 'error',
+            analysisError: 'Summary unavailable',
+          });
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown error';
         updateMultiCall(phone, {
