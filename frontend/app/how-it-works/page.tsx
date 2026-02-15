@@ -53,9 +53,9 @@ graph LR
 
 const llmProviderChart = `
 graph LR
-  Config[LLM_PROVIDER] --> OpenAI[OpenAI API<br/>gpt-4o-mini]
-  Config --> Anthropic[Anthropic API<br/>Claude Sonnet]
-  Config --> Local[Local Ollama<br/>qwen3:30b-a3b]
+  Config[LLM_PROVIDER] --> OpenAI[OpenAI gpt-4o-mini]
+  Config --> Anthropic[Anthropic Claude Sonnet]
+  Config --> Local[Ollama qwen3:30b-a3b]
   OpenAI --> Stream[Streaming Response]
   Anthropic --> Stream
   Local --> Stream

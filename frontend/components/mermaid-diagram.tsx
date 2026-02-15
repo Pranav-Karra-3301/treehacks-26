@@ -27,8 +27,9 @@ function makeResponsive(svgString: string): string {
   if (vbMatch) {
     const parts = vbMatch[1].split(/\s+/).map(Number);
     if (parts.length === 4) {
-      const pad = 20;
-      const newVb = `${parts[0] - pad} ${parts[1] - pad} ${parts[2] + pad * 2} ${parts[3] + pad * 2}`;
+      const padX = 20;
+      const padY = 40;
+      const newVb = `${parts[0] - padX} ${parts[1] - padX} ${parts[2] + padX * 2} ${parts[3] + padY * 2}`;
       processed = processed.replace(/viewBox="[^"]*"/, `viewBox="${newVb}"`);
     }
   }
