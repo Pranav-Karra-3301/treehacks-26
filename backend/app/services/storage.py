@@ -89,6 +89,7 @@ class DataStore:
         conn = sqlite3.connect(self._path)
         try:
             conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL")
             yield conn
             conn.commit()
         finally:
@@ -168,7 +169,7 @@ class DataStore:
                     """
                     UPDATE calls
                     SET status = 'ended', outcome = COALESCE(outcome, 'unknown'), ended_at = ?
-                    WHERE status IN ('active', 'dialing')
+                    WHERE status IN ('active', 'dialing', 'connected', 'media_connected', 'pending')
                     """,
                     (now,),
                 )
@@ -188,6 +189,22 @@ class DataStore:
 
     def get_task_dir(self, task_id: str) -> Path:
         return self._data_root / task_id
+
+    # ------------------------------------------------------------------ #
+    #  Audio storage stubs (no-op for SQLite/filesystem backend)           #
+    # ------------------------------------------------------------------ #
+
+    def ensure_audio_bucket(self) -> None:
+        pass
+
+    def upload_audio(self, task_id: str, filename: str, data: bytes) -> None:
+        pass
+
+    def download_audio(self, task_id: str, filename: str) -> bytes | None:
+        return None
+
+    def audio_exists(self, task_id: str, filename: str) -> bool:
+        return False
 
     def save_artifact(self, task_id: str, artifact_type: str, data: Any) -> None:
         """Save JSON artifact to filesystem."""

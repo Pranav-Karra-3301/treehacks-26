@@ -101,6 +101,15 @@ class CallOrchestrator:
         stream_sid = self._task_to_stream_sid.pop(task_id, None)
         if stream_sid and self._stream_sid_to_task.get(stream_id := stream_sid) == task_id:
             self._stream_sid_to_task.pop(stream_id, None)
+        # Clean up per-session tracking dicts to prevent memory leaks
+        session_id = self._task_to_session.get(task_id)
+        if session_id:
+            self._inbound_bytes.pop(session_id, None)
+            self._outbound_bytes.pop(session_id, None)
+            self._audio_stats.pop(session_id, None)
+            self._media_no_session_log_at.pop(session_id, None)
+            self._media_after_end_log_at.pop(session_id, None)
+        self._pending_agent_audio.pop(task_id, None)
 
     def _clear_task_call_sid(self, task_id: str) -> None:
         call_sid = self._task_to_call_sid.pop(task_id, None)
@@ -157,16 +166,17 @@ class CallOrchestrator:
             await self._send_agent_audio_to_twilio(task_id, chunk)
 
     async def start_task_call(self, task_id: str, task: Dict[str, Any]) -> Dict[str, Any]:
-        # === CALL START DEBUG LOGGING ===
-        print(f"\n{'='*60}")
-        print(f"[CALL START] Task: {task_id}")
-        print(f"[CALL START] Objective: {task.get('objective', 'N/A')}")
-        print(f"[CALL START] Target phone: {task.get('target_phone', 'N/A')}")
-        print(f"[CALL START] Style: {task.get('style', 'N/A')}")
-        print(f"[CALL START] Context: {task.get('context', 'N/A')}")
-        print(f"[CALL START] Walkaway: {task.get('walkaway_point', 'N/A')}")
-        print(f"[CALL START] Voice mode: {self._voice_mode_enabled()}")
-        print(f"{'='*60}\n")
+        log_event(
+            "orchestrator",
+            "call_start",
+            task_id=task_id,
+            details={
+                "objective": task.get("objective", "N/A"),
+                "target_phone": task.get("target_phone", "N/A"),
+                "style": task.get("style", "N/A"),
+                "voice_mode": self._voice_mode_enabled(),
+            },
+        )
         with timed_step("orchestrator", "start_task_call", task_id=task_id):
             session = await self._sessions.create_session(task_id)
             self._task_to_session[task_id] = session.session_id
@@ -1053,6 +1063,26 @@ class CallOrchestrator:
                 stats["bytes_by_side"]["mixed"] = max_len
                 break
 
+    async def _upload_audio_files(self, task_id: str) -> None:
+        """Upload inbound, outbound, and mixed audio to remote storage."""
+        try:
+            call_dir = self._store.get_task_dir(task_id)
+            for filename in ("inbound.wav", "outbound.wav", "mixed.wav"):
+                path = call_dir / filename
+                if path.exists():
+                    data = path.read_bytes()
+                    if data:
+                        self._store.upload_audio(task_id, filename, data)
+            log_event("orchestrator", "audio_upload_complete", task_id=task_id)
+        except Exception as exc:
+            log_event(
+                "orchestrator",
+                "audio_upload_error",
+                task_id=task_id,
+                status="warning",
+                details={"error": f"{type(exc).__name__}: {exc}"},
+            )
+
     async def stop_session(self, session_id: str, *, stop_reason: str = "unknown") -> None:
         # Guard against concurrent calls (race between watchdog / Twilio callback)
         if session_id in self._stopping_sessions:
@@ -1079,6 +1109,8 @@ class CallOrchestrator:
                 stats["stop_reason"] = stop_reason
             await self._persist_recording_stats(session_id)
             self._create_mixed_audio(task_id)
+            # Upload audio files to remote storage in background
+            asyncio.create_task(self._upload_audio_files(task_id))
             await self._ws.broadcast(
                 task_id,
                 {"type": "call_status", "data": {"status": "ended", "session_id": session_id}},

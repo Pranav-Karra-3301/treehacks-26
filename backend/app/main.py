@@ -203,6 +203,19 @@ def create_app(
                 details={"error": str(exc)},
             )
 
+    # Ensure Supabase Storage audio bucket exists
+    @app.on_event("startup")
+    async def ensure_audio_bucket() -> None:
+        try:
+            local_store.ensure_audio_bucket()
+        except Exception as exc:
+            log_event(
+                "system",
+                "ensure_audio_bucket",
+                status="warning",
+                details={"error": str(exc)},
+            )
+
     # Startup telemetry — dump full config so we can trace issues back to settings
     @app.on_event("startup")
     async def startup_telemetry() -> None:

@@ -54,13 +54,19 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
             return await summarize_fn(transcript, task)
         return await summarize_fn(transcript)
 
-    def _build_recording_files(call_dir: Path) -> dict[str, object]:
+    def _build_recording_files(call_dir: Path, task_id: str | None = None) -> dict[str, object]:
         file_stats = {}
         for name in ("inbound.wav", "outbound.wav", "mixed.wav", "recording_stats.json"):
             path = call_dir / name
+            local_exists = path.exists()
+            exists = local_exists
+            size = path.stat().st_size if local_exists else 0
+            # Check remote storage if local file is missing
+            if not local_exists and task_id and name.endswith(".wav"):
+                exists = store.audio_exists(task_id, name)
             file_stats[name] = {
-                "exists": path.exists(),
-                "size_bytes": path.stat().st_size if path.exists() else 0,
+                "exists": exists,
+                "size_bytes": size,
             }
         return file_stats
 
@@ -240,24 +246,35 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
     async def get_audio(task_id: str, side: str = Query(default="mixed")):
         with timed_step("api", "get_audio", task_id=task_id, details={"side": side}):
             call_dir = store.get_task_dir(task_id)
-            if not call_dir.exists():
-                raise HTTPException(status_code=404, detail="Task recordings not found")
 
-            files = {
-                "mixed": call_dir / "mixed.wav",
-                "inbound": call_dir / "inbound.wav",
-                "outbound": call_dir / "outbound.wav",
+            side_to_file = {
+                "mixed": "mixed.wav",
+                "inbound": "inbound.wav",
+                "outbound": "outbound.wav",
             }
 
-            selected = side if side in files else "mixed"
-            file_path = files[selected]
-            if not file_path.exists():
-                fallback = next(iter(sorted(call_dir.glob("*.wav"))), None)
-                if not fallback:
-                    raise HTTPException(status_code=404, detail="No audio for task")
-                file_path = fallback
+            selected = side if side in side_to_file else "mixed"
+            filename = side_to_file[selected]
+            file_path = call_dir / filename
 
-            raw_data = file_path.read_bytes()
+            raw_data: bytes | None = None
+
+            # Try local filesystem first
+            if file_path.exists():
+                raw_data = file_path.read_bytes()
+            else:
+                # Fallback: try other local .wav files
+                fallback = next(iter(sorted(call_dir.glob("*.wav"))), None) if call_dir.exists() else None
+                if fallback:
+                    raw_data = fallback.read_bytes()
+                    filename = fallback.name
+                else:
+                    # Fallback: download from remote storage
+                    raw_data = store.download_audio(task_id, filename)
+
+            if not raw_data:
+                raise HTTPException(status_code=404, detail="No audio for task")
+
             # If the file lacks a RIFF header, it's raw mulaw — decode to PCM WAV
             if not raw_data[:4] == b'RIFF':
                 raw_data = _mulaw_to_pcm_wav(raw_data)
@@ -269,7 +286,7 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
             return Response(
                 content=raw_data,
                 media_type="audio/wav",
-                headers={"Content-Disposition": f'inline; filename="{file_path.name}"'},
+                headers={"Content-Disposition": f'inline; filename="{filename}"'},
             )
 
     @router.get("/{task_id}/recording-metadata")
@@ -285,7 +302,7 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
                     "last_chunk_at": None,
                 }
             call_dir = store.get_task_dir(task_id)
-            metadata["files"] = _build_recording_files(call_dir)
+            metadata["files"] = _build_recording_files(call_dir, task_id)
             return metadata
 
     @router.get("/{task_id}/recording-files")
@@ -293,10 +310,10 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
         with timed_step("api", "get_recording_files", task_id=task_id):
             call_dir = store.get_task_dir(task_id)
             if not call_dir.exists():
-                raise HTTPException(status_code=404, detail="Task recordings not found")
+                call_dir.mkdir(parents=True, exist_ok=True)
             return {
                 "task_id": task_id,
-                "files": _build_recording_files(call_dir),
+                "files": _build_recording_files(call_dir, task_id),
             }
 
     @router.get("/{task_id}/transcript")

@@ -24,6 +24,47 @@ class SupabaseStore:
         self._data_root.mkdir(parents=True, exist_ok=True)
 
     # ------------------------------------------------------------------ #
+    #  Supabase Storage — audio recordings                                 #
+    # ------------------------------------------------------------------ #
+
+    _AUDIO_BUCKET = "call-recordings"
+
+    def ensure_audio_bucket(self) -> None:
+        """Create the audio bucket if it doesn't already exist."""
+        try:
+            self._client.storage.get_bucket(self._AUDIO_BUCKET)
+        except Exception:
+            self._client.storage.create_bucket(
+                self._AUDIO_BUCKET,
+                options={"public": False},
+            )
+
+    def upload_audio(self, task_id: str, filename: str, data: bytes) -> None:
+        """Upload audio bytes to call-recordings/{task_id}/{filename}."""
+        path = f"{task_id}/{filename}"
+        self._client.storage.from_(self._AUDIO_BUCKET).upload(
+            path,
+            data,
+            file_options={"content-type": "audio/wav", "upsert": "true"},
+        )
+
+    def download_audio(self, task_id: str, filename: str) -> bytes | None:
+        """Download audio from storage. Returns None if not found."""
+        path = f"{task_id}/{filename}"
+        try:
+            return self._client.storage.from_(self._AUDIO_BUCKET).download(path)
+        except Exception:
+            return None
+
+    def audio_exists(self, task_id: str, filename: str) -> bool:
+        """Check if an audio file exists in storage."""
+        try:
+            files = self._client.storage.from_(self._AUDIO_BUCKET).list(task_id)
+            return any(f.get("name") == filename for f in (files or []))
+        except Exception:
+            return False
+
+    # ------------------------------------------------------------------ #
     #  calls table                                                         #
     # ------------------------------------------------------------------ #
 
