@@ -68,6 +68,8 @@ class CallOrchestrator:
         self._dtmf_in_flight: set[str] = set()
         # Pending end-call tasks (agent-initiated hangup after goodbye TTS)
         self._pending_end_call: dict[str, asyncio.Task[None]] = {}
+        # Guard against concurrent stop_session calls (race between watchdog and Twilio callback)
+        self._stopping_sessions: set[str] = set()
         # Last conversation activity timestamp per task (for silence auto-hangup)
         self._last_activity: dict[str, float] = {}
         self._silence_watchdogs: dict[str, asyncio.Task[None]] = {}
@@ -639,21 +641,49 @@ class CallOrchestrator:
             )
             return response
 
-    # Voicemail detection phrases (lowercase)
+    # Voicemail detection phrases (lowercase).
+    # Matched as substrings against caller transcript.  Keep sorted by
+    # specificity — longer / more distinctive phrases first so they log
+    # the most informative match.
     _VOICEMAIL_PHRASES = [
+        # Explicit voicemail references
         "forwarded to voice mail",
         "forwarded to voicemail",
+        "reached the voicemail",
+        "voicemail box",
+        "voice mail box",
+        "mailbox is full",
+        # "Leave a message" variants
+        "please leave a message",
         "leave a message",
         "leave your message",
+        "leave your name",
+        "leave a brief message",
         "record your message",
+        "record a message",
+        # Tone / beep cues
         "at the tone",
         "after the beep",
         "after the tone",
-        "mailbox is full",
-        "voicemail box",
-        "not available",
-        "please leave a message",
+        # Availability phrases (voicemail greetings)
+        "no one is available",
+        "is not available",
+        "isn't available",
+        "unable to take your call",
+        "unable to answer",
+        "cannot take your call",
+        "can't take your call",
+        "not able to take your call",
+        "away from the phone",
+        "not here right now",
+        # Callback / follow-up promises (voicemail systems)
+        "get back to you",
+        "return your call",
+        "call you back",
+        # Hang-up prompts
         "you may hang up",
+        "press pound",
+        "or hang up",
     ]
     # Patterns the agent outputs as text instead of invoking the function call
     _END_CALL_TEXT_PATTERNS = [
@@ -986,8 +1016,14 @@ class CallOrchestrator:
                 break
 
     async def stop_session(self, session_id: str, *, stop_reason: str = "unknown") -> None:
+        # Guard against concurrent calls (race between watchdog / Twilio callback)
+        if session_id in self._stopping_sessions:
+            return
+        self._stopping_sessions.add(session_id)
+
         session = await self._sessions.get(session_id)
         if not session or session.status == "ended":
+            self._stopping_sessions.discard(session_id)
             return  # Already ended — skip duplicate
 
         task_id = session.task_id
@@ -1017,6 +1053,7 @@ class CallOrchestrator:
         self._audio_stats.pop(session_id, None)
         self._inbound_bytes.pop(session_id, None)
         self._outbound_bytes.pop(session_id, None)
+        self._stopping_sessions.discard(session_id)
 
         # Auto-generate analysis in background so outcome is always set
         asyncio.create_task(self._auto_analyze(task_id))

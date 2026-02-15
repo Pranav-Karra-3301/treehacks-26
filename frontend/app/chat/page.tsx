@@ -1109,6 +1109,11 @@ export default function ChatPage() {
     if (!text.trim()) return;
     const prev = multiCallsRef.current[phone];
     if (!prev) return;
+    // Deduplicate consecutive status entries with identical text (e.g. double "Ended")
+    if (role === 'status' && prev.transcript.length > 0) {
+      const last = prev.transcript[prev.transcript.length - 1];
+      if (last.role === 'status' && last.text === text) return;
+    }
     const entry: MultiCallTranscriptEntry = {
       id: `${Date.now()}-${Math.random()}`,
       role,
@@ -1152,15 +1157,20 @@ export default function ChatPage() {
     const deduped = Array.from(new Set(taskIds.filter(Boolean)));
     if (deduped.length === 0) return;
 
-    // Filter to only include calls that actually ended (exclude failed calls with empty transcripts)
+    // Filter to only include calls that ended AND had a real conversation
+    // (at least one non-status transcript entry, i.e. caller or agent spoke)
     const succeededTaskIds = deduped.filter((tid) => {
       const entry = Object.values(multiCallsRef.current).find((s) => s.taskId === tid);
-      return !entry || entry.status === 'ended';
+      if (!entry) return true; // unknown state — include optimistically
+      if (entry.status !== 'ended') return false; // not ended — skip
+      // Must have at least one caller or agent turn (not just status entries)
+      const hasRealContent = entry.transcript.some((t) => t.role === 'caller' || t.role === 'agent');
+      return hasRealContent;
     });
 
     if (succeededTaskIds.length === 0) {
       setMultiSummaryState('error');
-      setMultiSummaryError('No calls connected successfully. Try again or enter a number directly.');
+      setMultiSummaryError('No calls had a real conversation. All calls went to voicemail or were not answered.');
       return;
     }
 
