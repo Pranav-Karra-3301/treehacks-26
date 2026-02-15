@@ -86,7 +86,7 @@ export default function ChatInput({
             multiline
             maxLength={1000}
             returnKeyType="send"
-            blurOnSubmit={false}
+            submitBehavior="submit"
             onSubmitEditing={handleSend}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
