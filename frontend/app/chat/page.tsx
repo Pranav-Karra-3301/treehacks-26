@@ -1804,7 +1804,7 @@ export default function ChatPage() {
       .map(([phone, state]) => ({ 
         phone, 
         taskId: state.taskId,
-        vendor: targetDirectory[phone]?.title || null,
+        vendor: resolvedTargetDirectory[phone]?.title || null,
         summary: null, // Will be populated after analysis
       }));
     if (historyCalls.length > 0) {
@@ -2698,6 +2698,10 @@ export default function ChatPage() {
     // Generate new run ID for this follow-up session
     const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
+    // Reset completion flags for new run lifecycle
+    multiEndedAnnouncedRef.current = false;
+    activeSummaryRequestRef.current = null;
+
     // Enter concurrent mode
     setConcurrentTestMode(true);
     setPhase('connecting');
@@ -2780,7 +2784,7 @@ export default function ChatPage() {
       newState[result.phone] = {
         taskId: result.taskId,
         sessionId: result.sessionId,
-        status: result.ok ? 'pending' : 'failed',
+        status: result.ok ? 'dialing' : 'failed',
         transcript: result.ok
           ? []
           : [
@@ -2804,8 +2808,9 @@ export default function ChatPage() {
       }
     }
 
-    multiCallsRef.current = { ...multiCallsRef.current, ...newState };
-    setMultiCalls(multiCallsRef.current);
+    // Replace (not merge) prior multi-call state for clean follow-up run
+    multiCallsRef.current = newState;
+    setMultiCalls(newState);
     socketsToConnect.forEach(({ phone, taskId }) => connectMultiWebSocket(phone, taskId));
     refreshPastTasks();
 
