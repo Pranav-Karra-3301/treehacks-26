@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback, type FormEvent, type Keyboard
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowUp, ArrowLeft, Phone, RotateCcw, AlertTriangle, Plus, PanelLeftClose, PanelLeft, BarChart3, X, MapPin } from 'lucide-react';
+import { ArrowUp, ArrowLeft, Phone, RotateCcw, AlertTriangle, Plus, PanelLeftClose, PanelLeft, BarChart3, X, MapPin, ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
 import { createTask, startCall, stopCall, transferCall, sendCallDtmf, createCallSocket, checkVoiceReadiness, searchResearch, getTaskAnalysis, getTaskTranscript, getTask, listTasks, getMultiCallSummary, getChatSessionById, getChatSessionLatest, upsertChatSession } from '../../lib/api';
 import { readActiveLocalSession, writeLocalSessionWithAttempts, type PersistedChatSessionEnvelope } from '../../lib/chat-session-store';
 import type { CallEvent, CallStatus, AnalysisPayload, TaskSummary, CallOutcome, BusinessResult, VoiceReadiness, MultiCallSummaryPayload, MultiCallPriceComparison, ChatSessionMode, ChatSessionRecord } from '../../lib/types';
@@ -70,6 +70,7 @@ type ChatSnapshot = {
   researchContext: string;
   analysisLoaded: boolean;
   sidebarOpen: boolean;
+  failedSectionExpanded: boolean;
   discoveryResults: BusinessResult[];
   manualPhones: string[];
   manualPhoneInput: string;
@@ -366,6 +367,7 @@ function createEmergencyPersistenceSnapshot(snapshot: ChatSnapshot): ChatSnapsho
     researchContext: compactText(snapshot.researchContext || '', 1200),
     analysisLoaded: false,
     sidebarOpen: snapshot.sidebarOpen,
+    failedSectionExpanded: snapshot.failedSectionExpanded ?? false,
     discoveryResults: snapshot.discoveryResults.slice(0, 6).map(compactBusinessResult),
     manualPhones: snapshot.manualPhones.slice(0, 25),
     manualPhoneInput: '',
@@ -512,6 +514,8 @@ export default function ChatPage() {
   const [analysisLoaded, setAnalysisLoaded] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [pastTasks, setPastTasks] = useState<TaskSummary[]>([]);
+  const [failedSectionExpanded, setFailedSectionExpanded] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ taskId: string; x: number; y: number } | null>(null);
   const [discoveryResults, setDiscoveryResults] = useState<BusinessResult[]>([]);
   const [manualPhones, setManualPhones] = useState<string[]>([]);
   const [manualPhoneInput, setManualPhoneInput] = useState('');
@@ -641,6 +645,7 @@ export default function ChatPage() {
     setAnalysisLoaded(Boolean(snapshot.analysisLoaded));
     analysisLoadedRef.current = Boolean(snapshot.analysisLoaded);
     setSidebarOpen(snapshot.sidebarOpen ?? true);
+    setFailedSectionExpanded(snapshot.failedSectionExpanded ?? false);
     setDiscoveryResults(snapshot.discoveryResults ?? []);
     setManualPhones(snapshot.manualPhones ?? []);
     setManualPhoneInput(snapshot.manualPhoneInput ?? '');
@@ -963,6 +968,7 @@ export default function ChatPage() {
       researchContext: compactText(researchContext || '', 4500),
       analysisLoaded,
       sidebarOpen,
+      failedSectionExpanded,
       discoveryResults: discoveryResults.slice(0, SNAPSHOT_MAX_SEARCH_RESULTS).map(compactBusinessResult),
       manualPhones,
       manualPhoneInput,
@@ -1039,6 +1045,7 @@ export default function ChatPage() {
     researchContext,
     analysisLoaded,
     sidebarOpen,
+    failedSectionExpanded,
     discoveryResults,
     manualPhones,
     manualPhoneInput,
@@ -1475,6 +1482,14 @@ export default function ChatPage() {
       return () => clearTimeout(timer);
     }
   }, [phase, taskId, loadAnalysis]);
+
+  // Close context menu when clicking outside
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClick = () => setContextMenu(null);
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [contextMenu]);
 
   // Connect single-call WebSocket
   const connectWebSocket = useCallback((identifier: string) => {
@@ -2618,6 +2633,11 @@ export default function ChatPage() {
   const multiRunEntries = Array.from(multiRunEntryMap.values()).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   const multiRunTaskIds = new Set(multiRunEntries.flatMap((entry) => entry.calls.map((call) => call.taskId)));
   const filteredPastTasks = pastTasks.filter((task) => !task.run_id && !multiRunTaskIds.has(task.id));
+  
+  // Split tasks into successful and failed
+  const failedOutcomes: CallOutcome[] = ['failed', 'walkaway', 'unknown'];
+  const successfulTasks = filteredPastTasks.filter((task) => !failedOutcomes.includes(task.outcome));
+  const failedTasks = filteredPastTasks.filter((task) => failedOutcomes.includes(task.outcome));
 
   const outcomeDot: Record<CallOutcome, string> = {
     success: 'bg-emerald-500', partial: 'bg-amber-500', failed: 'bg-red-500', walkaway: 'bg-red-500', unknown: 'bg-gray-300',
@@ -2659,21 +2679,31 @@ export default function ChatPage() {
             </div>
 
             {/* Task list */}
-            <div className="flex-1 overflow-y-auto px-2 pb-3">
+            <div 
+              className="flex-1 overflow-y-auto px-2 pb-3"
+              onClick={() => setContextMenu(null)}
+            >
+              {/* Recent (successful) tasks */}
               <div className="px-2 pt-3 pb-1.5">
                 <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Recent</span>
               </div>
-              {filteredPastTasks.length === 0 ? (
+              {successfulTasks.length === 0 && failedTasks.length === 0 ? (
                 <p className="px-3 py-4 text-[12px] text-gray-400">No past negotiations</p>
+              ) : successfulTasks.length === 0 ? (
+                <p className="px-3 py-2 text-[11px] text-gray-400 italic">No successful calls yet</p>
               ) : (
                 <div className="space-y-0.5">
-                  {filteredPastTasks.map((t) => {
+                  {successfulTasks.map((t) => {
                     const isActive = t.id === taskId;
                     const dot = outcomeDot[t.outcome] ?? 'bg-gray-300';
                     return (
                       <button
                         key={t.id}
                         onClick={() => loadPastChat(t.id)}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setContextMenu({ taskId: t.id, x: e.clientX, y: e.clientY });
+                        }}
                         className={`w-full text-left rounded-lg px-3 py-2 text-[13px] transition-all duration-150 group ${isActive
                           ? 'bg-gray-100 text-gray-900 shadow-soft'
                           : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
@@ -2695,6 +2725,65 @@ export default function ChatPage() {
                   })}
                 </div>
               )}
+
+              {/* Failed tasks section */}
+              {failedTasks.length > 0 ? (
+                <>
+                  <button
+                    onClick={() => setFailedSectionExpanded(!failedSectionExpanded)}
+                    className="w-full flex items-center gap-1.5 px-2 pt-4 pb-1.5 text-left hover:bg-gray-50 rounded transition-colors"
+                  >
+                    {failedSectionExpanded ? (
+                      <ChevronDown size={12} className="text-gray-400" />
+                    ) : (
+                      <ChevronRight size={12} className="text-gray-400" />
+                    )}
+                    <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                      Failed ({failedTasks.length})
+                    </span>
+                  </button>
+                  {failedSectionExpanded ? (
+                    <div className="space-y-0.5">
+                      {failedTasks.map((t) => {
+                        const isActive = t.id === taskId;
+                        const dot = outcomeDot[t.outcome] ?? 'bg-gray-300';
+                        const isCallActive = callStatus !== 'ended' && callStatus !== 'failed' && sessionId && t.id === taskId;
+                        return (
+                          <button
+                            key={t.id}
+                            onClick={() => loadPastChat(t.id)}
+                            onContextMenu={(e) => {
+                              e.preventDefault();
+                              setContextMenu({ taskId: t.id, x: e.clientX, y: e.clientY });
+                            }}
+                            className={`w-full text-left rounded-lg px-3 py-2 text-[13px] transition-all duration-150 group ${isActive
+                              ? 'bg-gray-100 text-gray-900 shadow-soft'
+                              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
+                              }`}
+                            title={t.objective}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${dot} transition-colors`} />
+                              <span className="truncate flex-1 font-medium">{t.objective || 'Untitled'}</span>
+                              {isCallActive ? (
+                                <span className="shrink-0 text-[9px] font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                  LIVE
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-0.5 ml-3.5">
+                              <span className="text-[10px] text-gray-400">{t.outcome}</span>
+                              {t.duration_seconds > 0 ? (
+                                <span className="text-[10px] text-gray-300">{t.duration_seconds < 60 ? `${t.duration_seconds}s` : `${Math.floor(t.duration_seconds / 60)}m`}</span>
+                              ) : null}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
 
               {multiRunEntries.length > 0 ? (
                 <>
@@ -2759,6 +2848,50 @@ export default function ChatPage() {
           </motion.aside>
         ) : null}
       </AnimatePresence>
+
+      {/* Context menu for task actions */}
+      {contextMenu ? (
+        <div
+          className="fixed z-50 bg-white rounded-lg shadow-card border border-gray-200 py-1 min-w-[160px]"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {(() => {
+            const task = pastTasks.find((t) => t.id === contextMenu.taskId);
+            const isCallActive = task && sessionId && task.id === taskId && callStatus !== 'ended' && callStatus !== 'failed';
+            return (
+              <>
+                {isCallActive ? (
+                  <button
+                    onClick={async () => {
+                      if (contextMenu.taskId && sessionId) {
+                        await stopCall(contextMenu.taskId);
+                      }
+                      setContextMenu(null);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <X size={14} />
+                    Kill agent
+                  </button>
+                ) : null}
+                <button
+                  onClick={() => {
+                    // TODO: Implement delete task endpoint in backend
+                    console.log('Delete task:', contextMenu.taskId);
+                    alert('Delete functionality requires backend endpoint implementation');
+                    setContextMenu(null);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <Trash2 size={14} />
+                  Delete
+                </button>
+              </>
+            );
+          })()}
+        </div>
+      ) : null}
 
       {/* ── Main area ─────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0">
