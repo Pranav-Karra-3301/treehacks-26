@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="frontend/public/favicon.png" alt="kiru" width="96" />
+</p>
+
 # kiru
 
 kiru is a local-or-API-driven voice negotiation agent scaffold for TreeHacks-style demos.
