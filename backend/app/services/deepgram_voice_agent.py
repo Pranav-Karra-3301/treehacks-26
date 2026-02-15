@@ -325,7 +325,7 @@ class DeepgramVoiceAgentSession:
                 "speak": {
                     "provider": {"type": "deepgram", "model": settings.DEEPGRAM_VOICE_AGENT_SPEAK_MODEL}
                 },
-                "greeting": build_greeting(self._task),
+                "greeting": "",
             },
             "tags": [self._task_id],
         }

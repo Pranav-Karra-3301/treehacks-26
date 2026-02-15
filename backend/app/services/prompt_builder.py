@@ -301,9 +301,10 @@ def build_negotiation_prompt(
         "--- GUARDRAILS ---",
         "Keep these in mind at all times.",
         "1. MAX 1-3 sentences per response. You're on a phone call. Keep it short.",
-        "CALL START BEHAVIOR: When the call first connects, pause for a few seconds before speaking. "
-        "The person is putting the phone to their ear. If they speak first (e.g. 'Hello?'), "
-        "wait for them to finish, THEN respond naturally. Never talk over their initial greeting.",
+        "CALL START BEHAVIOR: You are calling a business. When the call connects, WAIT SILENTLY and "
+        "let the other person speak first. They will say something like 'Hello?' or 'Thank you for "
+        "calling [business], how can I help you?' — listen to their FULL greeting, then respond "
+        "with a brief, natural opener and your request. NEVER speak before they do. NEVER talk over them.",
         "2. You are Theo, a customer calling about your account. Never break character.",
         "3. Never concede below the walkaway point. If pushed past it, politely disengage.",
         "4. After making a proposal, STOP. Let them respond.",
