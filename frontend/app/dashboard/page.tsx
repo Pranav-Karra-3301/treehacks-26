@@ -21,7 +21,7 @@ import {
   Target,
   ChevronRight,
 } from 'lucide-react';
-import { listTasks, getTask, getTaskAnalysis, getTaskTranscript, getAudioUrl } from '../../lib/api';
+import { listTasks, getTask, getTaskAnalysis, getTaskTranscript, getAudioUrl, stopCall } from '../../lib/api';
 import type { TaskSummary, TaskDetail, AnalysisPayload, TranscriptEntry } from '../../lib/types';
 
 // ─── Design tokens ──────────────────────────────────────────────────────────────
@@ -280,6 +280,20 @@ export default function DashboardPage() {
 function CallRow({ call, index, onSelect }: { call: TaskSummary; index: number; onSelect: (id: string) => void }) {
   const oc = outcomeConfig[getOutcome(call.outcome)];
   const dot = statusDot[call.status ?? ''] ?? 'bg-gray-300';
+  const isActive = call.status === 'active' || call.status === 'dialing' || call.status === 'connected';
+  const [stopping, setStopping] = useState(false);
+
+  async function handleStop(e: React.MouseEvent) {
+    e.stopPropagation();
+    setStopping(true);
+    try {
+      await stopCall(call.id);
+    } catch {
+      // best effort
+    } finally {
+      setStopping(false);
+    }
+  }
 
   return (
     <motion.button
@@ -309,6 +323,16 @@ function CallRow({ call, index, onSelect }: { call: TaskSummary; index: number; 
             ) : null}
           </div>
         </div>
+        {isActive ? (
+          <button
+            type="button"
+            onClick={handleStop}
+            disabled={stopping}
+            className="shrink-0 rounded-full bg-red-600 px-3 py-1 text-[11px] font-medium text-white hover:bg-red-700 active:scale-[0.96] disabled:opacity-50 transition-all duration-150"
+          >
+            {stopping ? 'Stopping...' : 'Stop'}
+          </button>
+        ) : null}
         <ChevronDown size={14} className="text-gray-300 -rotate-90 group-hover:text-gray-500 transition-colors shrink-0" />
       </div>
     </motion.button>

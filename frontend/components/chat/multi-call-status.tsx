@@ -63,6 +63,7 @@ type MultiCallStatusProps = {
   onLoadMultiSummary: (taskIds: string[], objective: string, force?: boolean) => void | Promise<void>;
   onTransferToPersonal: (callTaskId: string, phoneLabel?: string) => void | Promise<void>;
   onSendDtmf: (callTaskId: string, digits: string, phoneLabel?: string) => void | Promise<void>;
+  onStopCall: (callTaskId: string, phoneLabel?: string) => void | Promise<void>;
   onSetPersonalHandoffNumber: (value: string) => void;
   onSetMultiDtmfInputs: (updater: (prev: Record<string, string>) => Record<string, string>) => void;
   onCallBackFromSummary: (item: MultiCallPriceComparison) => void;
@@ -86,6 +87,7 @@ const MultiCallStatus = React.memo(function MultiCallStatus({
   onLoadMultiSummary,
   onTransferToPersonal,
   onSendDtmf,
+  onStopCall,
   onSetPersonalHandoffNumber,
   onSetMultiDtmfInputs,
   onCallBackFromSummary,
@@ -159,9 +161,20 @@ const MultiCallStatus = React.memo(function MultiCallStatus({
                   </div>
                   <div className="text-[10.5px] text-gray-500">{formatPhone(phone)}</div>
                 </div>
-                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${statusClass}`}>
-                  {statusLabel}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${statusClass}`}>
+                    {statusLabel}
+                  </span>
+                  {canControlThisCall && state.taskId ? (
+                    <button
+                      type="button"
+                      onClick={() => { void onStopCall(state.taskId, phone); }}
+                      className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-red-700 active:scale-[0.96] transition-all duration-150"
+                    >
+                      Stop
+                    </button>
+                  ) : null}
+                </div>
               </div>
               <div className="h-56 overflow-y-auto px-3 py-2 space-y-1.5">
                 {state.transcript.length === 0 ? (

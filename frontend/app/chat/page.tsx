@@ -657,8 +657,8 @@ export default function ChatPage() {
     setMultiSummary(snapshot.multiSummary ?? null);
     const restoredSummaryState: MultiSummaryState =
       snapshot.multiSummaryState === 'ready'
-      || snapshot.multiSummaryState === 'error'
-      || snapshot.multiSummaryState === 'idle'
+        || snapshot.multiSummaryState === 'error'
+        || snapshot.multiSummaryState === 'idle'
         ? snapshot.multiSummaryState
         : 'idle';
     setMultiSummaryState(restoredSummaryState);
@@ -686,7 +686,7 @@ export default function ChatPage() {
 
   // Fetch past tasks on mount
   const refreshPastTasks = useCallback(() => {
-    listTasks().then(setPastTasks).catch(() => {});
+    listTasks().then(setPastTasks).catch(() => { });
   }, []);
 
   useEffect(() => {
@@ -846,7 +846,7 @@ export default function ChatPage() {
           // Location enrichment is best-effort
         }
       },
-      () => {}, // denied — no-op
+      () => { }, // denied — no-op
       { timeout: 5000, maximumAge: 600000 },
     );
   }, [locationMode]);
@@ -945,7 +945,7 @@ export default function ChatPage() {
   useEffect(() => {
     checkVoiceReadiness()
       .then(applyReadiness)
-      .catch(() => {});
+      .catch(() => { });
   }, [applyReadiness]);
 
   useEffect(() => {
@@ -1180,7 +1180,6 @@ export default function ChatPage() {
     if (
       !force
       && activeSummaryRequestRef.current === requestKey
-      && (multiSummaryState === 'loading' || multiSummaryState === 'ready')
     ) {
       return;
     }
@@ -1210,7 +1209,7 @@ export default function ChatPage() {
         activeSummaryRequestRef.current = null; // Allow retry after error
       }
     }
-  }, [multiSummaryState, wait]);
+  }, [wait]);
 
   const hydrateMultiCallArtifacts = useCallback(async (phone: string, tid: string) => {
     if (!phone || !tid) return;
@@ -1483,7 +1482,7 @@ export default function ChatPage() {
       socketRef.current.close();
     }
     const socket = createCallSocket(identifier, (event) => handleCallEvent(event));
-    socket.onclose = () => {};
+    socket.onclose = () => { };
     socketRef.current = socket;
   }, [handleCallEvent]);
 
@@ -1492,7 +1491,7 @@ export default function ChatPage() {
     const existing = multiSocketRef.current[phone];
     if (existing) existing.close();
     const socket = createCallSocket(taskId, (event) => handleCallEvent(event, { phone, taskId, multi: true }));
-    socket.onclose = () => {};
+    socket.onclose = () => { };
     multiSocketRef.current[phone] = socket;
   }, [handleCallEvent]);
 
@@ -1821,6 +1820,24 @@ export default function ChatPage() {
     }
   }
 
+  async function handleStopSingleCall(callTaskId: string, phoneLabel?: string) {
+    try {
+      const result = await stopCall(callTaskId);
+      const label = phoneLabel ? ` for ${formatPhone(phoneLabel)}` : '';
+      if (result.ok) {
+        addMessage({ role: 'status', text: `Ending call${label}...` });
+        if (phoneLabel) {
+          appendMultiTranscript(phoneLabel, 'status', 'Call stop requested');
+        }
+      } else {
+        addMessage({ role: 'ai', text: result.message || `Could not end the call${label}.` });
+      }
+    } catch {
+      const label = phoneLabel ? ` for ${formatPhone(phoneLabel)}` : '';
+      addMessage({ role: 'ai', text: `Could not end the call${label}. It may have already ended.` });
+    }
+  }
+
   async function handleTransferToPersonal(callTaskId: string, phoneLabel?: string) {
     const normalizedTarget = normalizePhone(personalHandoffNumber);
     if (!normalizedTarget) {
@@ -1892,7 +1909,8 @@ export default function ChatPage() {
     }
   }
 
-  function handleNewNegotiation() {
+  /** Reset all negotiation state to initial values. Shared by handleNewNegotiation and handleSend (ended). */
+  function resetNegotiationState() {
     closeAllSockets();
     resetChatSessionIdentity('chat');
     try {
@@ -1933,6 +1951,10 @@ export default function ChatPage() {
     setActiveMultiHistoryId(null);
     analysisLoadedRef.current = false;
     refreshPastTasks();
+  }
+
+  function handleNewNegotiation() {
+    resetNegotiationState();
   }
 
   function buildCrossCallContext(excludePhone?: string): string {
@@ -2362,45 +2384,8 @@ export default function ChatPage() {
     // If negotiation ended, start a fresh one with this message as the new objective
     let currentPhase = phase;
     if (currentPhase === 'ended') {
-      closeAllSockets();
-      resetChatSessionIdentity('chat');
-      try {
-        window.localStorage.removeItem(CHAT_SNAPSHOT_STORAGE_KEY);
-        window.localStorage.removeItem(CHAT_SNAPSHOT_FALLBACK_STORAGE_KEY);
-      } catch { /* ignore */ }
-      setMessages([{ id: 'welcome', role: 'ai', text: 'What would you like me to negotiate?' }]);
-      setInput('');
-      setTyping(false);
-      setObjective('');
-      setPhoneNumber('');
-      setTaskId(null);
-      setSessionId(null);
-      setCallStatus('pending');
-      setResearchContext('');
-      setAnalysisLoaded(false);
-      analysisLoadedRef.current = false;
-      setDiscoveryResults([]);
-      setManualPhones([]);
-      setManualPhoneInput('');
-      setConcurrentTestMode(false);
-      setConcurrentRunMode('test');
-      setConcurrentTargetCount(3);
-      setAutoSourceNumbers(true);
-      setMultiCallTargets({});
-      setMultiCalls({});
-      multiCallsRef.current = {};
-      setMultiSummary(null);
-      setMultiSummaryState('idle');
-      setMultiSummaryError(null);
-      setSingleDtmfInput('');
-      setMultiDtmfInputs({});
-      setPersonalHandoffNumber('');
-      activeSummaryRequestRef.current = null;
-      multiEndedAnnouncedRef.current = false;
-      setActiveMultiHistoryId(null);
-      setPhase('objective');
+      resetNegotiationState();
       currentPhase = 'objective';
-      refreshPastTasks();
     }
 
     addMessage({ role: 'user', text });
@@ -2444,7 +2429,7 @@ export default function ChatPage() {
                 setResearchContext(snippets);
               }
             })
-            .catch(() => {});
+            .catch(() => { });
 
           const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
           void startConcurrentTestCalls(parsedPhones, effectiveObjective, 'real', runId, targetDirectory);
@@ -2470,7 +2455,7 @@ export default function ChatPage() {
                 setResearchContext(snippets);
               }
             })
-            .catch(() => {}); // Research is best-effort
+            .catch(() => { }); // Research is best-effort
 
           startNegotiation(phone, effectiveObjective);
           return;
@@ -2689,11 +2674,10 @@ export default function ChatPage() {
                       <button
                         key={t.id}
                         onClick={() => loadPastChat(t.id)}
-                        className={`w-full text-left rounded-lg px-3 py-2 text-[13px] transition-all duration-150 group ${
-                          isActive
-                            ? 'bg-gray-100 text-gray-900 shadow-soft'
-                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
-                        }`}
+                        className={`w-full text-left rounded-lg px-3 py-2 text-[13px] transition-all duration-150 group ${isActive
+                          ? 'bg-gray-100 text-gray-900 shadow-soft'
+                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
+                          }`}
                         title={t.objective}
                       >
                         <div className="flex items-center gap-2">
@@ -2724,11 +2708,10 @@ export default function ChatPage() {
                         <button
                           key={entry.id}
                           onClick={() => loadMultiHistoryChat(entry.id)}
-                          className={`w-full text-left rounded-lg px-3 py-2 text-[13px] transition-all duration-150 ${
-                            isActive
-                              ? 'bg-gray-100 text-gray-900 shadow-soft'
-                              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
-                          }`}
+                          className={`w-full text-left rounded-lg px-3 py-2 text-[13px] transition-all duration-150 ${isActive
+                            ? 'bg-gray-100 text-gray-900 shadow-soft'
+                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
+                            }`}
                           title={entry.objective}
                         >
                           <div className="truncate font-medium">{entry.objective || 'Concurrent run'}</div>
@@ -2758,11 +2741,10 @@ export default function ChatPage() {
                   <span className="truncate max-w-[160px]">
                     {locationMode === 'timesquare' ? 'Times Square, NY' : userLocation ?? 'Auto-detecting...'}
                   </span>
-                  <span className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${
-                    locationMode === 'timesquare'
-                      ? 'bg-amber-50 text-amber-600'
-                      : 'bg-gray-100 text-gray-400'
-                  }`}>
+                  <span className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${locationMode === 'timesquare'
+                    ? 'bg-amber-50 text-amber-600'
+                    : 'bg-gray-100 text-gray-400'
+                    }`}>
                     {locationMode === 'timesquare' ? 'NYC' : 'Auto'}
                   </span>
                 </button>
@@ -2885,6 +2867,7 @@ export default function ChatPage() {
                 onLoadMultiSummary={loadMultiSummary}
                 onTransferToPersonal={handleTransferToPersonal}
                 onSendDtmf={handleSendDtmf}
+                onStopCall={handleStopSingleCall}
                 onSetPersonalHandoffNumber={setPersonalHandoffNumber}
                 onSetMultiDtmfInputs={setMultiDtmfInputs}
                 onCallBackFromSummary={handleCallBackFromSummary}

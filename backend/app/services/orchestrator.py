@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional
 
 from app.core.config import settings
 from app.services.deepgram_voice_agent import DeepgramVoiceAgentSession
+from app.services.dtmf_generator import generate_dtmf_audio
 from app.services.llm_client import LLMClient
 from app.services.negotiation_engine import NegotiationEngine
 from app.services.research import ExaSearchService
@@ -63,9 +64,8 @@ class CallOrchestrator:
         # Track inbound byte counts so outbound can be time-aligned
         self._inbound_bytes: dict[str, int] = {}
         self._outbound_bytes: dict[str, int] = {}
-        # DTMF in-flight tracking: prevents stream stop from ending the call
-        # when a TwiML update (for DTMF) causes the media stream to reconnect.
-        self._dtmf_in_flight: set[str] = set()
+        # DTMF chunk size: 20ms at 8kHz mulaw = 160 bytes per chunk
+        self._dtmf_chunk_size = 160
         # Pending end-call tasks (agent-initiated hangup after goodbye TTS)
         self._pending_end_call: dict[str, asyncio.Task[None]] = {}
         # Guard against concurrent stop_session calls (race between watchdog and Twilio callback)
@@ -324,6 +324,29 @@ class CallOrchestrator:
             )
             return payload
 
+    async def send_dtmf_audio(self, task_id: str, digits: str) -> None:
+        """Generate DTMF tones as mulaw audio and send through the existing media stream.
+
+        This avoids TwiML updates that cause stream disconnection/reconnection.
+        """
+        normalized = self._twilio.normalize_dtmf_digits(digits)
+        audio = generate_dtmf_audio(normalized)
+        if not audio:
+            return
+
+        # Split into 20ms chunks (160 bytes at 8kHz mulaw)
+        chunk_size = self._dtmf_chunk_size
+        for offset in range(0, len(audio), chunk_size):
+            chunk = audio[offset : offset + chunk_size]
+            await self._send_agent_audio_to_twilio(task_id, chunk)
+
+        log_event(
+            "orchestrator",
+            "dtmf_audio_sent",
+            task_id=task_id,
+            details={"digits": normalized, "audio_bytes": len(audio)},
+        )
+
     async def send_task_dtmf(self, task_id: str, digits: str) -> Dict[str, Any]:
         with timed_step("orchestrator", "send_task_dtmf", task_id=task_id, details={"digits": digits}):
             call_sid = self._task_to_call_sid.get(task_id)
@@ -335,11 +358,11 @@ class CallOrchestrator:
             if status in {"ended", "failed"}:
                 raise LookupError(f"Task call is already {status}.")
 
-            # Mark DTMF in-flight so the stream stop from the TwiML update
-            # doesn't terminate the call.
-            self._dtmf_in_flight.add(task_id)
+            # Send DTMF as audio through the existing media stream
+            # (no TwiML update, no stream disconnection)
+            await self.send_dtmf_audio(task_id, digits)
 
-            payload = await self._twilio.send_dtmf(call_sid, task_id, digits)
+            normalized = self._twilio.normalize_dtmf_digits(digits)
             await self._ws.broadcast(
                 task_id,
                 {
@@ -347,7 +370,7 @@ class CallOrchestrator:
                     "data": {
                         "status": "active",
                         "action": "dtmf_sent",
-                        "digits": digits,
+                        "digits": normalized,
                     },
                 },
             )
@@ -355,16 +378,9 @@ class CallOrchestrator:
                 "orchestrator",
                 "task_dtmf_sent",
                 task_id=task_id,
-                details={"call_sid": call_sid, "digits": digits},
+                details={"call_sid": call_sid, "digits": normalized},
             )
-            return payload
-
-    def consume_dtmf_in_flight(self, task_id: str) -> bool:
-        """Check and consume DTMF in-flight flag. Returns True if DTMF was in progress."""
-        if task_id in self._dtmf_in_flight:
-            self._dtmf_in_flight.discard(task_id)
-            return True
-        return False
+            return {"sid": call_sid, "status": "active", "digits": normalized}
 
     def _reset_silence_watchdog(self, task_id: str) -> None:
         """Reset the silence watchdog timer for a task."""
