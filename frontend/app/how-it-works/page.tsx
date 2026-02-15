@@ -129,6 +129,7 @@ interface Section {
   description: ReactNode;
   chart: string;
   bg: string;
+  highlightLabel?: string;
 }
 
 const sections: Section[] = [
@@ -147,6 +148,7 @@ const sections: Section[] = [
     description: <>Switch between OpenAI, Anthropic, or a fully local setup with a single environment variable. In production, kiru runs on a <HL>local Asus ROG GX10 workstation</HL> with <HL>Ollama serving qwen3:30b-a3b</HL> for zero API costs and full privacy.</>,
     chart: llmProviderChart,
     bg: 'bg-gray-50/60',
+    highlightLabel: 'Ollama',
   },
   {
     label: 'Call Lifecycle',
@@ -239,7 +241,7 @@ export default function HowItWorksPage() {
             </Reveal>
             <Reveal delay={0.15}>
               <div className="mt-10">
-                <MermaidDiagram chart={section.chart} />
+                <MermaidDiagram chart={section.chart} highlightLabel={section.highlightLabel} />
               </div>
             </Reveal>
           </div>

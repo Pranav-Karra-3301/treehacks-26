@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { renderMermaid } from 'beautiful-mermaid';
 
 // High-contrast theme on white
@@ -17,6 +17,7 @@ const diagramTheme = {
 interface MermaidDiagramProps {
   chart: string;
   className?: string;
+  highlightLabel?: string;
 }
 
 function makeResponsive(svgString: string): string {
@@ -42,7 +43,7 @@ function makeResponsive(svgString: string): string {
   return processed;
 }
 
-export default function MermaidDiagram({ chart, className = '' }: MermaidDiagramProps) {
+export default function MermaidDiagram({ chart, className = '', highlightLabel }: MermaidDiagramProps) {
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -71,6 +72,34 @@ export default function MermaidDiagram({ chart, className = '' }: MermaidDiagram
     render();
     return () => { cancelled = true; };
   }, [chart]);
+
+  // After SVG renders, highlight matching nodes
+  const applyHighlight = useCallback(() => {
+    if (!containerRef.current || !highlightLabel) return;
+    const svgEl = containerRef.current.querySelector('svg');
+    if (!svgEl) return;
+
+    const texts = svgEl.querySelectorAll('text');
+    texts.forEach((textEl) => {
+      if (textEl.textContent?.includes(highlightLabel)) {
+        // Walk up to the <g> group, find the <rect> sibling
+        const group = textEl.closest('g');
+        if (!group) return;
+        const rect = group.querySelector('rect');
+        if (rect) {
+          rect.setAttribute('fill', '#dcfce7');
+          rect.setAttribute('stroke', '#16a34a');
+          rect.setAttribute('stroke-width', '2');
+        }
+        textEl.setAttribute('fill', '#14532d');
+        textEl.setAttribute('font-weight', '600');
+      }
+    });
+  }, [highlightLabel]);
+
+  useEffect(() => {
+    if (svg) applyHighlight();
+  }, [svg, applyHighlight]);
 
   if (error) {
     return (
