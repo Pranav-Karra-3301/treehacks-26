@@ -639,6 +639,31 @@ class CallOrchestrator:
             )
             return response
 
+    # Voicemail detection phrases (lowercase)
+    _VOICEMAIL_PHRASES = [
+        "forwarded to voice mail",
+        "forwarded to voicemail",
+        "leave a message",
+        "leave your message",
+        "record your message",
+        "at the tone",
+        "after the beep",
+        "after the tone",
+        "mailbox is full",
+        "voicemail box",
+        "not available",
+        "please leave a message",
+        "you may hang up",
+    ]
+    # Patterns the agent outputs as text instead of invoking the function call
+    _END_CALL_TEXT_PATTERNS = [
+        "(end_call)",
+        "[end_call]",
+        "{end_call}",
+        "end_call(",
+        "end_call()",
+    ]
+
     async def append_turn(
         self,
         task_id: str,
@@ -662,6 +687,26 @@ class CallOrchestrator:
             # Track last conversation activity for silence auto-hangup
             self._last_activity[task_id] = time.time()
             self._reset_silence_watchdog(task_id)
+
+            content_lower = content.lower()
+
+            # Voicemail detection — auto-hangup when caller side is a voicemail system
+            if speaker == "caller":
+                for phrase in self._VOICEMAIL_PHRASES:
+                    if phrase in content_lower:
+                        log_event("orchestrator", "voicemail_detected", task_id=task_id,
+                                  details={"phrase": phrase, "content": content[:200]})
+                        await self.schedule_agent_hangup(task_id, delay_seconds=1.0)
+                        break
+
+            # Fallback: detect when agent outputs end_call as text instead of function call
+            if speaker == "agent":
+                for pattern in self._END_CALL_TEXT_PATTERNS:
+                    if pattern in content_lower:
+                        log_event("orchestrator", "end_call_text_fallback", task_id=task_id,
+                                  details={"pattern": pattern, "content": content[:200]})
+                        await self.schedule_agent_hangup(task_id, delay_seconds=2.0)
+                        break
 
             role = "user" if speaker == "caller" else "assistant"
             now = time.time()

@@ -261,10 +261,15 @@ def build_negotiation_prompt(
         "- The other party says goodbye or the office is closed\n"
         "- Negotiations failed and there's nothing more to discuss\n"
         "- You're stuck in an IVR loop or automated system with no way forward\n"
-        "- You left a voicemail message\n\n"
+        "- You reached a voicemail or answering machine — hang up IMMEDIATELY, do NOT leave a message\n\n"
+        "VOICEMAIL DETECTION (CRITICAL):\n"
+        "If you hear ANY of these, it means you've reached voicemail — call end_call IMMEDIATELY:\n"
+        "- 'leave a message', 'record your message', 'at the tone', 'after the beep'\n"
+        "- 'forwarded to voicemail', 'not available', 'mailbox'\n"
+        "- 'you may hang up', 'please leave a message'\n"
+        "Do NOT speak to a voicemail system. Do NOT leave a message. Just call end_call right away.\n\n"
         "HOW TO USE IT:\n"
-        "After you say your final goodbye ('Thanks so much, have a good one!'), "
-        "you MUST immediately call end_call in that same turn. "
+        "Say your final goodbye ('Thanks, have a good one!'), then call end_call in that same turn.\n"
         "Do NOT generate another response after your goodbye — call end_call right away.\n\n"
         "CRITICAL: If you say 'bye', 'thanks', 'have a good one', 'take care', or any "
         "farewell phrase, you MUST also call end_call in that response. "
@@ -334,12 +339,14 @@ def build_negotiation_prompt(
         "12. Do not request email/contact info unless it is required to finalize or document an agreed change.",
         "13. Use keypad navigation only when explicitly prompted by an IVR/menu or representative.",
         "14. ALWAYS HANG UP: After saying goodbye, you MUST call end_call. The call does not end by itself. "
-        "If you leave a voicemail, call end_call after your message. If the objective is complete, say a brief "
-        "goodbye and call end_call immediately. Do NOT sit in silence — always end the call.",
-        "15. INTERRUPTION HANDLING: If the other person interrupts you, STOP immediately. "
+        "If the objective is complete, say a brief goodbye and call end_call immediately. "
+        "Do NOT sit in silence — always end the call.",
+        "15a. VOICEMAIL: If you detect voicemail or an answering machine, call end_call IMMEDIATELY. "
+        "Do NOT leave a message. Do NOT wait for the beep. Just hang up right away.",
+        "16. INTERRUPTION HANDLING: If the other person interrupts you, STOP immediately. "
         "Do NOT try to finish your previous thought. Respond to what THEY said.",
-        "16. LANGUAGE: This conversation is ONLY in English. Do not respond in any other language.",
-        "17. EMOTIONAL MIRRORING: If they sound frustrated, lower your energy and empathize briefly. "
+        "17. LANGUAGE: This conversation is ONLY in English. Do not respond in any other language.",
+        "18. EMOTIONAL MIRRORING: If they sound frustrated, lower your energy and empathize briefly. "
         "If they sound enthusiastic, match it slightly. Don't be monotone.",
     ]
     if info_only_mode:
