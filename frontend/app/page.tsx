@@ -385,57 +385,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── How it works ──────────────────────── */}
-      <section id="how-it-works" className="px-6 py-20 sm:py-28 bg-gray-50/60">
-        <div className="mx-auto max-w-5xl">
-          <Reveal>
-            <p className="text-[13px] font-medium text-gray-400 tracking-wide uppercase mb-3">How it works</p>
-            <h2 className="text-[clamp(1.75rem,4vw,2.75rem)] font-bold tracking-[-0.03em] text-gray-950 max-w-lg">
-              Three steps.{' '}<span className="font-serif italic font-normal">Real savings.</span>
-            </h2>
-          </Reveal>
-
-          <div className="mt-14 grid gap-8 sm:grid-cols-3">
-            {[
-              {
-                step: '01',
-                title: 'Tell us what you want',
-                desc: 'Describe your goal in plain language. Lower your cable bill, dispute a charge, cancel and renegotiate — whatever it is.',
-                icon: FileText,
-              },
-              {
-                step: '02',
-                title: 'We make the call',
-                desc: 'Kiru dials the number, navigates phone trees, waits on hold, and speaks to a real human — using proven negotiation tactics.',
-                icon: Phone,
-              },
-              {
-                step: '03',
-                title: 'You get results',
-                desc: 'Get a full transcript, performance score, and breakdown of every tactic used. See exactly what was said and what you saved.',
-                icon: Check,
-              },
-            ].map((item, i) => (
-              <Reveal key={item.step} delay={0.08 * (i + 1)}>
-                <div className="relative">
-                  {/* Step number */}
-                  <span className="text-[11px] font-semibold text-gray-300 tracking-widest uppercase">{item.step}</span>
-                  {/* Connector line (not on last) */}
-                  {i < 2 && (
-                    <div className="hidden sm:block absolute top-[5px] left-[36px] right-[-32px] h-px bg-gray-200" />
-                  )}
-                  <div className="mt-4 flex h-10 w-10 items-center justify-center rounded-xl bg-gray-900 text-white mb-4">
-                    <item.icon size={18} strokeWidth={2} />
-                  </div>
-                  <h3 className="text-[17px] font-semibold text-gray-950">{item.title}</h3>
-                  <p className="mt-2 text-[14px] leading-relaxed text-gray-500">{item.desc}</p>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* ── Bento Feature Grid ──────────────────── */}
       <section id="features" className="px-6 py-20 sm:py-28">
         <div className="mx-auto max-w-5xl">
@@ -509,7 +458,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── Use Cases ───────────────────────────── */}
-      <section className="px-6 py-20 sm:py-28 bg-gray-50/60">
+      <section className="px-6 py-20 sm:py-28">
         <div className="mx-auto max-w-5xl">
           <div className="grid gap-12 lg:grid-cols-5 lg:gap-16 items-start">
             <Reveal className="lg:col-span-2">
