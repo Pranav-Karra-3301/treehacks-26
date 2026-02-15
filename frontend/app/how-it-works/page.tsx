@@ -147,7 +147,7 @@ const sections: Section[] = [
     titleAccent: 'LLM support.',
     description: <>Switch between OpenAI, Anthropic, or a fully local setup with a single environment variable. In production, kiru runs on a <HL>local Asus ROG GX10 workstation</HL> with <HL>Ollama serving qwen3:30b-a3b</HL> for zero API costs and full privacy.</>,
     chart: llmProviderChart,
-    bg: 'bg-gray-50/60',
+    bg: 'bg-white',
     highlightLabel: 'Ollama',
   },
   {
@@ -164,7 +164,7 @@ const sections: Section[] = [
     titleAccent: 'audio processing.',
     description: <>Twilio streams raw <HL>mulaw audio over a WebSocket</HL>. The orchestrator pipes it to Deepgram for speech-to-text, feeds transcripts to the LLM, converts responses to speech, and sends audio back, all in under a second of latency.</>,
     chart: audioPipelineChart,
-    bg: 'bg-gray-50/60',
+    bg: 'bg-white',
   },
   {
     label: 'Negotiation Engine',
@@ -180,7 +180,7 @@ const sections: Section[] = [
     titleAccent: 'WebSocket events.',
     description: <>The browser subscribes to a <HL>WebSocket channel</HL> for the active call. Every transcript update, agent thinking state, status change, and analysis result is pushed in real time. No polling, no delays.</>,
     chart: frontendRealtimeChart,
-    bg: 'bg-gray-50/60',
+    bg: 'bg-white',
   },
 ];
 
@@ -227,7 +227,7 @@ export default function HowItWorksPage() {
 
       {/* ── Diagram sections ─────────────────────── */}
       {sections.map((section) => (
-        <section key={section.label} className={`px-6 py-20 sm:py-28 ${section.bg}`}>
+        <section key={section.label} className="px-6 py-20 sm:py-28">
           <div className="mx-auto max-w-5xl">
             <Reveal>
               <p className="text-[13px] font-medium text-gray-400 tracking-wide uppercase mb-3">{section.label}</p>
