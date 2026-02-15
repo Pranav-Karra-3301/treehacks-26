@@ -2076,34 +2076,27 @@ export default function ChatPage() {
   ): FollowUpIntent | null {
     const lowerMsg = message.toLowerCase();
 
-    // Intent signals must require an explicit back-reference to previous calls.
-    // Avoid broad phrases like "the businesses" or "call back" that appear in
-    // normal new objectives — only match when user clearly refers to the same
-    // set of contacts from a prior run.
+    // Intent signals: references to previous calls
     const intentSignals = [
+      'these gyms',
+      'those gyms',
+      'these businesses',
+      'those businesses',
+      'the gyms',
+      'the businesses',
       'call them back',
-      'call them again',
-      'call those same',
-      'call the same',
+      'call back',
       'follow up with them',
-      'same places again',
-      'same numbers again',
-      'those same businesses',
-      'those same gyms',
-      'those same places',
+      'call the same',
+      'same places',
+      'same numbers',
+      'those places',
+      'those numbers',
       'them again',
     ];
 
     if (!intentSignals.some((signal) => lowerMsg.includes(signal))) {
       return null; // Not a follow-up intent
-    }
-
-    // Only consider follow-up if there is a completed multi-call session with a
-    // summary available — an ended run without a summary means the calls didn't
-    // produce actionable data to follow up on.
-    const hasCompletedSession = currentMultiSummary !== null;
-    if (!hasCompletedSession) {
-      return null;
     }
 
     const hasCurrentCalls = Object.keys(currentMultiCalls).length > 0;
@@ -2330,13 +2323,12 @@ export default function ChatPage() {
       setResearchContext(snippets);
     }
 
-    const normalizedPhones = Array.from(new Set(
-      phones
-        .map((p) => normalizePhone(p))
-        .filter((p): p is string => Boolean(p)),
-    )).slice(0, MAX_CONCURRENT_TEST_CALLS);
+    const normalizedPhones = phones
+      .map((p) => normalizePhone(p))
+      .filter((p): p is string => Boolean(p))
+      .slice(0, MAX_CONCURRENT_TEST_CALLS);
 
-    addMessage({ role: 'user', text: `Call all ${normalizedPhones.length} business${normalizedPhones.length === 1 ? '' : 'es'}` });
+    addMessage({ role: 'user', text: `Call all ${normalizedPhones.length} businesses` });
 
     const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     void startConcurrentTestCalls(normalizedPhones, objective, 'real', runId, targetDirectory);
