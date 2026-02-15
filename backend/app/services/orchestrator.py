@@ -241,6 +241,9 @@ class CallOrchestrator:
                 {"type": "call_status", "data": {"status": "dialing", "session_id": session.session_id}},
             )
 
+            # Initialize activity tracking when call starts
+            self._last_activity[task_id] = time.time()
+            
             # Start max-duration watchdog (auto-cancel if stuck dialing/on hold)
             self._start_call_duration_watchdog(task_id)
 
@@ -439,7 +442,16 @@ class CallOrchestrator:
                 # Only hang up if there's been no activity in the last 60 seconds
                 # This prevents terminating active conversations
                 last_activity = self._last_activity.get(task_id, 0)
-                seconds_since_activity = time.time() - last_activity if last_activity > 0 else self._max_call_duration_seconds
+                
+                # If last_activity was never set (shouldn't happen with fix above), be lenient
+                if last_activity == 0:
+                    log_event("orchestrator", "duration_watchdog_skip", task_id=task_id,
+                              details={"max_seconds": self._max_call_duration_seconds, 
+                                      "reason": "no_activity_tracking"})
+                    self._call_duration_watchdogs.pop(task_id, None)
+                    return
+                
+                seconds_since_activity = time.time() - last_activity
                 
                 if seconds_since_activity < 60:
                     # There was recent activity, don't hang up
@@ -615,8 +627,10 @@ class CallOrchestrator:
                         f.write(json.dumps({"location":"backend/app/services/orchestrator.py:582","message":"Voice session start failed","data":{"task_id":task_id,"error":str(exc)},"timestamp":int(time.time()*1000),"hypothesisId":"H7,H9"})+"\n")
                     # #endregion
                     log_event("orchestrator", "start_voice_session_failed",
-                              task_id=task_id, status="warning",
+                              task_id=task_id, status="error",
                               details={"error": f"{type(exc).__name__}: {exc}"})
+                    # Critical failure - hang up the call since no audio will work
+                    await self.stop_task_call(task_id, stop_reason="voice_session_init_failed")
 
     async def set_media_call_sid(self, task_id: str, call_sid: str) -> None:
         self._link_call_sid(task_id, call_sid)
