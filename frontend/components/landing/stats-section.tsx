@@ -34,9 +34,9 @@ export default function StatsSection() {
       <div className="mx-auto max-w-5xl">
         <div className="grid grid-cols-3 divide-x divide-gray-100">
           {[
-            { end: 2400000, prefix: '$', suffix: '+', label: 'Saved for users', display: '$2.4M+' },
-            { end: 12000, prefix: '', suffix: '+', label: 'Calls completed' },
-            { end: 94, prefix: '', suffix: '%', label: 'Success rate' },
+            { end: 8, prefix: '$', suffix: 'K+', label: 'Potential value saved', display: '$8K+' },
+            { end: 300, prefix: '', suffix: '+', label: 'Calls' },
+            { end: 83, prefix: '', suffix: '%', label: 'Success' },
           ].map((s) => (
             <Reveal key={s.label} className="text-center px-4">
               <p className="text-[clamp(1.5rem,3.5vw,2.5rem)] font-bold tracking-tight text-gray-950 tabular-nums">

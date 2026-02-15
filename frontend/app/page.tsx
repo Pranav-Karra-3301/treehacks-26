@@ -95,49 +95,25 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-white">
 
-      {/* ── Nav ─────────────────────────────────── */}
+      {/* ── Nav ─────────────────────────────────────────────────────────────────── */}
       <div className="sticky top-0 z-50 flex justify-center px-4 pt-3">
-        <nav className="w-full max-w-5xl rounded-2xl backdrop-blur-xl border border-white/40 relative overflow-hidden"
-          style={{
-            background: 'linear-gradient(135deg, rgba(255,255,255,0.52) 0%, rgba(255,255,255,0.28) 45%, rgba(255,255,255,0.18) 100%)',
-            boxShadow: 'inset 1px 1px 0 0 rgba(255,255,255,0.6), inset -1px -1px 0 0 rgba(0,0,0,0.04), 0 8px 32px rgba(0,0,0,0.06)',
-          }}
-        >
-          {/* Light from top-left (-45°, ~80%) — glass highlight */}
-          <div
-            className="absolute inset-0 rounded-2xl pointer-events-none"
-            style={{
-              background: 'linear-gradient(135deg, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0.08) 40%, transparent 70%)',
-            }}
-          />
-          {/* Inner bottom half: full-width wavy blue gradient */}
-          <div className="absolute left-0 right-0 bottom-0 top-[38%] w-full pointer-events-none">
-            <svg className="absolute inset-0 w-full h-full min-w-full" viewBox="0 0 800 56" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="nav-wave-blue" x1="0%" y1="100%" x2="0%" y2="0%">
-                  <stop offset="0%" stopColor="rgb(96 165 250)" stopOpacity="0.38" />
-                  <stop offset="45%" stopColor="rgb(59 130 246)" stopOpacity="0.12" />
-                  <stop offset="100%" stopColor="rgb(59 130 246)" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              <path
-                d="M0 56V28C50 42 100 14 150 28C200 42 250 14 300 28C350 42 400 14 450 28C500 42 550 14 600 28C650 42 700 14 750 28C750 42 800 42 800 28V56H0z"
-                fill="url(#nav-wave-blue)"
-              />
-            </svg>
-          </div>
-          <div className="flex items-center justify-between px-6 h-14 relative z-10">
-            <Link href="/" className="tracking-tight text-gray-950">
-              <span className="font-serif italic text-[28px]">kiru</span>
+        <nav className="w-full max-w-5xl rounded-2xl flex items-center justify-between px-6 h-14 bg-white/95 backdrop-blur-sm border border-gray-200/60">
+          <Link href="/" className="tracking-tight text-gray-950">
+            <span className="font-serif italic text-[28px]">kiru</span>
+          </Link>
+          <div className="flex items-center gap-6">
+            <Link href="/how-it-works" className="hidden sm:block text-[13px] font-medium text-gray-500 transition hover:text-gray-900">
+              How it works
             </Link>
-            <div className="flex items-center gap-6">
-              <Link href="/how-it-works" className="hidden sm:block text-[13px] text-gray-500 transition hover:text-gray-900">How it works</Link>
-              <a href="#features" className="hidden sm:block text-[13px] text-gray-500 transition hover:text-gray-900">Features</a>
-              <Link href="/dashboard" className="hidden sm:block text-[13px] text-gray-500 transition hover:text-gray-900">Dashboard</Link>
-              <Link href="/chat" className="group inline-flex items-center gap-1.5 rounded-full bg-gray-950 px-4 py-1.5 text-[13px] font-medium text-white transition hover:bg-gray-800">
-                Launch App <ArrowUpRight size={12} strokeWidth={2.5} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-              </Link>
-            </div>
+            <a href="#features" className="hidden sm:block text-[13px] font-medium text-gray-500 transition hover:text-gray-900">
+              Features
+            </a>
+            <Link href="/dashboard" className="hidden sm:block text-[13px] font-medium text-gray-500 transition hover:text-gray-900">
+              Dashboard
+            </Link>
+            <Link href="/chat" className="group inline-flex items-center gap-1.5 rounded-full bg-gray-950 px-4 py-1.5 text-[13px] font-medium text-white transition hover:bg-gray-800">
+              Launch App <ArrowUpRight size={12} strokeWidth={2.5} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+            </Link>
           </div>
         </nav>
       </div>
