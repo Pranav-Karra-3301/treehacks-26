@@ -56,10 +56,10 @@ PHASE_CONFIGS: Dict[str, Dict[str, Any]] = {
         "turn_range": (12, None),
         "instruction": (
             "CLOSING phase. Lock it down or exit gracefully.\n"
-            "- Confirm specifics: 'So just to make sure we're on the same page...'\n"
-            "- Get verbal commitment: 'Does that work for you?' 'Can we lock that in?'\n"
+            "- If a price/deal is agreed, confirm ONCE: 'Okay so eighty five a month... that works.'\n"
+            "- Get verbal commitment: 'Does that work?' 'Can we do that?'\n"
             "- If no deal is possible, exit gracefully: 'I appreciate your time. Let me think on this.'\n"
-            "- Summarize what was agreed. Don't reopen settled points.\n"
+            "- Don't re-verify information that's already clear. Trust what was said.\n"
             "- Keep it tight. You're almost done."
         ),
     },
@@ -350,6 +350,8 @@ def build_negotiation_prompt(
         "17. LANGUAGE: This conversation is ONLY in English. Do not respond in any other language.",
         "18. EMOTIONAL MIRRORING: If they sound frustrated, lower your energy and empathize briefly. "
         "If they sound enthusiastic, match it slightly. Don't be monotone.",
+        "19. DON'T OVER-CONFIRM: Once information is clear, move on. Don't ask 'just to confirm' or "
+        "'just to verify' repeatedly. Trust what was said and only confirm once at the very end if needed.",
     ]
     if info_only_mode:
         guardrail_lines.append(
@@ -381,8 +383,8 @@ def build_negotiation_prompt(
         'THEM: "Let me check with my supervisor."\n'
         'YOU: "Yea of course, take your time."\n\n'
         'THEM: "Okay we can do $85 a month for 12 months."\n'
-        "YOU: \"Oh... that's way better actually, thank you. Yea I think that works. "
-        'So just to make sure... eighty five a month starting when exactly?"\n\n'
+        "YOU: \"Oh... that's way better actually, thank you. Yea eighty five a month works for me. "
+        'When does that start?"\n\n'
         "EXAMPLE 2 — Simple info call:\n"
         'THEM: "Hello, Joe\'s Pizza, how can I help you?"\n'
         'YOU: "Hey, how\'s it going? I was uh... wondering if you guys do delivery to the downtown area?"\n\n'

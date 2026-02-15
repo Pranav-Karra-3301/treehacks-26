@@ -1,0 +1,7 @@
+{"location":"frontend/app/chat/page.tsx:1701","message":"Task creation results","data":{"taskCount":3,"tasks":[{"ok":true,"phone":"+14084599631"},{"ok":true,"phone":"+18148268588"},{"ok":true,"phone":"+12062652833"}]},"timestamp":1771166046052,"hypothesisId":"H1,H4"}
+{"location":"frontend/app/chat/page.tsx:1710","message":"Starting call","data":{"index":0,"phone":"+14084599631","ok":true},"timestamp":1771166046053,"hypothesisId":"H1,H5"}
+{"location":"frontend/app/chat/page.tsx:1720","message":"Call started","data":{"index":0,"phone":"+14084599631","ok":true,"message":"call started"},"timestamp":1771166047227,"hypothesisId":"H1,H5"}
+{"location":"frontend/app/chat/page.tsx:1710","message":"Starting call","data":{"index":1,"phone":"+18148268588","ok":true},"timestamp":1771166047227,"hypothesisId":"H1,H5"}
+{"location":"frontend/app/chat/page.tsx:1720","message":"Call started","data":{"index":1,"phone":"+18148268588","ok":true,"message":"call started"},"timestamp":1771166048967,"hypothesisId":"H1,H5"}
+{"location":"frontend/app/chat/page.tsx:1710","message":"Starting call","data":{"index":2,"phone":"+12062652833","ok":true},"timestamp":1771166048967,"hypothesisId":"H1,H5"}
+{"location":"frontend/app/chat/page.tsx:1720","message":"Call started","data":{"index":2,"phone":"+12062652833","ok":true,"message":"call started"},"timestamp":1771166050156,"hypothesisId":"H1,H5"}

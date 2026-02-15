@@ -1702,36 +1702,30 @@ export default function ChatPage() {
     fetch('http://127.0.0.1:7248/ingest/7295f040-090d-41f5-a445-399ebc98ac02',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/app/chat/page.tsx:1701',message:'Task creation results',data:{taskCount:taskCreationResults.length,tasks:taskCreationResults.map(t=>({ok:t.ok,phone:t.phone}))},timestamp:Date.now(),hypothesisId:'H1,H4'})}).catch(()=>{});
     // #endregion
 
-    // Start calls sequentially with 500ms stagger to let each Twilio media
-    // stream register before the next call arrives.
-    const results: Array<
-      | { ok: true; phone: string; taskId: string; sessionId: string; callResult: any }
-      | { ok: false; phone: string; errorMsg: string }
-    > = [];
-    for (let i = 0; i < taskCreationResults.length; i++) {
-      const taskResult = taskCreationResults[i];
+    // Start all calls in parallel for true concurrent execution
+    const callPromises = taskCreationResults.map(async (taskResult, i) => {
       // #region agent log
-      fetch('http://127.0.0.1:7248/ingest/7295f040-090d-41f5-a445-399ebc98ac02',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/app/chat/page.tsx:1710',message:'Starting call',data:{index:i,phone:taskResult.phone,ok:taskResult.ok},timestamp:Date.now(),hypothesisId:'H1,H5'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7248/ingest/7295f040-090d-41f5-a445-399ebc98ac02',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/app/chat/page.tsx:1706',message:'Starting call',data:{index:i,phone:taskResult.phone,ok:taskResult.ok},timestamp:Date.now(),hypothesisId:'H1,H5'})}).catch(()=>{});
       // #endregion
       if (!taskResult.ok) {
-        results.push(taskResult);
-        continue;
+        return taskResult;
       }
       try {
-        if (i > 0) await new Promise((r) => setTimeout(r, 500));
         const callResult = await startCall(taskResult.taskId);
         // #region agent log
-        fetch('http://127.0.0.1:7248/ingest/7295f040-090d-41f5-a445-399ebc98ac02',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/app/chat/page.tsx:1720',message:'Call started',data:{index:i,phone:taskResult.phone,ok:callResult.ok,message:callResult.message},timestamp:Date.now(),hypothesisId:'H1,H5'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7248/ingest/7295f040-090d-41f5-a445-399ebc98ac02',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/app/chat/page.tsx:1715',message:'Call started',data:{index:i,phone:taskResult.phone,ok:callResult.ok,message:callResult.message},timestamp:Date.now(),hypothesisId:'H1,H5'})}).catch(()=>{});
         // #endregion
-        results.push({ ok: true, phone: taskResult.phone, taskId: taskResult.taskId, sessionId: callResult.session_id ?? '', callResult });
+        return { ok: true as const, phone: taskResult.phone, taskId: taskResult.taskId, sessionId: callResult.session_id ?? '', callResult };
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Unknown error';
         // #region agent log
-        fetch('http://127.0.0.1:7248/ingest/7295f040-090d-41f5-a445-399ebc98ac02',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/app/chat/page.tsx:1728',message:'Call start error',data:{index:i,phone:taskResult.phone,error:errorMsg},timestamp:Date.now(),hypothesisId:'H1,H5'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7248/ingest/7295f040-090d-41f5-a445-399ebc98ac02',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/app/chat/page.tsx:1722',message:'Call start error',data:{index:i,phone:taskResult.phone,error:errorMsg},timestamp:Date.now(),hypothesisId:'H1,H5'})}).catch(()=>{});
         // #endregion
-        results.push({ ok: false, phone: taskResult.phone, errorMsg });
+        return { ok: false as const, phone: taskResult.phone, errorMsg };
       }
-    }
+    });
+
+    const results = await Promise.all(callPromises);
 
     let startedCount = 0;
     const newState: Record<string, MultiCallState> = {};

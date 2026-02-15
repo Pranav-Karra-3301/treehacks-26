@@ -76,7 +76,7 @@ class CallOrchestrator:
         self._silence_timeout_seconds = 20.0  # auto-hangup after 20s silence
         # Max call duration watchdog — auto-cancel calls that run too long (e.g. stuck on hold)
         self._call_duration_watchdogs: dict[str, asyncio.Task[None]] = {}
-        self._max_call_duration_seconds = 90.0
+        self._max_call_duration_seconds = 300.0  # 5 minutes max for active calls
 
     def _session_recording_path(self, task_id: str) -> Path:
         # Legacy: kept for backward compat, prefer store.save_artifact("recording_stats", ...)
@@ -422,7 +422,10 @@ class CallOrchestrator:
         self._last_activity.pop(task_id, None)
 
     def _start_call_duration_watchdog(self, task_id: str) -> None:
-        """Start a watchdog that auto-cancels the call after max duration (e.g. stuck on hold)."""
+        """Start a watchdog that auto-cancels the call after max duration (e.g. stuck on hold).
+        
+        Only triggers if there's been no recent activity (last 60s), indicating the call is stuck.
+        """
         self._cancel_call_duration_watchdog(task_id)
 
         async def _duration_check() -> None:
@@ -432,8 +435,24 @@ class CallOrchestrator:
                 status = str((task or {}).get("status", ""))
                 if status in {"ended", "failed"}:
                     return
+                
+                # Only hang up if there's been no activity in the last 60 seconds
+                # This prevents terminating active conversations
+                last_activity = self._last_activity.get(task_id, 0)
+                seconds_since_activity = time.time() - last_activity if last_activity > 0 else self._max_call_duration_seconds
+                
+                if seconds_since_activity < 60:
+                    # There was recent activity, don't hang up
+                    log_event("orchestrator", "duration_watchdog_skip", task_id=task_id,
+                              details={"max_seconds": self._max_call_duration_seconds, 
+                                      "seconds_since_activity": seconds_since_activity,
+                                      "reason": "recent_activity"})
+                    self._call_duration_watchdogs.pop(task_id, None)
+                    return
+                    
                 log_event("orchestrator", "call_duration_auto_hangup", task_id=task_id,
-                          details={"max_seconds": self._max_call_duration_seconds})
+                          details={"max_seconds": self._max_call_duration_seconds,
+                                  "seconds_since_activity": seconds_since_activity})
                 await self.stop_task_call(task_id, stop_reason="max_duration_timeout")
             except asyncio.CancelledError:
                 pass  # Normal cancellation when call ends before timeout
