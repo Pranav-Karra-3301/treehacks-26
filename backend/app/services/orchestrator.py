@@ -72,6 +72,9 @@ class CallOrchestrator:
         self._last_activity: dict[str, float] = {}
         self._silence_watchdogs: dict[str, asyncio.Task[None]] = {}
         self._silence_timeout_seconds = 20.0  # auto-hangup after 20s silence
+        # Max call duration watchdog — auto-cancel calls that run too long (e.g. stuck on hold)
+        self._call_duration_watchdogs: dict[str, asyncio.Task[None]] = {}
+        self._max_call_duration_seconds = 90.0
 
     def _session_recording_path(self, task_id: str) -> Path:
         # Legacy: kept for backward compat, prefer store.save_artifact("recording_stats", ...)
@@ -216,6 +219,9 @@ class CallOrchestrator:
                 {"type": "call_status", "data": {"status": "dialing", "session_id": session.session_id}},
             )
 
+            # Start max-duration watchdog (auto-cancel if stuck dialing/on hold)
+            self._start_call_duration_watchdog(task_id)
+
             if self._voice_mode_enabled():
                 log_event("orchestrator", "voice_session_deferred", task_id=task_id,
                           session_id=session.session_id,
@@ -243,6 +249,7 @@ class CallOrchestrator:
     async def stop_task_call(self, task_id: str, *, from_status_callback: bool = False, stop_reason: str = "unknown") -> None:
         with timed_step("orchestrator", "stop_task_call", task_id=task_id):
             self._cancel_silence_watchdog(task_id)
+            self._cancel_call_duration_watchdog(task_id)
             # Cancel any pending agent-initiated hangup
             pending = self._pending_end_call.pop(task_id, None)
             if pending and not pending.done():
@@ -375,6 +382,29 @@ class CallOrchestrator:
         if watchdog and not watchdog.done():
             watchdog.cancel()
         self._last_activity.pop(task_id, None)
+
+    def _start_call_duration_watchdog(self, task_id: str) -> None:
+        """Start a watchdog that auto-cancels the call after max duration (e.g. stuck on hold)."""
+        self._cancel_call_duration_watchdog(task_id)
+
+        async def _duration_check() -> None:
+            await asyncio.sleep(self._max_call_duration_seconds)
+            task = self._store.get_task(task_id)
+            status = str((task or {}).get("status", ""))
+            if status in {"ended", "failed"}:
+                return
+            log_event("orchestrator", "call_duration_auto_hangup", task_id=task_id,
+                      details={"max_seconds": self._max_call_duration_seconds})
+            await self.stop_task_call(task_id, stop_reason="max_duration_timeout")
+            self._call_duration_watchdogs.pop(task_id, None)
+
+        self._call_duration_watchdogs[task_id] = asyncio.create_task(_duration_check())
+
+    def _cancel_call_duration_watchdog(self, task_id: str) -> None:
+        """Cancel the call duration watchdog for a task."""
+        watchdog = self._call_duration_watchdogs.pop(task_id, None)
+        if watchdog and not watchdog.done():
+            watchdog.cancel()
 
     async def schedule_agent_hangup(self, task_id: str, delay_seconds: float = 2.0) -> None:
         """Schedule a delayed hangup after the agent says goodbye.
