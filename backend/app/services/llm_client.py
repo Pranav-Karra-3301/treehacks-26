@@ -248,6 +248,14 @@ class LLMClient:
                 provider_tag="openai",
                 timeout_seconds=settings.LLM_STREAM_TIMEOUT_SECONDS,
             )
+        elif self._provider_name == "groq":
+            self._provider = OpenAICompatibleProvider(
+                base_url=settings.GROQ_BASE_URL,
+                api_key=settings.GROQ_API_KEY,
+                model=settings.GROQ_MODEL,
+                provider_tag="groq",
+                timeout_seconds=settings.LLM_STREAM_TIMEOUT_SECONDS,
+            )
         elif self._provider_name == "anthropic":
             self._provider = AnthropicProvider(
                 base_url=settings.ANTHROPIC_BASE_URL,

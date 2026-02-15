@@ -39,7 +39,14 @@ def _build_think_payload(task: Dict[str, Any], endpoint_url: str) -> Dict[str, A
         provider = settings.LLM_PROVIDER
 
     think_headers = {}
-    if provider == "openai":
+    if provider == "groq":
+        if not model:
+            model = settings.GROQ_MODEL
+        if not endpoint_url:
+            endpoint_url = _normalize_openai_endpoint(settings.GROQ_BASE_URL)
+        if settings.GROQ_API_KEY:
+            think_headers["Authorization"] = f"Bearer {settings.GROQ_API_KEY}"
+    elif provider == "openai":
         if not model:
             model = settings.OPENAI_MODEL
         if not endpoint_url:
@@ -74,7 +81,7 @@ def _build_think_payload(task: Dict[str, Any], endpoint_url: str) -> Dict[str, A
 
     think: Dict[str, Any] = {
         "provider": {
-            "type": "open_ai" if provider in {"openai", "local", "ollama"} else provider,
+            "type": "open_ai" if provider in {"openai", "local", "ollama", "groq"} else provider,
             "model": model,
             "temperature": settings.DEEPGRAM_VOICE_AGENT_THINK_TEMPERATURE,
         },
@@ -414,7 +421,23 @@ class DeepgramVoiceAgentSession:
             )
             return
 
+        if message_type == "Warning":
+            description = payload.get("description", "")
+            code = payload.get("code", "")
+            print(f"[DEEPGRAM WARNING] {code}: {description}")
+            log_event(
+                "deepgram",
+                "agent_warning",
+                task_id=self._task_id,
+                status="warning",
+                details={"code": code, "description": description, "payload": payload},
+            )
+            return
+
         if message_type == "Error":
+            description = payload.get("description", "")
+            code = payload.get("code", "")
+            print(f"[DEEPGRAM ERROR] {code}: {description}")
             log_event(
                 "deepgram",
                 "agent_error",
@@ -485,4 +508,3 @@ class DeepgramVoiceAgentSession:
             except Exception as exc:
                 log_event("deepgram", "function_call_response_error", task_id=self._task_id,
                           status="error", details={"error": f"{type(exc).__name__}: {exc}"})
-

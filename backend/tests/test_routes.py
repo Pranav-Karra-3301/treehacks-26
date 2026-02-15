@@ -29,6 +29,26 @@ def test_voice_readiness_endpoint(monkeypatch, client) -> None:
     assert body["exa_search_enabled"] is True
 
 
+def test_voice_readiness_endpoint_with_groq(monkeypatch, client) -> None:
+    monkeypatch.setattr(settings, "TWILIO_ACCOUNT_SID", "AC123")
+    monkeypatch.setattr(settings, "TWILIO_AUTH_TOKEN", "token")
+    monkeypatch.setattr(settings, "TWILIO_PHONE_NUMBER", "+15550000001")
+    monkeypatch.setattr(settings, "TWILIO_WEBHOOK_HOST", "https://webhooks.example")
+    monkeypatch.setattr(settings, "DEEPGRAM_API_KEY", "deepgram")
+    monkeypatch.setattr(settings, "LLM_PROVIDER", "groq")
+    monkeypatch.setattr(settings, "GROQ_API_KEY", "g-sk-test")
+    monkeypatch.setattr(settings, "DEEPGRAM_VOICE_AGENT_ENABLED", True)
+
+    response = client.get("/api/system/voice-readiness")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["twilio_configured"] is True
+    assert body["deepgram_configured"] is True
+    assert body["llm_ready"] is True
+    assert body["llm_provider"] == "groq"
+
+
 def test_research_route_disabled(monkeypatch, client) -> None:
     monkeypatch.setattr(settings, "EXA_SEARCH_ENABLED", False)
     monkeypatch.setattr(settings, "EXA_API_KEY", "")

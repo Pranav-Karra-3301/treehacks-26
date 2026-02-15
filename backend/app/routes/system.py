@@ -23,6 +23,8 @@ def get_routes(cache: CacheService | None = None):
             has_deepgram = bool(settings.DEEPGRAM_API_KEY)
             if settings.LLM_PROVIDER == "openai":
                 llm_ready = bool(settings.OPENAI_API_KEY)
+            elif settings.LLM_PROVIDER == "groq":
+                llm_ready = bool(settings.GROQ_API_KEY)
             elif settings.LLM_PROVIDER == "anthropic":
                 llm_ready = bool(settings.ANTHROPIC_API_KEY)
             elif settings.LLM_PROVIDER in ("local", "ollama"):

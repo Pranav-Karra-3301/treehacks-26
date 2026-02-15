@@ -187,6 +187,8 @@ def create_app(
                     if settings.LLM_PROVIDER in ("local", "ollama")
                     else settings.OPENAI_MODEL
                     if settings.LLM_PROVIDER == "openai"
+                    else settings.GROQ_MODEL
+                    if settings.LLM_PROVIDER == "groq"
                     else settings.ANTHROPIC_MODEL
                 ),
                 "llm_base_url": (
@@ -194,6 +196,8 @@ def create_app(
                     if settings.LLM_PROVIDER in ("local", "ollama")
                     else settings.OPENAI_BASE_URL
                     if settings.LLM_PROVIDER == "openai"
+                    else settings.GROQ_BASE_URL
+                    if settings.LLM_PROVIDER == "groq"
                     else settings.ANTHROPIC_BASE_URL
                 ),
                 "llm_max_tokens_voice": settings.LLM_MAX_TOKENS_VOICE,

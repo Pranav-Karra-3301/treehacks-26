@@ -19,11 +19,13 @@ Set `LLM_PROVIDER`:
 
 - `LLM_PROVIDER=openai` for OpenAI
 - `LLM_PROVIDER=anthropic` for Claude
+- `LLM_PROVIDER=groq` for Groq (OpenAI-compatible endpoint)
 - `LLM_PROVIDER=local` for DGX/vLLM
 
 Required keys per provider:
 
 - OpenAI: `OPENAI_API_KEY`
+- Groq: `GROQ_API_KEY`
 - Claude: `ANTHROPIC_API_KEY`
 - Local: `VLLM_BASE_URL` and `VLLM_MODEL`
 

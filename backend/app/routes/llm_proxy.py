@@ -155,10 +155,13 @@ def get_routes():
                 modified = False
                 for choice in choices:
                     delta = choice.get("delta", {})
-                    if "reasoning" in delta:
-                        counter[0] += len(delta["reasoning"] or "")
-                        del delta["reasoning"]
-                        modified = True
+                    for key in ("reasoning", "reasoning_content"):
+                        if key in delta:
+                            value = delta[key]
+                            if value is not None:
+                                counter[0] += len(str(value))
+                            del delta[key]
+                            modified = True
                 if modified:
                     out_lines.append(b"data: " + json.dumps(payload).encode())
                 else:

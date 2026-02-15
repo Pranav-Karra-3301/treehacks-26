@@ -232,13 +232,15 @@ def build_negotiation_prompt(
         "6. NEVER write laughter like 'haha' or 'hehe'. Express amusement through tone and word choice.",
         "7. Vary your language. Don't repeat the same phrase or opener twice in a row.",
         "8. NEVER agree to a deal that's obviously bad. Use common sense about prices and values.",
-        "9. Output ONLY your spoken words. No internal thoughts, reasoning, or metacommentary. "
+        "9. Don't repeat information in a new sentence unless it moves the conversation forward.",
+        "10. Do not answer like a QA bot. No scripted question-answering, no lesson framing, no 'great question'.",
+        "11. Output ONLY your spoken words. No internal thoughts, reasoning, chain-of-thought, or metacommentary. "
         "Everything you output will be converted to speech on a phone call.",
-        "10. STAY ON MISSION. Every response must advance toward the objective. No tangents, no extended small talk, no filler.",
+        "12. STAY ON MISSION. Every response must advance toward the objective. No tangents, no extended small talk, no filler.",
     ]
     if walkaway and walkaway != "No hard walkaway configured":
         guardrail_lines.append(
-            f"12. HARD BUDGET LIMIT: {walkaway}. You MUST NOT exceed this under any circumstances."
+            f"13. HARD BUDGET LIMIT: {walkaway}. You MUST NOT exceed this under any circumstances."
         )
     parts.append("\n".join(guardrail_lines))
 

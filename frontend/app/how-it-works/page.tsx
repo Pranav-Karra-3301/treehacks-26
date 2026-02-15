@@ -55,9 +55,11 @@ const llmProviderChart = `
 graph LR
   Config[LLM_PROVIDER] --> OpenAI[OpenAI gpt-4o-mini]
   Config --> Anthropic[Anthropic Claude Sonnet]
+  Config --> Groq[Groq gpt-oss-120b]
   Config --> Local[Ollama qwen3:30b-a3b]
   OpenAI --> Stream[Streaming Response]
   Anthropic --> Stream
+  Groq --> Stream
   Local --> Stream
 `;
 
@@ -145,7 +147,7 @@ const sections: Section[] = [
     label: 'LLM Providers',
     title: 'Multi-provider',
     titleAccent: 'LLM support.',
-    description: <>Switch between OpenAI, Anthropic, or a fully local setup with a single environment variable. In production, kiru runs on a <HL>local Asus ROG GX10 workstation</HL> with <HL>Ollama serving qwen3:30b-a3b</HL> for zero API costs and full privacy.</>,
+    description: <>Switch between OpenAI, Anthropic, Groq, or a fully local setup with a single environment variable. In production, kiru runs on a <HL>local Asus ROG GX10 workstation</HL> with <HL>Ollama serving qwen3:30b-a3b</HL> for zero API costs and full privacy.</>,
     chart: llmProviderChart,
     bg: 'bg-white',
     highlightLabel: 'Ollama',
