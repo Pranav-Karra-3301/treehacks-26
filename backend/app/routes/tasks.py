@@ -286,7 +286,11 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
             return Response(
                 content=raw_data,
                 media_type="audio/wav",
-                headers={"Content-Disposition": f'inline; filename="{filename}"'},
+                headers={
+                    "Content-Disposition": f'inline; filename="{filename}"',
+                    "Content-Length": str(len(raw_data)),
+                    "Accept-Ranges": "bytes",
+                },
             )
 
     @router.get("/{task_id}/recording-metadata")
@@ -429,32 +433,36 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
             import asyncio as _asyncio
 
             async def _prepare_call(task_id: str) -> dict[str, object] | None:
-                row = store.get_task(task_id)
-                if not row:
+                try:
+                    row = store.get_task(task_id)
+                    if not row:
+                        return None
+
+                    transcript_raw = store.get_artifact(task_id, "transcript") or []
+                    transcript: List[TranscriptTurn] = [TranscriptTurn(**entry) for entry in transcript_raw]
+
+                    analysis = store.get_artifact(task_id, "analysis")
+                    if not analysis:
+                        analysis = await _summarize_transcript(transcript, row)
+                        store.save_artifact(task_id, "analysis", analysis)
+
+                    return {
+                        "task_id": task_id,
+                        "target_phone": row.get("target_phone", ""),
+                        "target_name": row.get("target_name"),
+                        "target_url": row.get("target_url"),
+                        "target_source": row.get("target_source"),
+                        "target_snippet": row.get("target_snippet"),
+                        "location": row.get("location"),
+                        "status": row.get("status", "unknown"),
+                        "outcome": row.get("outcome", (analysis or {}).get("outcome", "unknown")),
+                        "duration_seconds": row.get("duration_seconds", 0),
+                        "analysis": analysis,
+                        "transcript_excerpt": transcript_raw[-40:],
+                    }
+                except Exception:
+                    # Individual call preparation failure should not crash entire multi-analysis
                     return None
-
-                transcript_raw = store.get_artifact(task_id, "transcript") or []
-                transcript: List[TranscriptTurn] = [TranscriptTurn(**entry) for entry in transcript_raw]
-
-                analysis = store.get_artifact(task_id, "analysis")
-                if not analysis:
-                    analysis = await _summarize_transcript(transcript, row)
-                    store.save_artifact(task_id, "analysis", analysis)
-
-                return {
-                    "task_id": task_id,
-                    "target_phone": row.get("target_phone", ""),
-                    "target_name": row.get("target_name"),
-                    "target_url": row.get("target_url"),
-                    "target_source": row.get("target_source"),
-                    "target_snippet": row.get("target_snippet"),
-                    "location": row.get("location"),
-                    "status": row.get("status", "unknown"),
-                    "outcome": row.get("outcome", (analysis or {}).get("outcome", "unknown")),
-                    "duration_seconds": row.get("duration_seconds", 0),
-                    "analysis": analysis,
-                    "transcript_excerpt": transcript_raw[-40:],
-                }
 
             prepared = await _asyncio.gather(*[_prepare_call(tid) for tid in task_ids])
             calls: List[dict[str, object]] = [c for c in prepared if c is not None]

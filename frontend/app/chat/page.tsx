@@ -1253,11 +1253,9 @@ export default function ChatPage() {
     setCallStatus('ended');
     setPhase('ended');
     // Show loading state immediately so users see something while summary loads
-    if (multiSummaryState === 'idle') {
-      setMultiSummaryState('loading');
-    }
+    setMultiSummaryState('loading');
     refreshPastTasks();
-  }, [multiSummaryState, refreshPastTasks]);
+  }, [refreshPastTasks]);
 
   useEffect(() => {
     Object.entries(multiCalls).forEach(([phone, state]) => {
@@ -1281,7 +1279,9 @@ export default function ChatPage() {
     const taskIds = states.map((state) => state.taskId).filter(Boolean);
     if (taskIds.length === 0) return;
     if (multiSummaryState === 'ready' && multiSummary) return;
-    if (multiSummaryState === 'loading') return;
+    // Don't bail on 'loading' — maybeFinalizeMultiCalls sets loading eagerly
+    // so we need to actually fire the request. Use the ref to deduplicate.
+    if (activeSummaryRequestRef.current) return;
 
     let cancelled = false;
     // Short delay — backend generates missing per-call analyses in parallel
@@ -2995,6 +2995,14 @@ export default function ChatPage() {
                     Send
                   </button>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => { void handleEndCall(); }}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-[11.5px] font-medium text-red-600 hover:bg-red-100 hover:text-red-700 transition-all duration-150 shadow-soft"
+                >
+                  <Phone size={12} className="rotate-[135deg]" />
+                  End Call
+                </button>
               </div>
             ) : null}
             <div className="flex items-end gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-2.5 shadow-soft transition-all duration-200 focus-within:border-gray-300 focus-within:shadow-card">

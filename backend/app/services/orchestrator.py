@@ -416,17 +416,26 @@ class CallOrchestrator:
         self._cancel_call_duration_watchdog(task_id)
 
         async def _duration_check() -> None:
-            await asyncio.sleep(self._max_call_duration_seconds)
-            task = self._store.get_task(task_id)
-            status = str((task or {}).get("status", ""))
-            if status in {"ended", "failed"}:
-                return
-            log_event("orchestrator", "call_duration_auto_hangup", task_id=task_id,
-                      details={"max_seconds": self._max_call_duration_seconds})
-            await self.stop_task_call(task_id, stop_reason="max_duration_timeout")
-            self._call_duration_watchdogs.pop(task_id, None)
+            try:
+                await asyncio.sleep(self._max_call_duration_seconds)
+                task = self._store.get_task(task_id)
+                status = str((task or {}).get("status", ""))
+                if status in {"ended", "failed"}:
+                    return
+                log_event("orchestrator", "call_duration_auto_hangup", task_id=task_id,
+                          details={"max_seconds": self._max_call_duration_seconds})
+                await self.stop_task_call(task_id, stop_reason="max_duration_timeout")
+            except asyncio.CancelledError:
+                pass  # Normal cancellation when call ends before timeout
+            except Exception as exc:
+                log_event("orchestrator", "duration_watchdog_error", task_id=task_id,
+                          status="error", details={"error": f"{type(exc).__name__}: {exc}"})
+            finally:
+                self._call_duration_watchdogs.pop(task_id, None)
 
         self._call_duration_watchdogs[task_id] = asyncio.create_task(_duration_check())
+        log_event("orchestrator", "duration_watchdog_started", task_id=task_id,
+                  details={"max_seconds": self._max_call_duration_seconds})
 
     def _cancel_call_duration_watchdog(self, task_id: str) -> None:
         """Cancel the call duration watchdog for a task."""
