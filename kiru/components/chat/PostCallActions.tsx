@@ -1,6 +1,6 @@
 import { View, Text, Pressable } from 'react-native';
-import { Phone, RotateCcw } from 'lucide-react-native';
-import { colors, fonts } from '../../lib/theme';
+import { Phone, Plus } from 'lucide-react-native';
+import { colors, fonts, shadows } from '../../lib/theme';
 import * as Haptics from 'expo-haptics';
 
 type Props = {
@@ -15,8 +15,8 @@ export default function PostCallActions({ canCallAgain, onCallAgain, onNewNegoti
       style={{
         flexDirection: 'row',
         justifyContent: 'center',
-        gap: 10,
-        paddingTop: 12,
+        gap: 12,
+        paddingTop: 16,
         paddingBottom: 32,
       }}
     >
@@ -26,7 +26,7 @@ export default function PostCallActions({ canCallAgain, onCallAgain, onNewNegoti
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             onCallAgain();
           }}
-          style={{
+          style={({ pressed }) => ({
             flexDirection: 'row',
             alignItems: 'center',
             gap: 6,
@@ -35,11 +35,13 @@ export default function PostCallActions({ canCallAgain, onCallAgain, onNewNegoti
             borderColor: colors.gray200,
             backgroundColor: colors.white,
             paddingHorizontal: 20,
-            paddingVertical: 10,
-          }}
+            paddingVertical: 11,
+            opacity: pressed ? 0.7 : 1,
+            ...shadows.soft,
+          })}
         >
-          <Phone size={13} color={colors.gray700} />
-          <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.gray700 }}>
+          <Phone size={13} color={colors.gray700} strokeWidth={2} />
+          <Text style={{ fontFamily: fonts.medium, fontSize: 14, color: colors.gray700 }}>
             Call again
           </Text>
         </Pressable>
@@ -49,18 +51,20 @@ export default function PostCallActions({ canCallAgain, onCallAgain, onNewNegoti
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           onNewNegotiation();
         }}
-        style={{
+        style={({ pressed }) => ({
           flexDirection: 'row',
           alignItems: 'center',
           gap: 6,
           borderRadius: 99,
-          backgroundColor: colors.gray900,
+          backgroundColor: colors.gray950,
           paddingHorizontal: 20,
-          paddingVertical: 10,
-        }}
+          paddingVertical: 11,
+          opacity: pressed ? 0.8 : 1,
+          ...shadows.card,
+        })}
       >
-        <RotateCcw size={13} color="#fff" />
-        <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: '#fff' }}>
+        <Plus size={14} color="#fff" strokeWidth={2.5} />
+        <Text style={{ fontFamily: fonts.medium, fontSize: 14, color: '#fff' }}>
           New negotiation
         </Text>
       </Pressable>

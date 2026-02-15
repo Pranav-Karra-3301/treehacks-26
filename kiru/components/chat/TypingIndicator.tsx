@@ -8,7 +8,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useEffect } from 'react';
-import { colors } from '../../lib/theme';
+import { colors, shadows } from '../../lib/theme';
 
 function BounceDot({ index }: { index: number }) {
   const opacity = useSharedValue(0.3);
@@ -52,16 +52,17 @@ export default function TypingIndicator() {
       <View
         style={{
           backgroundColor: colors.white,
-          borderRadius: 18,
-          borderBottomLeftRadius: 4,
+          borderRadius: 20,
+          borderBottomLeftRadius: 6,
           borderWidth: 0.5,
           borderColor: 'rgba(0,0,0,0.06)',
-          paddingHorizontal: 14,
-          paddingVertical: 12,
+          paddingHorizontal: 16,
+          paddingVertical: 14,
           alignSelf: 'flex-start',
+          ...shadows.soft,
         }}
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
           {[0, 1, 2].map((i) => (
             <BounceDot key={i} index={i} />
           ))}

@@ -16,6 +16,10 @@ export default function RootLayout() {
     Inter_700Bold: require('@expo-google-fonts/inter/700Bold/Inter_700Bold.ttf'),
     InstrumentSerif_400Regular: require('@expo-google-fonts/instrument-serif/400Regular/InstrumentSerif_400Regular.ttf'),
     InstrumentSerif_400Regular_Italic: require('@expo-google-fonts/instrument-serif/400Regular_Italic/InstrumentSerif_400Regular_Italic.ttf'),
+    MartinaPl_Regular: require('../assets/fonts/MARTINA_PLANTIJN.ttf'),
+    MartinaPl_Italic: require('../assets/fonts/MARTINA_PLANTIJN-italic.ttf'),
+    MartinaPl_Bold: require('../assets/fonts/MARTINA_PLANTIJN-bold.ttf'),
+    MartinaPl_BoldItalic: require('../assets/fonts/MARTINA_PLANTIJN-bold-italic.ttf'),
   });
 
   const onLayoutReady = useCallback(async () => {

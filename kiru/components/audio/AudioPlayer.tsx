@@ -3,7 +3,7 @@ import Slider from '@react-native-community/slider';
 import { Play, Pause, Volume2 } from 'lucide-react-native';
 import { getAudioUrl } from '../../lib/api';
 import { useAudioPlayer } from '../../hooks/useAudioPlayer';
-import { colors, fonts } from '../../lib/theme';
+import { colors, fonts, shadows } from '../../lib/theme';
 import * as Haptics from 'expo-haptics';
 
 function formatTime(s: number): string {
@@ -20,15 +20,16 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
     return (
       <View
         style={{
-          borderRadius: 14,
-          backgroundColor: colors.gray50,
+          borderRadius: 16,
+          backgroundColor: colors.white,
           borderWidth: 0.5,
           borderColor: 'rgba(0,0,0,0.06)',
-          paddingHorizontal: 16,
-          paddingVertical: 14,
+          paddingHorizontal: 18,
+          paddingVertical: 16,
+          ...shadows.soft,
         }}
       >
-        <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.gray400 }}>
+        <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.gray400 }}>
           Recording unavailable
         </Text>
       </View>
@@ -38,35 +39,36 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
   return (
     <View
       style={{
-        borderRadius: 14,
-        backgroundColor: colors.gray50,
+        borderRadius: 16,
+        backgroundColor: colors.white,
         borderWidth: 0.5,
         borderColor: 'rgba(0,0,0,0.06)',
-        paddingHorizontal: 14,
-        paddingVertical: 12,
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+        ...shadows.soft,
       }}
     >
-      {/* Play button + slider row — vertically centered */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+      {/* Play button + slider row */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
         <Pressable
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            console.log('[AudioPlayer] togglePlay, src:', src);
             togglePlay();
           }}
-          style={{
-            height: 40,
-            width: 40,
-            borderRadius: 20,
-            backgroundColor: colors.gray900,
+          style={({ pressed }) => ({
+            height: 42,
+            width: 42,
+            borderRadius: 21,
+            backgroundColor: colors.gray950,
             alignItems: 'center',
             justifyContent: 'center',
-          }}
+            opacity: pressed ? 0.8 : 1,
+          })}
         >
           {playing ? (
-            <Pause size={14} color="#fff" />
+            <Pause size={15} color="#fff" />
           ) : (
-            <Play size={14} color="#fff" style={{ marginLeft: 2 }} />
+            <Play size={15} color="#fff" style={{ marginLeft: 2 }} />
           )}
         </Pressable>
 
@@ -90,14 +92,14 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
-          marginTop: 6,
-          paddingLeft: 52,
+          marginTop: 8,
+          paddingLeft: 56,
         }}
       >
         <Text
           style={{
             fontFamily: fonts.regular,
-            fontSize: 10,
+            fontSize: 11,
             color: colors.gray400,
             fontVariant: ['tabular-nums'],
           }}
@@ -105,15 +107,15 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
           {formatTime(position)}
         </Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-          <Volume2 size={10} color={colors.gray400} />
-          <Text style={{ fontFamily: fonts.medium, fontSize: 10, color: colors.gray400 }}>
+          <Volume2 size={11} color={colors.gray400} />
+          <Text style={{ fontFamily: fonts.medium, fontSize: 11, color: colors.gray400 }}>
             Call Recording
           </Text>
         </View>
         <Text
           style={{
             fontFamily: fonts.regular,
-            fontSize: 10,
+            fontSize: 11,
             color: colors.gray400,
             fontVariant: ['tabular-nums'],
           }}
