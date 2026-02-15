@@ -265,8 +265,8 @@ export default function LandingPage() {
     <div className="min-h-screen bg-white">
 
       {/* ── Nav ─────────────────────────────────── */}
-      <div className="sticky top-0 z-50 flex justify-center px-4 pt-3 mix-blend-difference">
-        <nav className="w-full max-w-5xl rounded-2xl bg-white backdrop-blur-xl">
+      <div className="sticky top-0 z-50 flex justify-center px-4 pt-3">
+        <nav className="w-full max-w-5xl rounded-2xl bg-white/80 backdrop-blur-xl border border-gray-200/60 shadow-soft">
           <div className="flex items-center justify-between px-6 h-14">
             <Link href="/" className="tracking-tight text-gray-950">
               <span className="font-serif italic text-[28px]">kiru</span>
