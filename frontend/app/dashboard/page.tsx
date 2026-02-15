@@ -118,10 +118,15 @@ export default function DashboardPage() {
     return tasks.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   };
 
-  const { data: calls = [], isLoading: loading } = useSWR<TaskSummary[]>('dashboard-calls', fetcher, {
+  const { data: calls = [], isLoading: loading, mutate } = useSWR<TaskSummary[]>('dashboard-calls', fetcher, {
     refreshInterval: 30_000,
     revalidateOnFocus: true,
   });
+
+  function handleCallStopped() {
+    // Revalidate after a short delay to let backend finish ending the call
+    setTimeout(() => { void mutate(); }, 1500);
+  }
 
   // Detail drawer
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -252,7 +257,7 @@ export default function DashboardPage() {
         ) : (
           <div className="space-y-2">
             {calls.map((call, i) => (
-              <CallRow key={call.id} call={call} index={i} onSelect={openDetail} />
+              <CallRow key={call.id} call={call} index={i} onSelect={openDetail} onStopped={handleCallStopped} />
             ))}
           </div>
         )}
@@ -277,7 +282,7 @@ export default function DashboardPage() {
 
 // ─── Call Row ───────────────────────────────────────────────────────────────────
 
-function CallRow({ call, index, onSelect }: { call: TaskSummary; index: number; onSelect: (id: string) => void }) {
+function CallRow({ call, index, onSelect, onStopped }: { call: TaskSummary; index: number; onSelect: (id: string) => void; onStopped?: () => void }) {
   const oc = outcomeConfig[getOutcome(call.outcome)];
   const dot = statusDot[call.status ?? ''] ?? 'bg-gray-300';
   const isActive = call.status === 'active' || call.status === 'dialing' || call.status === 'connected';
@@ -288,6 +293,7 @@ function CallRow({ call, index, onSelect }: { call: TaskSummary; index: number; 
     setStopping(true);
     try {
       await stopCall(call.id);
+      onStopped?.();
     } catch {
       // best effort
     } finally {
