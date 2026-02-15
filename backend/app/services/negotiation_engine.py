@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.models.schemas import CallOutcome, TranscriptTurn
-from app.services.llm_client import LLMClient
+from app.services.llm_client import LLMClient, OpenAICompatibleProvider
 from app.services.prompt_builder import build_negotiation_prompt
 from app.core.config import settings
 from app.core.telemetry import log_event, timed_step
@@ -93,6 +93,16 @@ Rules:
 class NegotiationEngine:
     def __init__(self, llm_client: LLMClient) -> None:
         self._llm = llm_client
+        # Dedicated fast OpenAI model for post-call analysis
+        self._analysis_llm: OpenAICompatibleProvider | None = None
+        if settings.OPENAI_API_KEY:
+            self._analysis_llm = OpenAICompatibleProvider(
+                base_url=settings.OPENAI_BASE_URL,
+                api_key=settings.OPENAI_API_KEY,
+                model=settings.OPENAI_ANALYSIS_MODEL,
+                provider_tag="openai_analysis",
+                timeout_seconds=settings.LLM_STREAM_TIMEOUT_SECONDS,
+            )
 
     def build_system_prompt(self, task: Dict[str, Any], turn_count: int) -> str:
         return build_negotiation_prompt(task, turn_count=turn_count, include_phase=True)
@@ -232,7 +242,8 @@ class NegotiationEngine:
         ]
 
         generated = []
-        async for token in self._llm.stream_completion(
+        provider = self._analysis_llm or self._llm
+        async for token in provider.stream_completion(
             messages, max_tokens=settings.LLM_MAX_TOKENS_ANALYSIS
         ):
             generated.append(token)
@@ -339,7 +350,8 @@ class NegotiationEngine:
 
         try:
             generated: List[str] = []
-            async for token in self._llm.stream_completion(
+            provider = self._analysis_llm or self._llm
+            async for token in provider.stream_completion(
                 messages,
                 max_tokens=max(settings.LLM_MAX_TOKENS_ANALYSIS, 1400),
             ):
