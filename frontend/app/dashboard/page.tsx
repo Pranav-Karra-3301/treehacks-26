@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import { motion, AnimatePresence, useInView } from 'framer-motion';
@@ -20,10 +20,11 @@ import {
   Play,
   Target,
   ChevronRight,
+  Trash2,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { SupabaseCall, SupabaseCallArtifact, SupabaseAnalysis, TranscriptTurn } from '../../lib/supabase';
-import { getAudioUrl } from '../../lib/api';
+import { getAudioUrl, deleteTask } from '../../lib/api';
 
 // ─── Design tokens ──────────────────────────────────────────────────────────────
 
@@ -126,7 +127,7 @@ export default function DashboardPage() {
     return data ?? [];
   };
 
-  const { data: calls = [], isLoading: loading } = useSWR<SupabaseCall[]>('dashboard-calls', fetcher, {
+  const { data: calls = [], isLoading: loading, mutate } = useSWR<SupabaseCall[]>('dashboard-calls', fetcher, {
     refreshInterval: 30_000,
     revalidateOnFocus: true,
   });
@@ -165,6 +166,13 @@ export default function DashboardPage() {
     setSelectedId(null);
     setDetailData({});
   }
+
+  const handleDelete = useCallback(async (taskId: string) => {
+    await deleteTask(taskId);
+    setSelectedId(null);
+    setDetailData({});
+    mutate();
+  }, [mutate]);
 
   // ── Stats ─────────────────────────────────────────────────────────────────
 
@@ -277,6 +285,7 @@ export default function DashboardPage() {
             activeTab={detailTab}
             setActiveTab={setDetailTab}
             onClose={closeDetail}
+            onDelete={handleDelete}
           />
         ) : null}
       </AnimatePresence>
@@ -336,6 +345,7 @@ function DetailDrawer({
   activeTab,
   setActiveTab,
   onClose,
+  onDelete,
 }: {
   taskId: string;
   data: DetailData;
@@ -343,9 +353,12 @@ function DetailDrawer({
   activeTab: 'transcript' | 'analysis' | 'recording';
   setActiveTab: (t: 'transcript' | 'analysis' | 'recording') => void;
   onClose: () => void;
+  onDelete: (taskId: string) => Promise<void>;
 }) {
   const { call, analysis, transcript } = data;
   const oc = call ? outcomeConfig[getOutcome(call.outcome)] : outcomeConfig.unknown;
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const detailTabs: { key: typeof activeTab; label: string; icon: typeof MessageSquare; count?: number }[] = [
     { key: 'transcript', label: 'Transcript', icon: MessageSquare, count: transcript?.length },
@@ -378,9 +391,39 @@ function DetailDrawer({
               <Phone size={14} className="text-gray-400" />
               <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Call Detail</span>
             </div>
-            <button onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
-              <X size={14} />
-            </button>
+            <div className="flex items-center gap-1">
+              {confirmDelete ? (
+                <div className="flex items-center gap-1.5 mr-1">
+                  <button
+                    onClick={async () => {
+                      setDeleting(true);
+                      await onDelete(taskId);
+                    }}
+                    disabled={deleting}
+                    className="rounded-lg px-2.5 py-1 text-[11px] font-medium bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50"
+                  >
+                    {deleting ? 'Deleting...' : 'Confirm'}
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete(false)}
+                    className="rounded-lg px-2 py-1 text-[11px] font-medium text-gray-500 hover:bg-gray-100 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                  title="Delete call"
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
+              <button onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
+                <X size={14} />
+              </button>
+            </div>
           </div>
 
           {call ? (
