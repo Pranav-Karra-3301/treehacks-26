@@ -1,11 +1,12 @@
 fastapi==0.129.0
 uvicorn[standard]==0.40.0
 pydantic==2.12.5
-httpx==0.28.1
+httpx>=0.26.0,<0.28.0
 aiofiles==25.1.0
 python-multipart==0.0.22
 python-dotenv==1.2.1
-websockets==16.0
+websockets>=11.0,<14.0
 redis==7.1.1
+supabase>=2.10.0
 brightdata-sdk==2.1.1
 pytest==9.0.2

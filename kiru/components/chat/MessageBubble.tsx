@@ -1,10 +1,12 @@
+import { memo } from 'react';
 import { View, Text } from 'react-native';
 import type { Message } from '../../hooks/useChatMachine';
 import type { BusinessResult } from '../../lib/types';
-import { colors, fonts, shadows } from '../../lib/theme';
+import { colors, fonts } from '../../lib/theme';
 import AnalysisCard from '../analysis/AnalysisCard';
 import AudioPlayer from '../audio/AudioPlayer';
 import SearchResultCards from '../search/SearchResultCards';
+import TypewriterText from './TypewriterText';
 
 type Props = {
   message: Message;
@@ -12,7 +14,7 @@ type Props = {
   onSkip?: () => void;
 };
 
-export default function MessageBubble({ message, onCall, onSkip }: Props) {
+export default memo(function MessageBubble({ message, onCall, onSkip }: Props) {
   if (message.role === 'analysis' && message.analysisData) {
     return <AnalysisCard analysis={message.analysisData} />;
   }
@@ -82,6 +84,7 @@ export default function MessageBubble({ message, onCall, onSkip }: Props) {
     <View style={{ paddingRight: 56 }}>
       <View
         style={{
+          alignSelf: 'flex-start',
           backgroundColor: colors.white,
           borderRadius: 18,
           borderBottomLeftRadius: 4,
@@ -91,17 +94,17 @@ export default function MessageBubble({ message, onCall, onSkip }: Props) {
           paddingVertical: 10,
         }}
       >
-        <Text
+        <TypewriterText
+          text={message.text}
+          animate={message.animate !== false}
           style={{
             fontFamily: fonts.regular,
             fontSize: 15,
             lineHeight: 21,
             color: colors.gray900,
           }}
-        >
-          {message.text}
-        </Text>
+        />
       </View>
     </View>
   );
-}
+});

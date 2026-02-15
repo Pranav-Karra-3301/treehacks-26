@@ -14,7 +14,9 @@ from app.services.orchestrator import CallOrchestrator
 from app.services.cache import CacheService
 from app.services.session_manager import SessionManager
 from app.services.storage import DataStore
+from app.services.supabase_store import SupabaseStore
 from app.services.ws_manager import ConnectionManager
+from app.routes import chat_sessions as chat_session_routes
 from app.routes import llm_proxy as llm_proxy_routes
 from app.routes import research as research_routes
 from app.routes import system as system_routes
@@ -52,7 +54,12 @@ def create_app(
 
     configure_logging()
 
-    local_store = store or DataStore(data_root=data_root, sqlite_path=sqlite_path)
+    if store:
+        local_store = store
+    elif settings.SUPABASE_URL and (settings.SUPABASE_SERVICE_ROLE_KEY or settings.SUPABASE_ANON_KEY):
+        local_store = SupabaseStore()
+    else:
+        local_store = DataStore(data_root=data_root, sqlite_path=sqlite_path)
     local_session_manager = session_manager or SessionManager()
     local_ws_manager = ws_manager or ConnectionManager()
     local_cache = cache or CacheService(
@@ -78,6 +85,7 @@ def create_app(
     app.state.cache = local_cache
 
     app.include_router(task_routes.get_routes(local_store, local_orchestrator, local_cache))
+    app.include_router(chat_session_routes.get_routes(local_store))
     app.include_router(ws_routes.get_routes(local_ws_manager, local_orchestrator))
     app.include_router(twilio_routes.get_routes(local_orchestrator, local_ws_manager))
     app.include_router(telemetry_routes.get_routes())
@@ -174,6 +182,40 @@ def create_app(
         with timed_step("http", "healthcheck"):
             return {"status": "ok"}
 
+    # On startup, mark any stale active/dialing calls as ended.
+    # When Cloud Run recycles the container mid-call, those calls never get
+    # properly ended — their status stays stuck as 'active' in the DB forever.
+    @app.on_event("startup")
+    async def cleanup_stale_calls() -> None:
+        try:
+            count = local_store.mark_stale_calls_ended()
+            if count:
+                log_event(
+                    "system",
+                    "cleanup_stale_calls",
+                    details={"stale_calls_ended": count},
+                )
+        except Exception as exc:
+            log_event(
+                "system",
+                "cleanup_stale_calls",
+                status="error",
+                details={"error": str(exc)},
+            )
+
+    # Ensure Supabase Storage audio bucket exists
+    @app.on_event("startup")
+    async def ensure_audio_bucket() -> None:
+        try:
+            local_store.ensure_audio_bucket()
+        except Exception as exc:
+            log_event(
+                "system",
+                "ensure_audio_bucket",
+                status="warning",
+                details={"error": str(exc)},
+            )
+
     # Startup telemetry — dump full config so we can trace issues back to settings
     @app.on_event("startup")
     async def startup_telemetry() -> None:
@@ -209,6 +251,8 @@ def create_app(
                 "deepgram_speak_model": settings.DEEPGRAM_VOICE_AGENT_SPEAK_MODEL,
                 "deepgram_think_provider": settings.DEEPGRAM_VOICE_AGENT_THINK_PROVIDER or "(inherit from LLM_PROVIDER)",
                 "deepgram_think_model": settings.DEEPGRAM_VOICE_AGENT_THINK_MODEL or "(inherit from provider)",
+                "deepgram_think_provider_effective": "openai",
+                "deepgram_think_model_effective": settings.DEEPGRAM_VOICE_AGENT_THINK_MODEL or settings.OPENAI_MODEL,
                 "twilio_configured": bool(settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN),
                 "twilio_webhook_host": settings.TWILIO_WEBHOOK_HOST or "(not set)",
                 "cache_enabled": settings.CACHE_ENABLED,

@@ -1,4 +1,13 @@
-export type CallStatus = 'pending' | 'dialing' | 'active' | 'ended' | 'failed';
+export type CallStatus =
+  | 'pending'
+  | 'dialing'
+  | 'connected'
+  | 'media_connected'
+  | 'active'
+  | 'disconnected'
+  | 'ended'
+  | 'failed'
+  | 'mark';
 export type CallOutcome = 'unknown' | 'success' | 'partial' | 'failed' | 'walkaway';
 export type NegotiationStyle = 'collaborative' | 'assertive' | 'empathetic';
 
@@ -13,6 +22,8 @@ export type TaskSummary = {
   task_type: string;
   target_phone: string;
   objective: string;
+  run_id?: string | null;
+  run_mode?: 'test' | 'real' | null;
   status: CallStatus;
   outcome: CallOutcome;
   duration_seconds: number;
@@ -58,6 +69,8 @@ export type AnalysisPayload = {
 
 export type VoiceReadiness = {
   twilio_configured: boolean;
+  twilio_webhook_public?: boolean;
+  twilio_webhook_reason?: string | null;
   deepgram_configured: boolean;
   llm_ready: boolean;
   llm_provider: string;
@@ -101,7 +114,19 @@ export type ActionResponse = {
 
 // Discriminated union for WebSocket events
 export type CallEvent =
-  | { type: 'call_status'; data: { status: CallStatus }; timestamp?: string }
+  | {
+      type: 'call_status';
+      data: {
+        status: CallStatus;
+        action?: string;
+        digits?: string;
+        error?: string;
+        target_phone?: string;
+        stream_sid?: string;
+        session_id?: string;
+      };
+      timestamp?: string;
+    }
   | { type: 'transcript_update'; data: { speaker: 'caller' | 'agent'; content: string; created_at?: string }; timestamp?: string }
   | { type: 'agent_thinking'; data: { delta: string }; timestamp?: string }
   | { type: 'strategy_update'; data: { strategy: string; tactics?: string[] }; timestamp?: string }
@@ -111,4 +136,18 @@ export type CallEvent =
 export type TranscriptResponse = {
   task_id: string;
   turns: TranscriptEntry[];
+  count: number;
+};
+
+export type ChatSessionMode = 'single' | 'concurrent';
+
+export type ChatSessionRecord = {
+  session_id: string;
+  mode: ChatSessionMode;
+  revision: number;
+  run_id?: string | null;
+  task_ids: string[];
+  data: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
 };

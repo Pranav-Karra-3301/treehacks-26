@@ -73,14 +73,15 @@ class ExaSearchService:
         if limit <= 0:
             limit = 1
 
+        # Enhance query to find business contact pages with phone numbers
+        enhanced_query = f"{trimmed_query} phone number contact"
         payload = {
-            "query": trimmed_query,
+            "query": enhanced_query,
             "type": settings.EXA_SEARCH_TYPE,
             "numResults": limit,
             "contents": {
-                "text": {"maxCharacters": 5000},
-                "summary": True,
-                "highlights": True,
+                "text": {"maxCharacters": 3000},
+                "highlights": {"numSentences": 5},
             },
             "includeDomains": [],
             "excludeDomains": [],
@@ -96,7 +97,7 @@ class ExaSearchService:
             details={"query": trimmed_query, "limit": limit},
         ):
             try:
-                async with httpx.AsyncClient(timeout=15.0, headers=headers) as client:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(8.0, connect=3.0), headers=headers) as client:
                     resp = await client.post(settings.EXA_SEARCH_URL, json=payload)
                     resp.raise_for_status()
                     data = resp.json()
@@ -148,8 +149,11 @@ class ExaSearchService:
                 continue
             text_content = item.get("text") or item.get("snippet") or item.get("summary") or ""
             highlights = item.get("highlights") or []
-            phone_numbers = extract_phone_numbers(text_content)
-            # Also try to extract from highlights
+            title = item.get("title") or ""
+            url = item.get("url") or ""
+            # Extract phone numbers from all available text
+            all_text = f"{title}\n{url}\n{text_content}"
+            phone_numbers = extract_phone_numbers(all_text)
             for h in highlights:
                 for p in extract_phone_numbers(h):
                     if p not in phone_numbers:

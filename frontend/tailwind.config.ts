@@ -41,8 +41,13 @@ const config: Config = {
         'aurora-drift': 'auroraDrift 12s ease-in-out infinite alternate',
         'aurora-drift-2': 'auroraDrift2 10s ease-in-out infinite alternate-reverse',
         'marquee': 'marquee 30s linear infinite',
+        'orb-float': 'orbFloat 5s ease-in-out infinite',
       },
       keyframes: {
+        orbFloat: {
+          '0%, 100%': { transform: 'translateY(0) scale(1)' },
+          '50%': { transform: 'translateY(-14px) scale(1.02)' },
+        },
         fadeUp: {
           from: { opacity: '0', transform: 'translateY(20px)' },
           to: { opacity: '1', transform: 'translateY(0)' },

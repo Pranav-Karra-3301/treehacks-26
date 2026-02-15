@@ -1,37 +1,31 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Audio } from 'expo-av';
+import {
+  useAudioPlayer as useExpoPlayer,
+  useAudioPlayerStatus,
+  setAudioModeAsync,
+} from 'expo-audio';
+import type { AudioSource } from 'expo-audio';
 import * as FileSystem from 'expo-file-system/legacy';
 
-type AudioState = {
-  playing: boolean;
-  duration: number;
-  position: number;
-  error: boolean;
-};
-
 export function useAudioPlayer(uri: string) {
-  const soundRef = useRef<Audio.Sound | null>(null);
-  const playingRef = useRef(false);
-  const loadingRef = useRef(false);
   const localUriRef = useRef<string | null>(null);
-  const [state, setState] = useState<AudioState>({
-    playing: false,
-    duration: 0,
-    position: 0,
-    error: false,
-  });
+  const mountedRef = useRef(true);
+  const loadingRef = useRef(false);
+  const [error, setError] = useState(false);
+
+  const player = useExpoPlayer(null, { updateInterval: 250 });
+  const status = useAudioPlayerStatus(player);
 
   useEffect(() => {
-    Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
-      shouldDuckAndroid: true,
-    }).catch((e) => console.warn('[AudioPlayer] setAudioModeAsync failed:', e));
+    mountedRef.current = true;
+    setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: false,
+      interruptionMode: 'duckOthers',
+    }).catch(() => {});
 
     return () => {
-      soundRef.current?.unloadAsync();
-      // Clean up temp file
+      mountedRef.current = false;
       if (localUriRef.current) {
         FileSystem.deleteAsync(localUriRef.current, { idempotent: true }).catch(() => {});
       }
@@ -39,27 +33,18 @@ export function useAudioPlayer(uri: string) {
   }, []);
 
   const load = useCallback(async () => {
-    if (loadingRef.current) return;
+    if (loadingRef.current || !mountedRef.current) return;
     loadingRef.current = true;
     try {
-      if (soundRef.current) {
-        await soundRef.current.unloadAsync();
-        soundRef.current = null;
-      }
-      console.log('[AudioPlayer] Downloading audio from:', uri);
-
-      // Download with ngrok-skip-browser-warning header to bypass interstitial
       const localPath = `${FileSystem.cacheDirectory}audio_${Date.now()}.wav`;
       const result = await FileSystem.downloadAsync(uri, localPath, {
-        headers: {
-          'ngrok-skip-browser-warning': '1',
-          'Accept': 'audio/wav, audio/*',
-        },
+        headers: { 'Accept': 'audio/wav, audio/*' },
       });
 
+      if (!mountedRef.current) return;
+
       if (result.status !== 200) {
-        console.warn('[AudioPlayer] Download failed, status:', result.status);
-        setState((prev) => ({ ...prev, error: true }));
+        setError(true);
         return;
       }
 
@@ -69,100 +54,51 @@ export function useAudioPlayer(uri: string) {
       }
       localUriRef.current = result.uri;
 
-      console.log('[AudioPlayer] Downloaded to:', result.uri);
-
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: result.uri },
-        { shouldPlay: false, progressUpdateIntervalMillis: 250 },
-        (status) => {
-          if (!status.isLoaded) return;
-          playingRef.current = status.isPlaying;
-          setState((prev) => ({
-            ...prev,
-            playing: status.isPlaying,
-            duration: (status.durationMillis ?? 0) / 1000,
-            position: (status.positionMillis ?? 0) / 1000,
-          }));
-          if (status.didJustFinish) {
-            playingRef.current = false;
-            setState((prev) => ({ ...prev, playing: false, position: 0 }));
-          }
-        },
-      );
-      soundRef.current = sound;
-      setState((prev) => ({ ...prev, error: false }));
-      console.log('[AudioPlayer] Sound loaded successfully');
-    } catch (e) {
-      console.warn('[AudioPlayer] Load error:', e);
-      setState((prev) => ({ ...prev, error: true }));
+      player.replace(result.uri as AudioSource);
+      setError(false);
+    } catch {
+      if (mountedRef.current) setError(true);
     } finally {
       loadingRef.current = false;
     }
-  }, [uri]);
+  }, [uri, player]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const togglePlay = useCallback(async () => {
-    console.log('[AudioPlayer] togglePlay called, playing:', playingRef.current);
-    let sound = soundRef.current;
-    if (!sound) {
-      console.log('[AudioPlayer] No sound ref, attempting reload...');
-      try {
-        await load();
-        sound = soundRef.current;
-      } catch {
-        return;
-      }
+  // Reset position when playback finishes
+  useEffect(() => {
+    if (status.didJustFinish) {
+      player.seekTo(0);
     }
-    if (!sound) {
-      console.warn('[AudioPlayer] Still no sound after reload');
+  }, [status.didJustFinish, player]);
+
+  const togglePlay = useCallback(() => {
+    if (!status.isLoaded) {
+      load();
       return;
     }
-
-    try {
-      const status = await sound.getStatusAsync();
-      console.log('[AudioPlayer] Status:', JSON.stringify(status).slice(0, 200));
-      if (!status.isLoaded) {
-        console.log('[AudioPlayer] Sound not loaded, reloading...');
-        await load();
-        sound = soundRef.current;
-        if (!sound) return;
-      }
-
-      if (playingRef.current) {
-        await sound.pauseAsync();
-        console.log('[AudioPlayer] Paused');
-      } else {
-        if (status.isLoaded && status.positionMillis === status.durationMillis) {
-          await sound.setPositionAsync(0);
-        }
-        await sound.playAsync();
-        console.log('[AudioPlayer] Playing');
-      }
-    } catch (e) {
-      console.warn('[AudioPlayer] Toggle error:', e);
-      try {
-        await load();
-      } catch {
-        // give up
-      }
+    if (status.playing) {
+      player.pause();
+    } else {
+      player.play();
     }
-  }, [load]);
+  }, [status.isLoaded, status.playing, player, load]);
 
   const seek = useCallback(
-    async (seconds: number) => {
-      const sound = soundRef.current;
-      if (!sound) return;
-      try {
-        await sound.setPositionAsync(seconds * 1000);
-      } catch {
-        // ignore seek errors
-      }
+    (seconds: number) => {
+      player.seekTo(seconds);
     },
-    [],
+    [player],
   );
 
-  return { ...state, togglePlay, seek };
+  return {
+    playing: status.playing,
+    duration: status.duration,
+    position: status.currentTime,
+    error,
+    togglePlay,
+    seek,
+  };
 }

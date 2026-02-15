@@ -7,8 +7,9 @@ from pathlib import Path
 from typing import List
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.services.cache import CacheService
@@ -53,15 +54,27 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
             return await summarize_fn(transcript, task)
         return await summarize_fn(transcript)
 
-    def _build_recording_files(call_dir: Path) -> dict[str, object]:
+    def _build_recording_files(call_dir: Path, task_id: str | None = None) -> dict[str, object]:
         file_stats = {}
         for name in ("inbound.wav", "outbound.wav", "mixed.wav", "recording_stats.json"):
             path = call_dir / name
+            local_exists = path.exists()
+            exists = local_exists
+            size = path.stat().st_size if local_exists else 0
+            # Check remote storage if local file is missing
+            if not local_exists and task_id and name.endswith(".wav"):
+                exists = store.audio_exists(task_id, name)
             file_stats[name] = {
-                "exists": path.exists(),
-                "size_bytes": path.stat().st_size if path.exists() else 0,
+                "exists": exists,
+                "size_bytes": size,
             }
         return file_stats
+
+    class TransferRequest(BaseModel):
+        to_phone: str = Field(min_length=8, max_length=20)
+
+    class DtmfRequest(BaseModel):
+        digits: str = Field(min_length=1, max_length=64)
 
     @router.post("", response_model=TaskSummary)
     async def create_task(task: NegotiationTaskCreate):
@@ -149,16 +162,39 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
             await orchestrator.stop_task_call(task_id, stop_reason="user_stop")
             return ActionResponse(ok=True, message="call stopped")
 
-    @router.get("/{task_id}/transcript")
-    async def get_transcript(task_id: str):
-        with timed_step("api", "get_transcript", task_id=task_id):
-            call_dir = store.get_task_dir(task_id)
-            transcript_path = call_dir / "transcript.json"
-            if not transcript_path.exists():
-                raise HTTPException(status_code=404, detail="Transcript not found")
-            with open(transcript_path, "r", encoding="utf-8") as f:
-                turns = json.load(f)
-            return {"task_id": task_id, "turns": turns}
+    @router.post("/{task_id}/transfer", response_model=ActionResponse)
+    async def transfer_call(task_id: str, payload: TransferRequest):
+        with timed_step("api", "transfer_call", task_id=task_id):
+            row = store.get_task(task_id)
+            if not row:
+                raise HTTPException(status_code=404, detail="Task not found")
+            if local_cache is not None:
+                await local_cache.delete(_task_cache_key(task_id))
+                await local_cache.delete(_tasks_cache_key())
+            try:
+                await orchestrator.transfer_task_call(task_id, payload.to_phone)
+            except LookupError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            return ActionResponse(ok=True, message=f"transfer initiated to {payload.to_phone}")
+
+    @router.post("/{task_id}/dtmf", response_model=ActionResponse)
+    async def send_dtmf(task_id: str, payload: DtmfRequest):
+        with timed_step("api", "send_dtmf", task_id=task_id, details={"digits": payload.digits}):
+            row = store.get_task(task_id)
+            if not row:
+                raise HTTPException(status_code=404, detail="Task not found")
+            if local_cache is not None:
+                await local_cache.delete(_task_cache_key(task_id))
+                await local_cache.delete(_tasks_cache_key())
+            try:
+                await orchestrator.send_task_dtmf(task_id, payload.digits)
+            except LookupError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            return ActionResponse(ok=True, message=f"sent keypad digits: {payload.digits}")
 
     def _mulaw_decode_table() -> list[int]:
         """Build mulaw byte → 16-bit PCM lookup table (ITU G.711)."""
@@ -210,24 +246,35 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
     async def get_audio(task_id: str, side: str = Query(default="mixed")):
         with timed_step("api", "get_audio", task_id=task_id, details={"side": side}):
             call_dir = store.get_task_dir(task_id)
-            if not call_dir.exists():
-                raise HTTPException(status_code=404, detail="Task recordings not found")
 
-            files = {
-                "mixed": call_dir / "mixed.wav",
-                "inbound": call_dir / "inbound.wav",
-                "outbound": call_dir / "outbound.wav",
+            side_to_file = {
+                "mixed": "mixed.wav",
+                "inbound": "inbound.wav",
+                "outbound": "outbound.wav",
             }
 
-            selected = side if side in files else "mixed"
-            file_path = files[selected]
-            if not file_path.exists():
-                fallback = next(iter(sorted(call_dir.glob("*.wav"))), None)
-                if not fallback:
-                    raise HTTPException(status_code=404, detail="No audio for task")
-                file_path = fallback
+            selected = side if side in side_to_file else "mixed"
+            filename = side_to_file[selected]
+            file_path = call_dir / filename
 
-            raw_data = file_path.read_bytes()
+            raw_data: bytes | None = None
+
+            # Try local filesystem first
+            if file_path.exists():
+                raw_data = file_path.read_bytes()
+            else:
+                # Fallback: try other local .wav files
+                fallback = next(iter(sorted(call_dir.glob("*.wav"))), None) if call_dir.exists() else None
+                if fallback:
+                    raw_data = fallback.read_bytes()
+                    filename = fallback.name
+                else:
+                    # Fallback: download from remote storage
+                    raw_data = store.download_audio(task_id, filename)
+
+            if not raw_data:
+                raise HTTPException(status_code=404, detail="No audio for task")
+
             # If the file lacks a RIFF header, it's raw mulaw — decode to PCM WAV
             if not raw_data[:4] == b'RIFF':
                 raw_data = _mulaw_to_pcm_wav(raw_data)
@@ -239,17 +286,18 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
             return Response(
                 content=raw_data,
                 media_type="audio/wav",
-                headers={"Content-Disposition": f'inline; filename="{file_path.name}"'},
+                headers={
+                    "Content-Disposition": f'inline; filename="{filename}"',
+                    "Content-Length": str(len(raw_data)),
+                    "Accept-Ranges": "bytes",
+                },
             )
 
     @router.get("/{task_id}/recording-metadata")
     async def get_recording_metadata(task_id: str):
         with timed_step("api", "get_recording_metadata", task_id=task_id):
-            call_dir = store.get_task_dir(task_id)
-            metadata_path = call_dir / "recording_stats.json"
-            if not call_dir.exists():
-                raise HTTPException(status_code=404, detail="Task recordings not found")
-            if not metadata_path.exists():
+            metadata = store.get_artifact(task_id, "recording_stats")
+            if not metadata:
                 metadata = {
                     "task_id": task_id,
                     "status": "missing",
@@ -257,15 +305,8 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
                     "chunks_by_side": {"caller": 0, "agent": 0},
                     "last_chunk_at": None,
                 }
-                return {
-                    "recording": {},
-                    "files": _build_recording_files(call_dir),
-                    **metadata,
-                }
-
-            with open(metadata_path, "r", encoding="utf-8") as f:
-                metadata = json.load(f)
-            metadata["files"] = _build_recording_files(call_dir)
+            call_dir = store.get_task_dir(task_id)
+            metadata["files"] = _build_recording_files(call_dir, task_id)
             return metadata
 
     @router.get("/{task_id}/recording-files")
@@ -273,10 +314,10 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
         with timed_step("api", "get_recording_files", task_id=task_id):
             call_dir = store.get_task_dir(task_id)
             if not call_dir.exists():
-                raise HTTPException(status_code=404, detail="Task recordings not found")
+                call_dir.mkdir(parents=True, exist_ok=True)
             return {
                 "task_id": task_id,
-                "files": _build_recording_files(call_dir),
+                "files": _build_recording_files(call_dir, task_id),
             }
 
     @router.get("/{task_id}/transcript")
@@ -285,12 +326,9 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
             row = store.get_task(task_id)
             if not row:
                 raise HTTPException(status_code=404, detail="Task not found")
-            call_dir = store.get_task_dir(task_id)
-            transcript_path = call_dir / "transcript.json"
-            if not transcript_path.exists():
+            raw = store.get_artifact(task_id, "transcript")
+            if raw is None:
                 return {"task_id": task_id, "turns": [], "count": 0}
-            with open(transcript_path, "r", encoding="utf-8") as f:
-                raw = json.load(f)
             return {
                 "task_id": task_id,
                 "turns": raw,
@@ -309,25 +347,20 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
             if not row:
                 raise HTTPException(status_code=404, detail="Task not found")
 
-            call_dir = store.get_task_dir(task_id)
-            analysis_path = call_dir / "analysis.json"
-            if analysis_path.exists():
-                with open(analysis_path, "r", encoding="utf-8") as f:
-                    return AnalysisPayload(**json.load(f))
+            existing_analysis = store.get_artifact(task_id, "analysis")
+            if existing_analysis:
+                return AnalysisPayload(**existing_analysis)
 
-            transcript_file = call_dir / "transcript.json"
+            transcript_raw = store.get_artifact(task_id, "transcript")
             transcript: List[TranscriptTurn] = []
-            if transcript_file.exists():
-                with open(transcript_file, "r", encoding="utf-8") as f:
-                    transcript = [TranscriptTurn(**entry) for entry in json.load(f)]
+            if transcript_raw:
+                transcript = [TranscriptTurn(**entry) for entry in transcript_raw]
 
             analysis = await _summarize_transcript(transcript, row)
-            with open(analysis_path, "w", encoding="utf-8") as f:
-                json.dump(analysis, f, indent=2)
+            store.save_artifact(task_id, "analysis", analysis)
             outcome_value = analysis.get("outcome", "unknown")
             valid_outcomes = {"unknown", "success", "partial", "failed", "walkaway"}
             outcome = outcome_value if outcome_value in valid_outcomes else "unknown"
-            # Always write the outcome back to the task record
             store.update_status(task_id, row.get("status", "ended"), outcome=outcome)
             if local_cache is not None:
                 await local_cache.delete(_task_cache_key(task_id))
@@ -353,5 +386,111 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
                     ttl_seconds=settings.CACHE_ANALYSIS_TTL_SECONDS,
                 )
             return response
+
+    @router.post("/multi-analysis")
+    async def multi_analysis(request: Request):
+        try:
+            raw_payload = await request.json()
+        except Exception:
+            raw_payload = {}
+        if not isinstance(raw_payload, dict):
+            raw_payload = {}
+
+        raw_task_ids = raw_payload.get("task_ids")
+        if raw_task_ids is None:
+            raw_task_ids = raw_payload.get("taskIds")
+        if isinstance(raw_task_ids, str):
+            raw_task_ids = [raw_task_ids]
+        if not isinstance(raw_task_ids, (list, tuple, set)):
+            raw_task_ids = []
+
+        objective = raw_payload.get("objective", "")
+        if objective is None:
+            objective = ""
+        if not isinstance(objective, str):
+            objective = str(objective)
+
+        with timed_step(
+            "api",
+            "multi_analysis",
+            details={"requested_tasks": len(raw_task_ids)},
+        ):
+            normalized_ids: List[str] = []
+            for tid in raw_task_ids:
+                if tid is None:
+                    continue
+                if not isinstance(tid, str):
+                    tid = str(tid)
+                tid = tid.strip()
+                if tid:
+                    normalized_ids.append(tid)
+
+            task_ids = list(dict.fromkeys(normalized_ids))
+            if not task_ids:
+                raise HTTPException(status_code=400, detail="task_ids cannot be empty")
+
+            # Gather task data and generate missing analyses in parallel
+            import asyncio as _asyncio
+
+            async def _prepare_call(task_id: str) -> dict[str, object] | None:
+                try:
+                    row = store.get_task(task_id)
+                    if not row:
+                        return None
+
+                    transcript_raw = store.get_artifact(task_id, "transcript") or []
+                    transcript: List[TranscriptTurn] = [TranscriptTurn(**entry) for entry in transcript_raw]
+
+                    analysis = store.get_artifact(task_id, "analysis")
+                    if not analysis:
+                        analysis = await _summarize_transcript(transcript, row)
+                        store.save_artifact(task_id, "analysis", analysis)
+
+                    return {
+                        "task_id": task_id,
+                        "target_phone": row.get("target_phone", ""),
+                        "target_name": row.get("target_name"),
+                        "target_url": row.get("target_url"),
+                        "target_source": row.get("target_source"),
+                        "target_snippet": row.get("target_snippet"),
+                        "location": row.get("location"),
+                        "status": row.get("status", "unknown"),
+                        "outcome": row.get("outcome", (analysis or {}).get("outcome", "unknown")),
+                        "duration_seconds": row.get("duration_seconds", 0),
+                        "analysis": analysis,
+                        "transcript_excerpt": transcript_raw[-40:],
+                    }
+                except Exception:
+                    # Individual call preparation failure should not crash entire multi-analysis
+                    return None
+
+            prepared = await _asyncio.gather(*[_prepare_call(tid) for tid in task_ids])
+            calls: List[dict[str, object]] = [c for c in prepared if c is not None]
+
+            if not calls:
+                raise HTTPException(status_code=404, detail="No tasks found for multi-analysis")
+
+            summary = await orchestrator._engine.summarize_multi_calls(
+                calls,
+                objective=objective,
+            )
+            return {
+                "ok": True,
+                "call_count": len(calls),
+                "summary": summary,
+                "calls": [
+                    {
+                        "task_id": call.get("task_id"),
+                        "target_phone": call.get("target_phone"),
+                        "target_name": call.get("target_name"),
+                        "target_url": call.get("target_url"),
+                        "location": call.get("location"),
+                        "status": call.get("status"),
+                        "outcome": call.get("outcome"),
+                        "score": int((call.get("analysis") or {}).get("score", 0)),
+                    }
+                    for call in calls
+                ],
+            }
 
     return router

@@ -25,7 +25,8 @@ export default function ScoreRing({ score }: { score: number }) {
 
   useEffect(() => {
     progress.value = withTiming(Math.min(score, 100) / 100, { duration: 1200 });
-  }, [score, progress]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [score]);
 
   const animatedProps = useAnimatedProps(() => ({
     strokeDashoffset: CIRCUMFERENCE * (1 - progress.value),

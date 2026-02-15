@@ -125,7 +125,7 @@ if is_truthy "${DEEPGRAM_ENABLED}"; then
     elif [[ "${TWILIO_WEBHOOK_HOST}" == *localhost* || "${TWILIO_WEBHOOK_HOST}" == *127.0.0.1* ]]; then
       missing_required+=("TWILIO_WEBHOOK_HOST (must be public and not localhost)")
     elif [[ "${TWILIO_WEBHOOK_HOST}" == *".ngrok"* ]]; then
-      info "TWILIO_WEBHOOK_HOST is an ngrok domain — ensure the tunnel is running (dev-up.sh starts it automatically)."
+      info "TWILIO_WEBHOOK_HOST is an ngrok domain — ensure the tunnel is running (use dev-up.sh --ngrok)."
     fi
   fi
 else
@@ -154,7 +154,7 @@ if [ "${#missing_required[@]}" -gt 0 ]; then
     error "  - ${key}"
   done
   error ""
-  error "Update backend/.env then rerun: required example in backend/.env.example"
+  error "Update backend/.env then rerun: base template is .env.example at repo root"
   error "You can continue anyway with PRECHECK_STRICT=0 (debug mode only)."
   if [ "${STRICT_MODE}" = "0" ]; then
     info "Preflight found issues but is running in non-strict mode (PRECHECK_STRICT=0)."

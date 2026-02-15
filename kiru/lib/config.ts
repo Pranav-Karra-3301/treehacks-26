@@ -1,4 +1,4 @@
 export const BACKEND_API_URL =
-  process.env.EXPO_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
+  process.env.EXPO_PUBLIC_BACKEND_URL ?? 'https://kiru-backend-ln77omdz3q-uc.a.run.app';
 export const BACKEND_WS_URL =
-  process.env.EXPO_PUBLIC_BACKEND_WS_URL ?? 'ws://localhost:3001';
+  process.env.EXPO_PUBLIC_BACKEND_WS_URL ?? 'wss://kiru-backend-ln77omdz3q-uc.a.run.app';

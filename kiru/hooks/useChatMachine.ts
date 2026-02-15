@@ -1,12 +1,16 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { AppState } from 'react-native';
 import {
   createTask,
   startCall,
   stopCall,
+  sendCallDtmf,
+  transferCall,
   getTaskAnalysis,
   getTaskTranscript,
   getTask,
   searchResearch,
+  upsertChatSession,
 } from '../lib/api';
 import type {
   CallEvent,
@@ -14,6 +18,12 @@ import type {
   AnalysisPayload,
   BusinessResult,
 } from '../lib/types';
+import {
+  readActiveLocalSession,
+  writeLocalSession,
+  CHAT_SESSION_SCHEMA_VERSION,
+  type PersistedChatSessionEnvelope,
+} from '../lib/session-store';
 import { useWebSocket } from './useWebSocket';
 import { useLocation } from './useLocation';
 import { usePastTasks } from './usePastTasks';
@@ -22,6 +32,7 @@ export type Message = {
   id: string;
   role: 'user' | 'ai' | 'status' | 'analysis' | 'audio' | 'search-results';
   text: string;
+  animate?: boolean;
   analysisData?: AnalysisPayload;
   audioTaskId?: string;
   searchResults?: BusinessResult[];
@@ -57,14 +68,113 @@ export function useChatMachine() {
 
   const analysisLoadedRef = useRef(false);
   const thinkingBufferRef = useRef('');
+  const connectedProcessedRef = useRef(false);
   const endedProcessedRef = useRef(false);
+  const appActiveRef = useRef(AppState.currentState === 'active');
+  const chatSessionIdRef = useRef<string>(genId());
+  const chatSessionRevisionRef = useRef(0);
+  const hasRestoredRef = useRef(false);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      appActiveRef.current = state === 'active';
+    });
+    return () => sub.remove();
+  }, []);
 
   const userLocation = useLocation();
   const { tasks: pastTasks, loading: pastTasksLoading, refresh: refreshPastTasks } = usePastTasks();
 
+  // ── Session persistence ────────────────────────────────────
+  type ChatSnapshot = {
+    phase: ConversationPhase;
+    messages: Message[];
+    objective: string;
+    phoneNumber: string;
+    taskId: string | null;
+    analysisLoaded: boolean;
+  };
+
+  const persistSession = useCallback(() => {
+    const snapshot: ChatSnapshot = {
+      phase,
+      messages,
+      objective,
+      phoneNumber,
+      taskId,
+      analysisLoaded,
+    };
+    chatSessionRevisionRef.current += 1;
+    const envelope: PersistedChatSessionEnvelope<ChatSnapshot> = {
+      schema_version: CHAT_SESSION_SCHEMA_VERSION,
+      session_id: chatSessionIdRef.current,
+      mode: 'single',
+      revision: chatSessionRevisionRef.current,
+      task_ids: taskId ? [taskId] : [],
+      updated_at: new Date().toISOString(),
+      data: snapshot,
+    };
+    writeLocalSession(envelope);
+    // Best-effort backend sync
+    upsertChatSession({
+      session_id: envelope.session_id,
+      mode: envelope.mode,
+      revision: envelope.revision,
+      task_ids: envelope.task_ids,
+      data: envelope.data as Record<string, unknown>,
+    }).catch(() => {});
+  }, [phase, messages, objective, phoneNumber, taskId, analysisLoaded]);
+
+  // Debounced auto-persist
+  useEffect(() => {
+    if (!hasRestoredRef.current) return;
+    const timer = setTimeout(persistSession, 2000);
+    return () => clearTimeout(timer);
+  }, [phase, messages.length, analysisLoaded, taskId, persistSession]);
+
+  // Restore on mount
+  useEffect(() => {
+    if (hasRestoredRef.current) return;
+    hasRestoredRef.current = true;
+
+    (async () => {
+      try {
+        const saved = await readActiveLocalSession<ChatSnapshot>();
+        if (!saved?.data) return;
+        const snap = saved.data;
+        // Don't restore if there's nothing meaningful
+        if (!snap.messages || snap.messages.length <= 1) return;
+
+        chatSessionIdRef.current = saved.session_id;
+        chatSessionRevisionRef.current = saved.revision;
+
+        setMessages(snap.messages.map((m) => ({ ...m, animate: false })));
+        setObjective(snap.objective || '');
+        setPhoneNumber(snap.phoneNumber || '');
+        setTaskId(snap.taskId || null);
+        setAnalysisLoaded(snap.analysisLoaded || false);
+        analysisLoadedRef.current = snap.analysisLoaded || false;
+
+        // Can't reconnect mid-call — downgrade active/connecting to ended
+        if (snap.phase === 'active' || snap.phase === 'connecting') {
+          setPhase('ended');
+        } else {
+          setPhase(snap.phase);
+        }
+      } catch {
+        // ignore restore failures — start fresh
+      }
+    })();
+  }, []);
+
   // ── Helpers ─────────────────────────────────────────────────
   const addMessage = useCallback((msg: Omit<Message, 'id'>) => {
-    setMessages((prev) => [...prev, { ...msg, id: genId() }]);
+    setMessages((prev) => [...prev, {
+      ...msg,
+      id: genId(),
+      // Skip typewriter for messages added while app is backgrounded (e.g. during a call with screen off)
+      ...(msg.role === 'ai' && !appActiveRef.current && { animate: false }),
+    }]);
   }, []);
 
   const aiReply = useCallback(
@@ -107,9 +217,17 @@ export function useChatMachine() {
           setCallStatus(status);
           if (status === 'dialing') {
             addMessage({ role: 'status', text: 'Dialing...' });
+          } else if (status === 'connected') {
+            if (connectedProcessedRef.current) break;
+            connectedProcessedRef.current = true;
+            addMessage({ role: 'status', text: 'Connected to carrier' });
+          } else if (status === 'media_connected') {
+            addMessage({ role: 'status', text: 'Media stream established' });
           } else if (status === 'active') {
             addMessage({ role: 'status', text: 'Connected' });
             setPhase('active');
+          } else if (status === 'disconnected' || status === 'mark') {
+            // silent — 'ended' follows disconnected; 'mark' is internal Twilio bookkeeping
           } else if (status === 'ended') {
             if (endedProcessedRef.current) break; // skip duplicate
             endedProcessedRef.current = true;
@@ -117,10 +235,9 @@ export function useChatMachine() {
             addMessage({ role: 'ai', text: 'The call has ended. Preparing your analysis...' });
             setPhase('ended');
           } else if (status === 'failed') {
-            const errorData = event.data as { status: CallStatus; error?: string };
             addMessage({
               role: 'status',
-              text: `Call failed${errorData.error ? `: ${errorData.error}` : ''}`,
+              text: `Call failed${event.data.error ? `: ${event.data.error}` : ''}`,
             });
             setPhase('ended');
           }
@@ -233,6 +350,36 @@ export function useChatMachine() {
     }
   }, [taskId, addMessage]);
 
+  // ── Send DTMF ─────────────────────────────────────────────
+  const handleSendDtmf = useCallback(async (digits: string) => {
+    if (!taskId) return;
+    try {
+      const result = await sendCallDtmf(taskId, digits);
+      if (result.ok) {
+        addMessage({ role: 'status', text: `Sent keypad: ${digits}` });
+      } else {
+        addMessage({ role: 'ai', text: result.message || 'Could not send keypad digits.' });
+      }
+    } catch {
+      addMessage({ role: 'ai', text: 'Could not send keypad digits.' });
+    }
+  }, [taskId, addMessage]);
+
+  // ── Transfer call ─────────────────────────────────────────
+  const handleTransferCall = useCallback(async (toPhone: string) => {
+    if (!taskId) return;
+    try {
+      const result = await transferCall(taskId, toPhone);
+      if (result.ok) {
+        addMessage({ role: 'status', text: `Transferring to ${toPhone}...` });
+      } else {
+        addMessage({ role: 'ai', text: result.message || 'Could not transfer the call.' });
+      }
+    } catch {
+      addMessage({ role: 'ai', text: 'Could not transfer the call.' });
+    }
+  }, [taskId, addMessage]);
+
   // ── New negotiation ─────────────────────────────────────────
   const handleNewNegotiation = useCallback(() => {
     disconnectWs();
@@ -250,7 +397,10 @@ export function useChatMachine() {
     setDiscoveryResults([]);
     analysisLoadedRef.current = false;
     thinkingBufferRef.current = '';
+    connectedProcessedRef.current = false;
     endedProcessedRef.current = false;
+    chatSessionIdRef.current = genId();
+    chatSessionRevisionRef.current = 0;
     refreshPastTasks();
   }, [disconnectWs, refreshPastTasks]);
 
@@ -296,7 +446,7 @@ export function useChatMachine() {
         setDiscoveryResults([]);
         thinkingBufferRef.current = '';
 
-        newMessages.push({ id: 'welcome', role: 'ai', text: 'What would you like me to negotiate?' });
+        newMessages.push({ id: 'welcome', role: 'ai', text: 'What would you like me to negotiate?', animate: false });
         if (task.objective) {
           newMessages.push({ id: `obj-${Date.now()}`, role: 'user', text: task.objective });
         }
@@ -305,6 +455,7 @@ export function useChatMachine() {
             id: `ai-phone-${Date.now()}`,
             role: 'ai',
             text: "Got it. What's the phone number I should call?",
+            animate: false,
           });
           newMessages.push({ id: `phone-${Date.now()}`, role: 'user', text: task.target_phone });
         }
@@ -314,7 +465,7 @@ export function useChatMachine() {
           for (const turn of transcriptRes.turns) {
             const msgId = `t-${Date.now()}-${Math.random()}`;
             if (turn.speaker === 'agent') {
-              newMessages.push({ id: msgId, role: 'ai', text: turn.content });
+              newMessages.push({ id: msgId, role: 'ai', text: turn.content, animate: false });
             } else {
               newMessages.push({ id: msgId, role: 'status', text: `Receiver: ${turn.content}` });
             }
@@ -351,9 +502,9 @@ export function useChatMachine() {
   const handleCallAgain = useCallback(() => {
     disconnectWs();
     setMessages([
-      { id: 'welcome', role: 'ai', text: 'What would you like me to negotiate?' },
+      { id: 'welcome', role: 'ai', text: 'What would you like me to negotiate?', animate: false },
       { id: `obj-${Date.now()}`, role: 'user', text: objective },
-      { id: `ai-phone-${Date.now()}`, role: 'ai', text: "Got it. What's the phone number I should call?" },
+      { id: `ai-phone-${Date.now()}`, role: 'ai', text: "Got it. What's the phone number I should call?", animate: false },
       { id: `phone-${Date.now()}`, role: 'user', text: phoneNumber },
     ]);
     setInput('');
@@ -366,6 +517,7 @@ export function useChatMachine() {
     setDiscoveryResults([]);
     analysisLoadedRef.current = false;
     thinkingBufferRef.current = '';
+    connectedProcessedRef.current = false;
     endedProcessedRef.current = false;
     startNegotiation(phoneNumber);
   }, [disconnectWs, objective, phoneNumber, startNegotiation]);
@@ -481,16 +633,16 @@ export function useChatMachine() {
   const canCallAgain = showPostCall && !!objective && !!phoneNumber;
 
   const placeholderText = inputDisabled
-    ? 'Setting up your negotiation...'
+    ? 'Setting up...'
     : phase === 'discovery'
-      ? 'Or type a phone number...'
+      ? 'Or type a number...'
       : phase === 'phone'
-        ? 'Enter the phone number...'
+        ? 'Enter phone number...'
         : phase === 'active'
           ? 'Send a note...'
           : phase === 'ended'
-            ? 'Negotiation complete'
-            : 'Describe what you want to negotiate...';
+            ? 'Done'
+            : 'What do you want to negotiate?';
 
   return {
     messages,
@@ -508,6 +660,8 @@ export function useChatMachine() {
     refreshPastTasks,
     handleSend,
     handleEndCall,
+    handleSendDtmf,
+    handleTransferCall,
     handleNewNegotiation,
     handleCallFromSearch,
     handleSkipDiscovery,

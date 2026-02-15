@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.models.schemas import CallOutcome, TranscriptTurn
-from app.services.llm_client import LLMClient
+from app.services.llm_client import LLMClient, OpenAICompatibleProvider
 from app.services.prompt_builder import build_negotiation_prompt
 from app.core.config import settings
 from app.core.telemetry import log_event, timed_step
@@ -16,20 +16,29 @@ You are an expert negotiation analyst. Given a phone call transcript and optiona
 
 Return ONLY valid JSON with these fields:
 {
-  "summary": "2-3 sentence summary of what happened on the call",
+  "summary": "6-10 sentence detailed summary of what happened on the call with concrete facts",
   "outcome": "success | partial | failed | walkaway | unknown",
-  "outcome_reasoning": "1-2 sentences explaining why you chose this outcome",
+  "outcome_reasoning": "2-4 sentences explaining why you chose this outcome and decision implications",
   "concessions": [
     {"party": "agent|caller", "description": "what was conceded", "significance": "low|medium|high"}
   ],
   "tactics_used": [
     {"tactic": "name of tactic", "by": "agent|caller", "effectiveness": "low|medium|high", "example": "brief quote or paraphrase"}
   ],
+  "decision_data": {
+    "vendor_name": "best effort business name or null",
+    "quoted_prices": ["every explicit numeric quote, rate, or amount mentioned"],
+    "discounts": ["discounts, promos, bundles, credits"],
+    "fees": ["fees, taxes, surcharges, penalties"],
+    "terms": ["minimums, commitments, refund policy, timing, constraints"],
+    "risks": ["ambiguities or contradictions"],
+    "important_numbers": ["phone numbers, quantities, dates, totals, percentages"]
+  },
   "score": 0-100,
   "score_reasoning": "1 sentence explaining the score",
   "rapport_quality": "poor|fair|good|excellent",
-  "key_moments": ["moment 1", "moment 2"],
-  "improvement_suggestions": ["suggestion 1", "suggestion 2"]
+  "key_moments": ["moment 1", "moment 2", "include concrete numbers where available"],
+  "improvement_suggestions": ["suggestion 1", "suggestion 2", "include missing data to ask for next time"]
 }
 
 Scoring guide:
@@ -39,13 +48,61 @@ Scoring guide:
 - 61-80: Good progress, meaningful concessions or agreement on key points
 - 81-100: Objective achieved or exceeded
 
-Be specific and reference actual transcript content. Do not invent details not present in the transcript.\
+Be specific and reference actual transcript content. Do not invent details not present in the transcript.
+If numbers (prices, fees, discounts, quantities, dates) are present, include all of them in decision_data.\
+"""
+
+MULTI_CALL_SUMMARY_SYSTEM_PROMPT = """\
+You are a decision analyst comparing multiple phone calls for one customer objective.
+Produce a single comprehensive recommendation with concrete details, especially prices and terms.
+
+Return ONLY valid JSON in this shape:
+{
+  "overall_summary": "2-4 detailed paragraphs comparing all calls with concrete facts",
+  "recommended_call_task_id": "task id of best option or null",
+  "recommended_phone": "phone number of best option or null",
+  "recommended_option": "clear recommendation sentence",
+  "decision_rationale": "detailed explanation of why this is best including tradeoffs",
+      "price_comparison": [
+        {
+          "task_id": "task id",
+          "phone": "phone number",
+          "vendor": "vendor/business name if known",
+          "location": "vendor location or service area if known",
+          "quoted_prices": ["all explicit numeric prices/rates/amounts from this call"],
+          "discounts": ["discounts/promotions/bundles"],
+          "fees": ["fees/taxes/surcharges/penalties"],
+          "constraints": ["availability, minimums, contract terms, policies, caveats"],
+          "key_takeaways": ["most important facts from this call"],
+      "confidence": "high|medium|low"
+    }
+  ],
+  "important_facts": ["cross-call facts customer should know before deciding"],
+  "missing_information": ["gaps that still need confirmation"],
+  "next_best_actions": ["specific next actions the customer should take now"]
+}
+
+Rules:
+- Include every relevant numeric value mentioned (prices, totals, percentages, quantities, dates, fees).
+- Include business identity and location context whenever available.
+- Do not invent details.
+- If a call failed or had no data, explicitly mark it with empty pricing and low confidence.
 """
 
 
 class NegotiationEngine:
     def __init__(self, llm_client: LLMClient) -> None:
         self._llm = llm_client
+        # Dedicated fast OpenAI model for post-call analysis
+        self._analysis_llm: OpenAICompatibleProvider | None = None
+        if settings.OPENAI_API_KEY:
+            self._analysis_llm = OpenAICompatibleProvider(
+                base_url=settings.OPENAI_BASE_URL,
+                api_key=settings.OPENAI_API_KEY,
+                model=settings.OPENAI_ANALYSIS_MODEL,
+                provider_tag="openai_analysis",
+                timeout_seconds=settings.LLM_STREAM_TIMEOUT_SECONDS,
+            )
 
     def build_system_prompt(self, task: Dict[str, Any], turn_count: int) -> str:
         return build_negotiation_prompt(task, turn_count=turn_count, include_phase=True)
@@ -76,17 +133,18 @@ class NegotiationEngine:
             messages.extend(conversation)
             messages.append({"role": "user", "content": user_utterance})
 
-            # === CALL DEBUG LOGGING ===
-            print(f"\n{'='*60}")
-            print(f"[NEGOTIATE] Task: {task.get('id')} | Turn: {turn_count}")
-            print(f"[NEGOTIATE] Objective: {task.get('objective', 'N/A')}")
-            print(f"[NEGOTIATE] Caller said: {user_utterance}")
-            print(f"[NEGOTIATE] System prompt ({len(system_prompt)} chars):")
-            print(f"  {system_prompt[:500]}{'...' if len(system_prompt) > 500 else ''}")
-            print(f"[NEGOTIATE] Conversation history: {len(conversation)} messages")
-            for msg in conversation[-4:]:
-                print(f"  [{msg.get('role')}]: {str(msg.get('content', ''))[:120]}")
-            print(f"{'='*60}")
+            log_event(
+                "negotiation",
+                "respond_start",
+                task_id=task.get("id"),
+                details={
+                    "turn": turn_count,
+                    "objective": task.get("objective", "N/A"),
+                    "utterance": user_utterance[:200],
+                    "system_prompt_chars": len(system_prompt),
+                    "conversation_messages": len(conversation),
+                },
+            )
 
             generated = []
             async for token in self._llm.stream_completion(messages, max_tokens=settings.LLM_MAX_TOKENS_VOICE):
@@ -94,8 +152,12 @@ class NegotiationEngine:
 
             response = "".join(generated).strip()
 
-            print(f"[NEGOTIATE] Agent response: {response}")
-            print(f"{'='*60}\n")
+            log_event(
+                "negotiation",
+                "respond_complete",
+                task_id=task.get("id"),
+                details={"response_chars": len(response)},
+            )
 
             return response, system_prompt
 
@@ -165,11 +227,14 @@ class NegotiationEngine:
             if style:
                 user_content += f"\nNEGOTIATION STYLE: {style}"
 
-        # === ANALYSIS DEBUG LOGGING ===
-        print(f"\n{'='*60}")
-        print(f"[ANALYSIS] Analyzing transcript ({len(transcript)} turns)")
-        print(f"[ANALYSIS] Transcript:\n{transcript_text[:800]}")
-        print(f"{'='*60}")
+        log_event(
+            "negotiation",
+            "llm_analysis_start",
+            details={
+                "transcript_turns": len(transcript),
+                "transcript_chars": len(transcript_text),
+            },
+        )
 
         messages = [
             {"role": "system", "content": ANALYSIS_SYSTEM_PROMPT},
@@ -177,7 +242,8 @@ class NegotiationEngine:
         ]
 
         generated = []
-        async for token in self._llm.stream_completion(
+        provider = self._analysis_llm or self._llm
+        async for token in provider.stream_completion(
             messages, max_tokens=settings.LLM_MAX_TOKENS_ANALYSIS
         ):
             generated.append(token)
@@ -229,6 +295,103 @@ class NegotiationEngine:
             "improvement_suggestions": analysis.get("improvement_suggestions", []),
             "details": analysis,
         }
+
+    async def summarize_multi_calls(
+        self,
+        calls: List[Dict[str, Any]],
+        objective: str = "",
+    ) -> Dict[str, Any]:
+        if not calls:
+            return {
+                "overall_summary": "No call data was provided.",
+                "recommended_call_task_id": None,
+                "recommended_phone": None,
+                "recommended_option": "No recommendation available.",
+                "decision_rationale": "There are no completed calls to compare.",
+                "price_comparison": [],
+                "important_facts": [],
+                "missing_information": ["No calls were available for analysis."],
+                "next_best_actions": ["Run at least one call before requesting a comparison."],
+                "generated_at": datetime.utcnow().isoformat(),
+            }
+
+        normalized_calls: List[Dict[str, Any]] = []
+        for call in calls:
+            analysis = call.get("analysis") or {}
+            normalized_calls.append(
+                {
+                    "task_id": call.get("task_id"),
+                    "target_phone": call.get("target_phone"),
+                    "target_name": call.get("target_name"),
+                    "target_url": call.get("target_url"),
+                    "target_source": call.get("target_source"),
+                    "target_snippet": call.get("target_snippet"),
+                    "location": call.get("location"),
+                    "status": call.get("status"),
+                    "outcome": call.get("outcome", analysis.get("outcome", "unknown")),
+                    "duration_seconds": call.get("duration_seconds", 0),
+                    "summary": analysis.get("summary", ""),
+                    "score": analysis.get("score", 0),
+                    "key_moments": analysis.get("key_moments", []),
+                    "decision_data": analysis.get("decision_data", {}),
+                    "transcript_excerpt": call.get("transcript_excerpt", []),
+                }
+            )
+
+        payload = {
+            "objective": objective,
+            "calls": normalized_calls,
+        }
+        user_content = json.dumps(payload, ensure_ascii=True)
+        messages = [
+            {"role": "system", "content": MULTI_CALL_SUMMARY_SYSTEM_PROMPT},
+            {"role": "user", "content": user_content},
+        ]
+
+        try:
+            generated: List[str] = []
+            provider = self._analysis_llm or self._llm
+            async for token in provider.stream_completion(
+                messages,
+                max_tokens=max(settings.LLM_MAX_TOKENS_ANALYSIS, 1400),
+            ):
+                generated.append(token)
+            raw = "".join(generated).strip()
+            if raw.startswith("```"):
+                lines = raw.split("\n")
+                lines = lines[1:]
+                if lines and lines[-1].strip() == "```":
+                    lines = lines[:-1]
+                raw = "\n".join(lines).strip()
+            parsed = json.loads(raw)
+        except Exception as exc:
+            log_event(
+                "negotiation",
+                "multi_call_summary_fallback",
+                status="warning",
+                details={"error": f"{type(exc).__name__}: {exc}", "call_count": len(calls)},
+            )
+            parsed = {}
+
+        best = max(normalized_calls, key=lambda c: int(c.get("score") or 0)) if normalized_calls else None
+        result = {
+            "overall_summary": parsed.get("overall_summary")
+            or "Completed calls were compared, but detailed synthesis was unavailable.",
+            "recommended_call_task_id": parsed.get("recommended_call_task_id")
+            or (best.get("task_id") if best else None),
+            "recommended_phone": parsed.get("recommended_phone")
+            or (best.get("target_phone") if best else None),
+            "recommended_option": parsed.get("recommended_option")
+            or "Choose the option with the strongest confirmed terms and best net value.",
+            "decision_rationale": parsed.get("decision_rationale")
+            or "Recommendation is based on available scores and extracted call details.",
+            "price_comparison": parsed.get("price_comparison") or [],
+            "important_facts": parsed.get("important_facts") or [],
+            "missing_information": parsed.get("missing_information") or [],
+            "next_best_actions": parsed.get("next_best_actions") or [],
+            "generated_at": datetime.utcnow().isoformat(),
+        }
+        return result
 
     def _keyword_fallback_analysis(self, transcript: List[TranscriptTurn]) -> Dict[str, Any]:
         """Legacy keyword-matching analysis used when LLM is unavailable."""

@@ -5,10 +5,87 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${PROJECT_ROOT}"
 
 AUTO_FIX_PORTS="${AUTO_FIX_PORTS:-1}"
+USE_NGROK="${USE_NGROK:-${NGROK_ENABLED:-0}}"
+COMPOSE_UP_ARGS=()
+TWILIO_WEBHOOK_HOST_CHANGED=0
+CREATED_TEMP_ENV_FILE=0
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --ngrok)
+      USE_NGROK=1
+      shift
+      ;;
+    --no-ngrok)
+      USE_NGROK=0
+      shift
+      ;;
+    --)
+      shift
+      while [ "$#" -gt 0 ]; do
+        COMPOSE_UP_ARGS+=("$1")
+        shift
+      done
+      ;;
+    *)
+      COMPOSE_UP_ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+NGROK_ENABLED="${USE_NGROK}"
+case "$(printf '%s' "${NGROK_ENABLED}" | tr '[:upper:]' '[:lower:]')" in
+  1|true|yes|on|y)
+    NGROK_ENABLED=1
+    ;;
+  *)
+    NGROK_ENABLED=0
+    ;;
+esac
+NGROK_API_PORT="${NGROK_API_PORT:-4040}"
 
 warn() { printf '\033[1;33mwarning\033[0m: %s\n' "$*" >&2; }
 info() { printf '\033[1;34minfo\033[0m: %s\n' "$*" >&2; }
 error() { printf '\033[1;31merror\033[0m: %s\n' "$*" >&2; }
+
+_sed_in_place() {
+  local expr="$1"
+  local file="$2"
+  if [ "$(uname -s)" = "Darwin" ]; then
+    sed -i '' "${expr}" "${file}"
+  else
+    sed -i "${expr}" "${file}"
+  fi
+}
+
+normalize_webhook_host() {
+  local raw="$1"
+  local normalized
+  normalized="$(printf '%s' "${raw}" | tr -d '\r' | sed -E 's/[[:space:]]+$//')"
+  normalized="${normalized%/}"
+  printf '%s' "${normalized}"
+}
+
+compose_supports_env_file() {
+  # shellcheck disable=SC2145
+  if "${COMPOSE_CMD[@]}" --help 2>&1 | grep -Fq -- "--env-file"; then
+    return 0
+  fi
+  return 1
+}
+
+compose_env_file_arg() {
+  if [ -f "backend/.env" ]; then
+    printf '%s' "backend/.env"
+    return 0
+  fi
+  if [ -f ".env" ]; then
+    printf '%s' ".env"
+    return 0
+  fi
+  return 1
+}
 
 get_env_value() {
   local file="$1"
@@ -174,34 +251,75 @@ else
 fi
 
 if ! docker info >/dev/null 2>&1; then
+  OS_NAME="$(uname -s 2>/dev/null || echo unknown)"
   warn "Docker daemon is not available for your user (permission denied or service issue)."
-  error "Run one of the following and re-run this script:"
-  echo "  - sudo systemctl start docker"
-  echo "  - sudo systemctl restart docker"
-  echo "  - Add user to docker group: sudo usermod -aG docker \$(whoami); newgrp docker"
+  error "Start Docker and re-run this script."
+  case "${OS_NAME}" in
+    Darwin)
+      echo "  - Open Docker Desktop and wait until it shows 'Engine running'"
+      echo "  - Or run: open -a Docker"
+      ;;
+    Linux)
+      echo "  - sudo systemctl start docker"
+      echo "  - sudo systemctl restart docker"
+      echo "  - Add user to docker group: sudo usermod -aG docker \$(whoami); newgrp docker"
+      ;;
+    MINGW*|MSYS*|CYGWIN*)
+      echo "  - Start Docker Desktop"
+      echo "  - If using WSL, ensure Docker Desktop integration is enabled for your distro"
+      ;;
+    *)
+      echo "  - Ensure the Docker daemon/service is running for your OS"
+      ;;
+  esac
   exit 1
 fi
 
-for pair in "backend/.env backend/.env.example" "frontend/.env.local frontend/.env.example"; do
+for pair in "backend/.env .env.example" "frontend/.env.local frontend/.env.example"; do
   IFS=' ' read -r target source <<<"${pair}"
   if [ ! -f "${target}" ]; then
+    if [ "${target}" = "backend/.env" ] && [ -f ".env" ]; then
+      cp ".env" "${target}"
+      warn "Created ${target} from root .env."
+      continue
+    fi
     if [ -f "${source}" ]; then
       cp "${source}" "${target}"
       warn "Created ${target} from ${source}."
     else
-      warn "Missing both ${target} and ${source}; create ${target} manually."
+      if [ "${target}" = "frontend/.env.local" ]; then
+        {
+          printf 'NEXT_PUBLIC_BACKEND_URL=http://localhost:3001\n'
+          printf 'NEXT_PUBLIC_BACKEND_WS_URL=ws://localhost:3001\n'
+        } > "${target}"
+        warn "Missing both ${target} and ${source}; created ${target} with default local values."
+      else
+        warn "Missing both ${target} and ${source}; create ${target} manually."
+      fi
     fi
   fi
 done
 
-if [ "${AUTO_FIX_PORTS}" = "1" ]; then
-  info "AUTO_FIX_PORTS is enabled. If default host ports are in use, free alternatives are selected automatically."
+COMPOSE_ENV_ARGS=()
+if compose_supports_env_file; then
+  if env_file="$(compose_env_file_arg)"; then
+    COMPOSE_ENV_ARGS=(--env-file "${env_file}")
+    info "Using docker compose env file: ${env_file}"
+  else
+    COMPOSE_ENV_ARGS=()
+    info "No .env or backend/.env found; running docker compose without --env-file."
+  fi
+else
+  warn "docker compose option --env-file is unavailable; proceeding with default compose env behavior."
+  if [ ! -f ".env" ]; then
+    : > ".env"
+    CREATED_TEMP_ENV_FILE=1
+    warn "Created temporary root .env (empty) for this run because docker compose --env-file is unsupported."
+  fi
 fi
 
-if [ "${SKIP_PREFLIGHT:-0}" != "1" ]; then
-  if ! "${PROJECT_ROOT}/scripts/preflight.sh" "${PRECHECK_STRICT-1}" ; then
-    exit 1
-  fi
+if [ "${AUTO_FIX_PORTS}" = "1" ]; then
+  info "AUTO_FIX_PORTS is enabled. If default host ports are in use, free alternatives are selected automatically."
 fi
 
 BACKEND_HOST_PORT="$(resolve_host_port "BACKEND_HOST_PORT" "3001")"
@@ -211,6 +329,73 @@ BACKEND_HOST_PORT="$(resolve_or_reassign_port "backend" "${BACKEND_HOST_PORT}")"
 FRONTEND_HOST_PORT="$(resolve_or_reassign_port "frontend" "${FRONTEND_HOST_PORT}")"
 
 export BACKEND_HOST_PORT FRONTEND_HOST_PORT
+
+_set_local_webhook_host() {
+  if [ ! -f "backend/.env" ]; then
+    return 0
+  fi
+
+  local local_webhook_host="http://localhost:${BACKEND_HOST_PORT}"
+  _set_webhook_host "${local_webhook_host}" "ngrok disabled"
+}
+
+_set_webhook_host() {
+  local webhook_host="$1"
+  local reason="$2"
+  if [ ! -f "backend/.env" ]; then
+    return 0
+  fi
+  local normalized_webhook_host
+  normalized_webhook_host="$(normalize_webhook_host "${webhook_host}")"
+  if [ -z "${normalized_webhook_host}" ]; then
+    warn "${reason}: skipped empty TWILIO_WEBHOOK_HOST update."
+    return 0
+  fi
+
+  local previous_webhook_host
+  previous_webhook_host="$(get_env_value "backend/.env" "TWILIO_WEBHOOK_HOST" 2>/dev/null || true)"
+  previous_webhook_host="$(normalize_webhook_host "${previous_webhook_host}")"
+
+  local tmp_file
+  tmp_file="$(mktemp)"
+  awk -v value="${normalized_webhook_host}" '
+    BEGIN { replaced = 0 }
+    /^[[:space:]]*TWILIO_WEBHOOK_HOST[[:space:]]*=/ {
+      if (!replaced) {
+        print "TWILIO_WEBHOOK_HOST=" value
+        replaced = 1
+      }
+      next
+    }
+    { print }
+    END {
+      if (!replaced) {
+        print "TWILIO_WEBHOOK_HOST=" value
+      }
+    }
+  ' "backend/.env" > "${tmp_file}"
+  mv "${tmp_file}" "backend/.env"
+
+  if [ "${previous_webhook_host}" != "${normalized_webhook_host}" ]; then
+    TWILIO_WEBHOOK_HOST_CHANGED=1
+    info "${reason}: TWILIO_WEBHOOK_HOST updated to ${normalized_webhook_host}"
+  else
+    info "${reason}: TWILIO_WEBHOOK_HOST unchanged (${normalized_webhook_host})"
+  fi
+}
+
+if [ "${NGROK_ENABLED}" = "1" ]; then
+  info "Tunnel mode: ngrok enabled (use --no-ngrok to disable)."
+else
+  info "Tunnel mode: local only (use --ngrok to enable public callbacks)."
+  _set_local_webhook_host
+fi
+
+if [ "${SKIP_PREFLIGHT:-0}" != "1" ]; then
+  if ! "${PROJECT_ROOT}/scripts/preflight.sh" "${PRECHECK_STRICT-1}" ; then
+    exit 1
+  fi
+fi
 
 # ---------------------------------------------------------------------------
 # ngrok tunnel management
@@ -225,28 +410,91 @@ _cleanup_ngrok() {
   fi
 }
 
-trap '_cleanup_ngrok' EXIT INT TERM
+_cleanup_dev_up() {
+  _cleanup_ngrok
+  if [ "${CREATED_TEMP_ENV_FILE}" = "1" ] && [ -f ".env" ]; then
+    rm -f ".env"
+  fi
+}
+
+trap '_cleanup_dev_up' EXIT INT TERM
+
+_extract_ngrok_url_from_log() {
+  local ngrok_log_file="$1"
+  if [ ! -f "${ngrok_log_file}" ]; then
+    return 1
+  fi
+
+  local url
+  url="$(grep -Eo 'https://[^[:space:]"]*ngrok[^[:space:]"]*' "${ngrok_log_file}" | tail -n 1 || true)"
+  url="${url%,}"
+  url="${url%\"}"
+  if [ -n "${url}" ]; then
+    printf '%s' "${url}"
+    return 0
+  fi
+  return 1
+}
+
+_launch_ngrok_process() {
+  local ngrok_log_file="$1"
+  shift
+
+  : > "${ngrok_log_file}"
+  ngrok "$@" --log stdout --log-format logfmt >"${ngrok_log_file}" 2>&1 &
+  NGROK_PID=$!
+
+  # Wait for either a discovered tunnel URL in logs or an early process failure.
+  local waited=0
+  while [ "${waited}" -lt 10 ]; do
+    if ! kill -0 "${NGROK_PID}" 2>/dev/null; then
+      error "ngrok exited during startup."
+      error "ngrok logs (${ngrok_log_file}):"
+      tail -n 40 "${ngrok_log_file}" >&2 || true
+      return 1
+    fi
+
+    local detected_url
+    detected_url="$(_extract_ngrok_url_from_log "${ngrok_log_file}" || true)"
+    if [ -n "${detected_url}" ]; then
+      printf '%s' "${detected_url}"
+      return 0
+    fi
+
+    sleep 1
+    waited=$((waited + 1))
+  done
+
+  # Process is still running but URL not yet observed; caller may use fallback
+  # detection (API query, static domain, or additional log parsing).
+  return 0
+}
 
 _start_ngrok() {
-  # Opt-out: NGROK_ENABLED=0
-  if [ "${NGROK_ENABLED:-1}" = "0" ]; then
+  local ngrok_api_url="http://127.0.0.1:${NGROK_API_PORT}/api/tunnels"
+  local ngrok_log_file="${PROJECT_ROOT}/backend/data/ngrok.log"
+
+  if [ "${NGROK_ENABLED}" != "1" ]; then
     info "ngrok: skipped (NGROK_ENABLED=0)"
     return 0
   fi
 
-  # Skip if ngrok binary is missing
   if ! command -v ngrok >/dev/null 2>&1; then
-    warn "ngrok binary not found in PATH — skipping tunnel. Install: https://ngrok.com/download"
-    return 0
+    error "ngrok requested but binary not found in PATH."
+    error "Install ngrok: https://ngrok.com/download"
+    return 1
   fi
 
-  # Reuse if ngrok is already running (API on :4040)
-  if curl -sf http://127.0.0.1:4040/api/tunnels >/dev/null 2>&1; then
+  mkdir -p "${PROJECT_ROOT}/backend/data"
+
+  # Reuse if ngrok is already running (API on configured port)
+  if curl -sf "${ngrok_api_url}" >/dev/null 2>&1; then
     local existing_url
-    existing_url="$(curl -sf http://127.0.0.1:4040/api/tunnels | python3 -c \
+    existing_url="$(curl -sf "${ngrok_api_url}" | python3 -c \
       "import sys,json; ts=json.load(sys.stdin)['tunnels']; print(ts[0]['public_url'] if ts else '')" 2>/dev/null || true)"
     if [ -n "${existing_url}" ]; then
       info "ngrok: reusing running tunnel → ${existing_url}"
+      _set_webhook_host "${existing_url}" "ngrok reuse"
       return 0
     fi
   fi
@@ -256,53 +504,65 @@ _start_ngrok() {
   webhook_host="$(get_env_value "backend/.env" "TWILIO_WEBHOOK_HOST" 2>/dev/null || true)"
 
   local ngrok_args=("http" "${BACKEND_HOST_PORT}")
+  local used_static_domain=0
+  local domain=""
+  local launch_url=""
 
   # If the configured host is a static ngrok domain, pin to it
   if [[ "${webhook_host}" == *".ngrok"* ]]; then
-    local domain="${webhook_host#https://}"
+    domain="${webhook_host#https://}"
     domain="${domain#http://}"
     domain="${domain%%/*}"
     ngrok_args+=("--url" "${domain}")
+    used_static_domain=1
     info "ngrok: starting with static domain ${domain}…"
   else
     info "ngrok: starting with dynamic URL…"
   fi
 
-  ngrok "${ngrok_args[@]}" >/dev/null 2>&1 &
-  NGROK_PID=$!
-
-  # Wait for the ngrok API to become available (up to 10 s)
-  local waited=0
-  while ! curl -sf http://127.0.0.1:4040/api/tunnels >/dev/null 2>&1; do
-    if [ "${waited}" -ge 10 ]; then
-      warn "ngrok: API at localhost:4040 did not respond within 10 s"
-      return 0
+  if ! launch_url="$(_launch_ngrok_process "${ngrok_log_file}" "${ngrok_args[@]}")"; then
+    if [ "${used_static_domain}" = "1" ]; then
+      warn "ngrok static domain failed; retrying with dynamic URL."
+      _cleanup_ngrok
+      ngrok_args=("http" "${BACKEND_HOST_PORT}")
+      used_static_domain=0
+      domain=""
+      if ! launch_url="$(_launch_ngrok_process "${ngrok_log_file}" "${ngrok_args[@]}")"; then
+        return 1
+      fi
+    else
+      return 1
     fi
-    sleep 1
-    waited=$((waited + 1))
-  done
+  fi
 
   # Fetch the tunnel URL
-  local tunnel_url
-  tunnel_url="$(curl -sf http://127.0.0.1:4040/api/tunnels | python3 -c \
-    "import sys,json; ts=json.load(sys.stdin)['tunnels']; print(ts[0]['public_url'] if ts else '')" 2>/dev/null || true)"
+  local tunnel_url="${launch_url}"
+
+  if [ -z "${tunnel_url}" ] && curl -sf "${ngrok_api_url}" >/dev/null 2>&1; then
+    tunnel_url="$(curl -sf "${ngrok_api_url}" | python3 -c \
+      "import sys,json; ts=json.load(sys.stdin)['tunnels']; print(ts[0]['public_url'] if ts else '')" 2>/dev/null || true)"
+  fi
 
   if [ -z "${tunnel_url}" ]; then
-    warn "ngrok: could not determine tunnel URL from API"
-    return 0
+    tunnel_url="$(_extract_ngrok_url_from_log "${ngrok_log_file}" || true)"
+  fi
+
+  if [ -z "${tunnel_url}" ] && [ "${used_static_domain}" = "1" ] && [ -n "${domain}" ]; then
+    tunnel_url="https://${domain}"
+  fi
+
+  if [ -z "${tunnel_url}" ]; then
+    error "ngrok: could not determine tunnel URL."
+    error "ngrok logs (${ngrok_log_file}):"
+    tail -n 40 "${ngrok_log_file}" >&2 || true
+    return 1
   fi
 
   info "ngrok: tunnel active → ${tunnel_url}"
 
-  # If the webhook host was a placeholder or missing, update backend/.env
-  if [ -z "${webhook_host}" ] \
-    || [ "${webhook_host}" = "https://your-public-url" ] \
-    || [ "${webhook_host}" = "https://your-public-ngrok-url" ]; then
-    if [ -f "backend/.env" ]; then
-      sed -i "s|^TWILIO_WEBHOOK_HOST=.*|TWILIO_WEBHOOK_HOST=${tunnel_url}|" "backend/.env"
-      info "ngrok: updated TWILIO_WEBHOOK_HOST in backend/.env → ${tunnel_url}"
-    fi
-  fi
+  # Keep backend/.env in sync with the active ngrok tunnel whenever ngrok mode
+  # is enabled, so Twilio callbacks always target the current tunnel.
+  _set_webhook_host "${tunnel_url}" "ngrok active"
 }
 
 _ensure_docker_host_url() {
@@ -323,6 +583,28 @@ _ensure_docker_host_url() {
   vllm_url="$(get_env_value "backend/.env" "VLLM_BASE_URL" 2>/dev/null || true)"
 
   local changed=0
+  local root_supabase_url
+  local root_supabase_anon_key
+  local root_supabase_table
+  local root_supabase_calls_table
+  local root_supabase_enabled
+  local root_supabase_calls_enabled
+  local root_supabase_artifacts_table
+  local root_supabase_artifacts_enabled
+  local root_supabase_artifact_audio_limit
+  local root_supabase_verbose_sync_logging
+  local root_auto_ivr_navigation_enabled
+  local backend_supabase_url
+  local backend_supabase_anon_key
+  local backend_supabase_table
+  local backend_supabase_calls_table
+  local backend_supabase_enabled
+  local backend_supabase_calls_enabled
+  local backend_supabase_artifacts_table
+  local backend_supabase_artifacts_enabled
+  local backend_supabase_artifact_audio_limit
+  local backend_supabase_verbose_sync_logging
+  local backend_auto_ivr_navigation_enabled
 
   if [[ "${ollama_url}" == *"localhost"* || "${ollama_url}" == *"127.0.0.1"* ]]; then
     local new_ollama="${ollama_url//localhost/host.docker.internal}"
@@ -337,13 +619,86 @@ _ensure_docker_host_url() {
     changed=1
   fi
 
+  # Optional Supabase fallbacks: if root-level values are set and backend/.env
+  # has them empty, inject only those keys into overrides so shared env works.
+  root_supabase_url="$(get_env_value ".env" "SUPABASE_URL" 2>/dev/null || true)"
+  root_supabase_anon_key="$(get_env_value ".env" "SUPABASE_ANON_KEY" 2>/dev/null || true)"
+  root_supabase_table="$(get_env_value ".env" "SUPABASE_CHAT_SESSIONS_TABLE" 2>/dev/null || true)"
+  root_supabase_calls_table="$(get_env_value ".env" "SUPABASE_CALLS_TABLE" 2>/dev/null || true)"
+  root_supabase_enabled="$(get_env_value ".env" "SUPABASE_CHAT_SESSIONS_ENABLED" 2>/dev/null || true)"
+  root_supabase_calls_enabled="$(get_env_value ".env" "SUPABASE_CALLS_ENABLED" 2>/dev/null || true)"
+  root_supabase_artifacts_table="$(get_env_value ".env" "SUPABASE_CALL_ARTIFACTS_TABLE" 2>/dev/null || true)"
+  root_supabase_artifacts_enabled="$(get_env_value ".env" "SUPABASE_CALL_ARTIFACTS_ENABLED" 2>/dev/null || true)"
+  root_supabase_artifact_audio_limit="$(get_env_value ".env" "SUPABASE_CALL_ARTIFACT_MAX_AUDIO_BYTES" 2>/dev/null || true)"
+  root_supabase_verbose_sync_logging="$(get_env_value ".env" "SUPABASE_VERBOSE_SYNC_LOGGING" 2>/dev/null || true)"
+  root_auto_ivr_navigation_enabled="$(get_env_value ".env" "AUTO_IVR_NAVIGATION_ENABLED" 2>/dev/null || true)"
+
+  backend_supabase_url="$(get_env_value "backend/.env" "SUPABASE_URL" 2>/dev/null || true)"
+  backend_supabase_anon_key="$(get_env_value "backend/.env" "SUPABASE_ANON_KEY" 2>/dev/null || true)"
+  backend_supabase_table="$(get_env_value "backend/.env" "SUPABASE_CHAT_SESSIONS_TABLE" 2>/dev/null || true)"
+  backend_supabase_calls_table="$(get_env_value "backend/.env" "SUPABASE_CALLS_TABLE" 2>/dev/null || true)"
+  backend_supabase_enabled="$(get_env_value "backend/.env" "SUPABASE_CHAT_SESSIONS_ENABLED" 2>/dev/null || true)"
+  backend_supabase_calls_enabled="$(get_env_value "backend/.env" "SUPABASE_CALLS_ENABLED" 2>/dev/null || true)"
+  backend_supabase_artifacts_table="$(get_env_value "backend/.env" "SUPABASE_CALL_ARTIFACTS_TABLE" 2>/dev/null || true)"
+  backend_supabase_artifacts_enabled="$(get_env_value "backend/.env" "SUPABASE_CALL_ARTIFACTS_ENABLED" 2>/dev/null || true)"
+  backend_supabase_artifact_audio_limit="$(get_env_value "backend/.env" "SUPABASE_CALL_ARTIFACT_MAX_AUDIO_BYTES" 2>/dev/null || true)"
+  backend_supabase_verbose_sync_logging="$(get_env_value "backend/.env" "SUPABASE_VERBOSE_SYNC_LOGGING" 2>/dev/null || true)"
+  backend_auto_ivr_navigation_enabled="$(get_env_value "backend/.env" "AUTO_IVR_NAVIGATION_ENABLED" 2>/dev/null || true)"
+
+  if [ -z "${backend_supabase_url}" ] && [ -n "${root_supabase_url}" ]; then
+    printf 'SUPABASE_URL=%s\n' "${root_supabase_url}" >> "${override_file}"
+    changed=1
+  fi
+  if [ -z "${backend_supabase_anon_key}" ] && [ -n "${root_supabase_anon_key}" ]; then
+    printf 'SUPABASE_ANON_KEY=%s\n' "${root_supabase_anon_key}" >> "${override_file}"
+    changed=1
+  fi
+  if [ -z "${backend_supabase_table}" ] && [ -n "${root_supabase_table}" ]; then
+    printf 'SUPABASE_CHAT_SESSIONS_TABLE=%s\n' "${root_supabase_table}" >> "${override_file}"
+    changed=1
+  fi
+  if [ -z "${backend_supabase_calls_table}" ] && [ -n "${root_supabase_calls_table}" ]; then
+    printf 'SUPABASE_CALLS_TABLE=%s\n' "${root_supabase_calls_table}" >> "${override_file}"
+    changed=1
+  fi
+  if [ -z "${backend_supabase_enabled}" ] && [ -n "${root_supabase_enabled}" ]; then
+    printf 'SUPABASE_CHAT_SESSIONS_ENABLED=%s\n' "${root_supabase_enabled}" >> "${override_file}"
+    changed=1
+  fi
+  if [ -z "${backend_supabase_calls_enabled}" ] && [ -n "${root_supabase_calls_enabled}" ]; then
+    printf 'SUPABASE_CALLS_ENABLED=%s\n' "${root_supabase_calls_enabled}" >> "${override_file}"
+    changed=1
+  fi
+  if [ -z "${backend_supabase_artifacts_table}" ] && [ -n "${root_supabase_artifacts_table}" ]; then
+    printf 'SUPABASE_CALL_ARTIFACTS_TABLE=%s\n' "${root_supabase_artifacts_table}" >> "${override_file}"
+    changed=1
+  fi
+  if [ -z "${backend_supabase_artifacts_enabled}" ] && [ -n "${root_supabase_artifacts_enabled}" ]; then
+    printf 'SUPABASE_CALL_ARTIFACTS_ENABLED=%s\n' "${root_supabase_artifacts_enabled}" >> "${override_file}"
+    changed=1
+  fi
+  if [ -z "${backend_supabase_artifact_audio_limit}" ] && [ -n "${root_supabase_artifact_audio_limit}" ]; then
+    printf 'SUPABASE_CALL_ARTIFACT_MAX_AUDIO_BYTES=%s\n' "${root_supabase_artifact_audio_limit}" >> "${override_file}"
+    changed=1
+  fi
+  if [ -z "${backend_supabase_verbose_sync_logging}" ] && [ -n "${root_supabase_verbose_sync_logging}" ]; then
+    printf 'SUPABASE_VERBOSE_SYNC_LOGGING=%s\n' "${root_supabase_verbose_sync_logging}" >> "${override_file}"
+    changed=1
+  fi
+  if [ -z "${backend_auto_ivr_navigation_enabled}" ] && [ -n "${root_auto_ivr_navigation_enabled}" ]; then
+    printf 'AUTO_IVR_NAVIGATION_ENABLED=%s\n' "${root_auto_ivr_navigation_enabled}" >> "${override_file}"
+    changed=1
+  fi
+
   if [ "${changed}" -eq 1 ]; then
     warn "Wrote host.docker.internal overrides to ${override_file} so the container can reach host Ollama."
     info "  (backend/.env is NOT modified — native runs still use localhost)"
   fi
 }
 
-_start_ngrok
+if ! _start_ngrok; then
+  exit 1
+fi
 _ensure_docker_host_url
 
 if [ "${BACKEND_HOST_PORT}" = "${FRONTEND_HOST_PORT}" ]; then
@@ -368,5 +723,22 @@ else
   info "Auto-fixed ports: BACKEND_HOST_PORT=${BACKEND_HOST_PORT}, FRONTEND_HOST_PORT=${FRONTEND_HOST_PORT}"
 fi
 
-info "Starting services with: ${COMPOSE_CMD[*]} up --build ${*+"$*"}"
-${COMPOSE_CMD[@]} up --build ${@+"$@"}
+COMPOSE_EFFECTIVE_ARGS=("${COMPOSE_UP_ARGS[@]+"${COMPOSE_UP_ARGS[@]}"}")
+if [ "${TWILIO_WEBHOOK_HOST_CHANGED}" = "1" ]; then
+  COMPOSE_EFFECTIVE_ARGS=(--force-recreate "${COMPOSE_EFFECTIVE_ARGS[@]+"${COMPOSE_EFFECTIVE_ARGS[@]}"}")
+  info "TWILIO_WEBHOOK_HOST changed; forcing container recreate so backend picks up new callback host."
+fi
+
+HAS_COMPOSE_ARGS=0
+for _arg in "${COMPOSE_EFFECTIVE_ARGS[@]+"${COMPOSE_EFFECTIVE_ARGS[@]}"}"; do
+  HAS_COMPOSE_ARGS=1
+  break
+done
+
+if [ "${HAS_COMPOSE_ARGS}" = "1" ]; then
+  info "Starting services with: ${COMPOSE_CMD[*]} ${COMPOSE_ENV_ARGS[*]} up --build ${COMPOSE_EFFECTIVE_ARGS[*]}"
+  "${COMPOSE_CMD[@]}" "${COMPOSE_ENV_ARGS[@]}" up --build "${COMPOSE_EFFECTIVE_ARGS[@]}"
+else
+  info "Starting services with: ${COMPOSE_CMD[*]} ${COMPOSE_ENV_ARGS[*]} up --build"
+  "${COMPOSE_CMD[@]}" "${COMPOSE_ENV_ARGS[@]}" up --build
+fi

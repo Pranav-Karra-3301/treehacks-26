@@ -1,0 +1,92 @@
+name: Deploy Backend to Cloud Run
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: true
+
+env:
+  PROJECT_ID: kiru-487506
+  REGION: us-central1
+  SERVICE: kiru-backend
+  IMAGE: us-central1-docker.pkg.dev/kiru-487506/kiru/backend
+
+jobs:
+  deploy:
+    name: Deploy to Cloud Run
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+
+      - name: Build and push image
+        working-directory: backend
+        run: |
+          docker build -t ${{ env.IMAGE }}:${{ github.sha }} -t ${{ env.IMAGE }}:latest .
+          docker push ${{ env.IMAGE }}:${{ github.sha }}
+          docker push ${{ env.IMAGE }}:latest
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE }} \
+            --image ${{ env.IMAGE }}:${{ github.sha }} \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8080 \
+            --memory 1Gi \
+            --cpu 1 \
+            --min-instances 0 \
+            --max-instances 3 \
+            --timeout 300 \
+            --set-env-vars "\
+          LLM_PROVIDER=${{ secrets.LLM_PROVIDER }},\
+          OPENAI_BASE_URL=${{ secrets.OPENAI_BASE_URL }},\
+          OPENAI_MODEL=${{ secrets.OPENAI_MODEL }},\
+          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},\
+          ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }},\
+          DEEPGRAM_API_KEY=${{ secrets.DEEPGRAM_API_KEY }},\
+          DEEPGRAM_VOICE_AGENT_ENABLED=true,\
+          DEEPGRAM_VOICE_AGENT_THINK_PROVIDER=openai,\
+          DEEPGRAM_VOICE_AGENT_THINK_MODEL=gpt-4o-mini,\
+          TWILIO_ACCOUNT_SID=${{ secrets.TWILIO_ACCOUNT_SID }},\
+          TWILIO_AUTH_TOKEN=${{ secrets.TWILIO_AUTH_TOKEN }},\
+          TWILIO_PHONE_NUMBER=${{ secrets.TWILIO_PHONE_NUMBER }},\
+          TWILIO_WEBHOOK_HOST=${{ secrets.TWILIO_WEBHOOK_HOST }},\
+          SUPABASE_URL=${{ secrets.SUPABASE_URL }},\
+          SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }},\
+          SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }},\
+          EXA_SEARCH_ENABLED=true,\
+          EXA_API_KEY=${{ secrets.EXA_API_KEY }},\
+          ALLOWED_ORIGINS=${{ secrets.ALLOWED_ORIGINS }},\
+          LOG_LEVEL=INFO,\
+          LOG_PRETTY=false"
+
+      - name: Show deployment URL
+        run: |
+          URL=$(gcloud run services describe ${{ env.SERVICE }} --region ${{ env.REGION }} --format 'value(status.url)')
+          echo "## 🚀 Deployed to Cloud Run" >> $GITHUB_STEP_SUMMARY
+          echo "**URL:** ${URL}" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** ${{ env.IMAGE }}:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY

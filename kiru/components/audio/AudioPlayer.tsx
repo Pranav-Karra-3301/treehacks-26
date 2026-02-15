@@ -51,9 +51,10 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
         <Pressable
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            console.log('[AudioPlayer] togglePlay, src:', src);
             togglePlay();
           }}
+          accessibilityRole="button"
+          accessibilityLabel={playing ? 'Pause recording' : 'Play recording'}
           style={{
             height: 40,
             width: 40,
@@ -76,6 +77,7 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
             minimumValue={0}
             maximumValue={duration || 1}
             onSlidingComplete={seek}
+            accessibilityLabel="Audio position"
             minimumTrackTintColor={colors.gray900}
             maximumTrackTintColor={colors.gray200}
             thumbTintColor={colors.gray900}

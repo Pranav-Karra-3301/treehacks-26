@@ -169,6 +169,9 @@
 html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -177,6 +180,17 @@ body {
   background: #ffffff;
   color: #09090b;
   font-family: 'Soehne', system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+  width: 100%;
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
+}
+
+/* Mobile viewport fix */
+@supports (-webkit-touch-callout: none) {
+  body {
+    min-height: -webkit-fill-available;
+  }
 }
 
 h1,
@@ -208,6 +222,15 @@ h6 {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #a1a1aa;
+}
+
+/* Hide scrollbar while keeping scroll behavior */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
 
 /* Dot grid pattern */

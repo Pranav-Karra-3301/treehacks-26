@@ -4,18 +4,23 @@ import type { CallEvent } from '../lib/types';
 
 export function useWebSocket(onEvent: (event: CallEvent) => void) {
   const socketRef = useRef<WebSocket | null>(null);
+  const onEventRef = useRef(onEvent);
 
-  const connect = useCallback(
-    (sessionId: string) => {
-      if (socketRef.current) {
-        socketRef.current.close();
-      }
-      const socket = createCallSocket(sessionId, onEvent);
-      socket.onclose = () => {};
-      socketRef.current = socket;
-    },
-    [onEvent],
-  );
+  // Keep the ref current without causing reconnections
+  useEffect(() => {
+    onEventRef.current = onEvent;
+  }, [onEvent]);
+
+  const connect = useCallback((sessionId: string) => {
+    if (socketRef.current) {
+      socketRef.current.close();
+    }
+    const socket = createCallSocket(sessionId, (event) => {
+      onEventRef.current(event);
+    });
+    socket.onclose = () => {};
+    socketRef.current = socket;
+  }, []);
 
   const disconnect = useCallback(() => {
     if (socketRef.current) {
@@ -26,9 +31,7 @@ export function useWebSocket(onEvent: (event: CallEvent) => void) {
 
   useEffect(() => {
     return () => {
-      if (socketRef.current) {
-        socketRef.current.close();
-      }
+      socketRef.current?.close();
     };
   }, []);
 

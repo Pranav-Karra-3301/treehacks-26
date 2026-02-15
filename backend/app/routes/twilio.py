@@ -328,6 +328,7 @@ def get_routes(orchestrator: CallOrchestrator, ws_manager: ConnectionManager):
                                     call_sid=call_sid,
                                 )
                             await orchestrator.stop_task_call(task_id, from_status_callback=True, stop_reason="stream_stop")
+                            break
             except WebSocketDisconnect:
                 await ws_manager.broadcast(task_id, {"type": "call_status", "data": {"status": "disconnected"}})
                 log_event(

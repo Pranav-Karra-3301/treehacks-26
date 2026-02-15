@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import pytest
+
 from app.services.audio_pipeline import SentenceBuffer
+
+pytestmark = pytest.mark.unit
 
 
 def test_sentence_buffer_collects_until_boundary() -> None:

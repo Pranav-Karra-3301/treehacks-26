@@ -3,6 +3,9 @@ from __future__ import annotations
 import asyncio
 
 import httpx
+import pytest
+
+pytestmark = pytest.mark.unit
 
 from app.core.config import settings
 from app.services.research import ExaSearchService

@@ -55,6 +55,7 @@ class Settings:
     # OpenAI API
     OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
     OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    OPENAI_ANALYSIS_MODEL = os.getenv("OPENAI_ANALYSIS_MODEL", "gpt-5-nano")
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
     # Groq API (OpenAI-compatible endpoint)
@@ -153,7 +154,7 @@ class Settings:
     )
     EXA_API_KEY = os.getenv("EXA_API_KEY", "")
     EXA_SEARCH_URL = os.getenv("EXA_SEARCH_URL", "https://api.exa.ai/search")
-    EXA_SEARCH_RESULTS_LIMIT = int(os.getenv("EXA_SEARCH_RESULTS_LIMIT", "5"))
+    EXA_SEARCH_RESULTS_LIMIT = int(os.getenv("EXA_SEARCH_RESULTS_LIMIT", "8"))
     EXA_SEARCH_TYPE = os.getenv("EXA_SEARCH_TYPE", "auto")
 
     # Perplexity Sonar
@@ -163,6 +164,11 @@ class Settings:
     PERPLEXITY_SEARCH_ENABLED = (
         os.getenv("PERPLEXITY_SEARCH_ENABLED", "false").strip().lower() == "true"
     )
+
+    # Supabase
+    SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
+    SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "").strip()
+    SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 
     # Redis / caching
     UPSTASH_REDIS_URL = os.getenv("UPSTASH_REDIS_URL", "").strip()

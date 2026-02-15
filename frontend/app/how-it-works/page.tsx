@@ -1,10 +1,20 @@
 'use client';
 
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useRef, ReactNode } from 'react';
 import { motion, useInView } from 'framer-motion';
 import { ArrowUpRight, ArrowRight } from 'lucide-react';
-import MermaidDiagram from '@/components/mermaid-diagram';
+
+const MermaidDiagram = dynamic(() => import('../../components/mermaid-diagram'), {
+  ssr: false,
+  loading: () => (
+    <div className="animate-pulse space-y-3 py-8">
+      <div className="h-4 w-1/3 rounded bg-gray-200/60" />
+      <div className="h-48 w-full rounded-lg bg-gray-100/60" />
+    </div>
+  ),
+});
 
 // ─── Branded wordmark ──────────────────────────────────────────────────────────
 
@@ -305,11 +315,11 @@ export default function HowItWorksPage() {
             <div className="flex flex-col items-center gap-6">
               <div className="flex items-center gap-2 text-[13px] text-white/50">
                 <span>Built by</span>
-                <span className="text-white/80 font-medium">Pranav</span>
+                <a href="https://x.com/pranavkarra" target="_blank" rel="noopener noreferrer" className="text-white/80 font-medium hover:text-white transition">Pranav</a>
                 <span>&middot;</span>
-                <span className="text-white/80 font-medium">Ethan</span>
+                <a href="https://x.com/_eth0n" target="_blank" rel="noopener noreferrer" className="text-white/80 font-medium hover:text-white transition">Ethan</a>
                 <span>&middot;</span>
-                <span className="text-white/80 font-medium">Jayanth</span>
+                <a href="https://www.linkedin.com/in/jayanthsidamsety/" target="_blank" rel="noopener noreferrer" className="text-white/80 font-medium hover:text-white transition">Jayanth</a>
               </div>
               <div className="flex items-center gap-6">
                 <Link href="/chat" className="text-[13px] text-white/60 transition hover:text-white">Launch App</Link>

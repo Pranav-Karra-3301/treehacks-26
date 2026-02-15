@@ -1,5 +1,24 @@
 import { BACKEND_API_URL, BACKEND_WS_URL } from './config';
-import type { TaskDetail, TaskSummary, CallEvent, AnalysisPayload, ActionResponse, VoiceReadiness, ResearchResponse, RecordingMetadata, TelemetryRecentResponse, TelemetrySummaryResponse, TranscriptResponse, TelemetryEventsPayload, CallRecordingMetadata, CallRecordingFiles, TaskTranscriptPayload } from './types';
+import type {
+  TaskDetail,
+  TaskSummary,
+  CallEvent,
+  AnalysisPayload,
+  ActionResponse,
+  VoiceReadiness,
+  ResearchResponse,
+  RecordingMetadata,
+  TelemetryRecentResponse,
+  TelemetrySummaryResponse,
+  TranscriptResponse,
+  TelemetryEventsPayload,
+  CallRecordingMetadata,
+  CallRecordingFiles,
+  TaskTranscriptPayload,
+  MultiCallSummaryResponse,
+  ChatSessionMode,
+  ChatSessionRecord,
+} from './types';
 
 export async function createTask(payload: unknown): Promise<TaskSummary> {
   const res = await fetch(`${BACKEND_API_URL}/api/tasks`, {
@@ -8,6 +27,36 @@ export async function createTask(payload: unknown): Promise<TaskSummary> {
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(`Failed to create task: ${res.status}`);
+  return res.json();
+}
+
+export async function upsertChatSession(payload: {
+  session_id: string;
+  mode: ChatSessionMode;
+  revision: number;
+  run_id?: string | null;
+  task_ids: string[];
+  data: Record<string, unknown>;
+}): Promise<ChatSessionRecord> {
+  const res = await fetch(`${BACKEND_API_URL}/api/chat-sessions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Failed to upsert chat session: ${res.status}`);
+  return res.json();
+}
+
+export async function getChatSessionLatest(mode?: ChatSessionMode): Promise<ChatSessionRecord> {
+  const query = mode ? `?mode=${mode}` : '';
+  const res = await fetch(`${BACKEND_API_URL}/api/chat-sessions/latest${query}`);
+  if (!res.ok) throw new Error(`Failed to load latest chat session: ${res.status}`);
+  return res.json();
+}
+
+export async function getChatSessionById(sessionId: string): Promise<ChatSessionRecord> {
+  const res = await fetch(`${BACKEND_API_URL}/api/chat-sessions/${sessionId}`);
+  if (!res.ok) throw new Error(`Failed to load chat session: ${res.status}`);
   return res.json();
 }
 
@@ -41,6 +90,38 @@ export async function stopCall(id: string): Promise<ActionResponse> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     return { ok: false, message: body.detail ?? `Failed to stop call: ${res.status}`, session_id: null };
+  }
+  return res.json();
+}
+
+export async function transferCall(id: string, toPhone: string): Promise<ActionResponse> {
+  const res = await fetch(`${BACKEND_API_URL}/api/tasks/${id}/transfer`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ to_phone: toPhone }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    return { ok: false, message: body.detail ?? `Failed to transfer call: ${res.status}`, session_id: null };
+  }
+  return res.json();
+}
+
+export async function sendCallDtmf(id: string, digits: string): Promise<ActionResponse> {
+  const res = await fetch(`${BACKEND_API_URL}/api/tasks/${id}/dtmf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ digits }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = body.detail;
+    const message = typeof detail === 'string'
+      ? detail
+      : Array.isArray(detail)
+        ? detail.map((d: { msg?: string }) => d.msg || JSON.stringify(d)).join('; ')
+        : `Failed to send keypad digits: ${res.status}`;
+    return { ok: false, message, session_id: null };
   }
   return res.json();
 }
@@ -95,6 +176,16 @@ export async function getTaskTranscript(id: string): Promise<TranscriptResponse>
   return res.json();
 }
 
+export async function getMultiCallSummary(taskIds: string[], objective = ''): Promise<MultiCallSummaryResponse> {
+  const res = await fetch(`${BACKEND_API_URL}/api/tasks/multi-analysis`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ task_ids: taskIds, taskIds, objective }),
+  });
+  if (!res.ok) throw new Error(`Failed to load multi-call summary: ${res.status}`);
+  return res.json();
+}
+
 export async function fetchTelemetryRecent(limit = 50): Promise<TelemetryRecentResponse> {
   const res = await fetch(`${BACKEND_API_URL}/api/telemetry/recent?limit=${limit}`);
   if (!res.ok) throw new Error(`Failed to fetch telemetry: ${res.status}`);
@@ -126,8 +217,8 @@ export async function getRecentTelemetry(params: {
   return res.json();
 }
 
-export function createCallSocket(sessionId: string, onEvent: (event: CallEvent) => void): WebSocket {
-  const socket = new WebSocket(`${BACKEND_WS_URL}/ws/call/${sessionId}`);
+export function createCallSocket(identifier: string, onEvent: (event: CallEvent) => void): WebSocket {
+  const socket = new WebSocket(`${BACKEND_WS_URL}/ws/call/${identifier}`);
   socket.onmessage = (event) => {
     try {
       const parsed: CallEvent = JSON.parse(event.data);

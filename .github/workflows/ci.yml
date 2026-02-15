@@ -11,8 +11,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  backend-unit:
-    name: Backend Unit Tests
+  backend:
+    name: Backend Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -31,81 +31,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run unit tests
+      - name: Run tests
         working-directory: backend
-        run: pytest -q -m unit
-
-  backend-integration:
-    name: Backend Integration Tests
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: "pip"
-          cache-dependency-path: backend/requirements.txt
-
-      - name: Install dependencies
-        working-directory: backend
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Run integration tests
-        working-directory: backend
-        run: pytest -q -m integration
-
-  backend-ws:
-    name: Backend WebSocket Tests
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: "pip"
-          cache-dependency-path: backend/requirements.txt
-
-      - name: Install dependencies
-        working-directory: backend
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Run WebSocket tests
-        working-directory: backend
-        run: pytest -q -m ws
-
-  backend-benchmark:
-    name: Backend Benchmarks
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: "pip"
-          cache-dependency-path: backend/requirements.txt
-
-      - name: Install dependencies
-        working-directory: backend
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Run benchmark checks
-        working-directory: backend
-        run: pytest -q -m benchmark
+        run: pytest -q
 
   frontend:
     name: Frontend Lint & Build
