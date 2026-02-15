@@ -607,7 +607,7 @@ export default function ChatPage() {
       {/* ── Main area ─────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <header className="flex items-center justify-between bg-white/80 backdrop-blur-xl border-b border-gray-200/60 px-5 py-3 shrink-0">
+        <header className="flex items-center justify-between mx-4 mt-3 rounded-2xl bg-white/80 backdrop-blur-xl border border-gray-200/60 shadow-soft px-5 py-3 shrink-0">
           <div className="flex items-center gap-3">
             {!sidebarOpen && (
               <button
@@ -624,7 +624,7 @@ export default function ChatPage() {
               <ArrowLeft size={16} />
             </Link>
             <div className="h-4 w-px bg-gray-200" />
-            <span className="text-[17px] tracking-tight text-gray-950 font-serif italic">kiru</span>
+            <span className="text-[28px] tracking-tight text-gray-950 font-serif italic">kiru</span>
           </div>
           <div className="flex items-center gap-3">
             {isOnCall && (

@@ -258,21 +258,23 @@ export default function LandingPage() {
     <div className="min-h-screen bg-white">
 
       {/* ── Nav ─────────────────────────────────── */}
-      <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-gray-100/60">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 h-14">
-          <Link href="/" className="text-[18px] tracking-tight text-gray-950">
-            <Kiru />
-          </Link>
-          <div className="flex items-center gap-6">
-            <a href="#how-it-works" className="hidden sm:block text-[13px] text-gray-500 transition hover:text-gray-900">How it works</a>
-            <a href="#features" className="hidden sm:block text-[13px] text-gray-500 transition hover:text-gray-900">Features</a>
-            <Link href="/dashboard" className="hidden sm:block text-[13px] text-gray-500 transition hover:text-gray-900">Dashboard</Link>
-            <Link href="/chat" className="group inline-flex items-center gap-1.5 rounded-full bg-gray-950 px-4 py-1.5 text-[13px] font-medium text-white transition hover:bg-gray-800">
-              Launch App <ArrowUpRight size={12} strokeWidth={2.5} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+      <div className="sticky top-0 z-50 flex justify-center px-4 pt-3">
+        <nav className="w-full max-w-5xl rounded-2xl bg-white/80 backdrop-blur-xl border border-gray-200/60 shadow-soft">
+          <div className="flex items-center justify-between px-6 h-14">
+            <Link href="/" className="tracking-tight text-gray-950">
+              <span className="font-serif italic text-[28px]">kiru</span>
             </Link>
+            <div className="flex items-center gap-6">
+              <a href="#how-it-works" className="hidden sm:block text-[13px] text-gray-500 transition hover:text-gray-900">How it works</a>
+              <a href="#features" className="hidden sm:block text-[13px] text-gray-500 transition hover:text-gray-900">Features</a>
+              <Link href="/dashboard" className="hidden sm:block text-[13px] text-gray-500 transition hover:text-gray-900">Dashboard</Link>
+              <Link href="/chat" className="group inline-flex items-center gap-1.5 rounded-full bg-gray-950 px-4 py-1.5 text-[13px] font-medium text-white transition hover:bg-gray-800">
+                Launch App <ArrowUpRight size={12} strokeWidth={2.5} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+              </Link>
+            </div>
           </div>
-        </div>
-      </nav>
+        </nav>
+      </div>
 
       {/* ── Hero ────────────────────────────────── */}
       <section ref={heroRef} className="relative overflow-hidden">
