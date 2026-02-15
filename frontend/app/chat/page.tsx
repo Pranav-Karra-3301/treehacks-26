@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowUp, ArrowLeft, Phone, RotateCcw, AlertTriangle, Plus, PanelLeftClose, PanelLeft, BarChart3, X } from 'lucide-react';
 import { createTask, startCall, stopCall, transferCall, sendCallDtmf, createCallSocket, checkVoiceReadiness, searchResearch, getTaskAnalysis, getTaskTranscript, getTask, listTasks, getMultiCallSummary, getChatSessionById, getChatSessionLatest, upsertChatSession } from '../../lib/api';
 import { readActiveLocalSession, writeLocalSessionWithAttempts, type PersistedChatSessionEnvelope } from '../../lib/chat-session-store';
-import type { CallEvent, CallStatus, AnalysisPayload, TaskSummary, CallOutcome, BusinessResult, VoiceReadiness, MultiCallSummaryPayload, ChatSessionMode, ChatSessionRecord } from '../../lib/types';
+import type { CallEvent, CallStatus, AnalysisPayload, TaskSummary, CallOutcome, BusinessResult, VoiceReadiness, MultiCallSummaryPayload, MultiCallPriceComparison, ChatSessionMode, ChatSessionRecord } from '../../lib/types';
 import AnalysisCard from '../../components/analysis-card';
 import AudioPlayer from '../../components/audio-player';
 import SearchResultCards from '../../components/search-result-cards';
@@ -1122,7 +1122,26 @@ export default function ChatPage() {
   const loadMultiSummary = useCallback(async (taskIds: string[], objectiveText: string, force = false) => {
     const deduped = Array.from(new Set(taskIds.filter(Boolean)));
     if (deduped.length === 0) return;
-    const requestKey = `${objectiveText}::${deduped.slice().sort().join(',')}`;
+
+    // Filter to only include calls that actually ended (exclude failed calls with empty transcripts)
+    const succeededTaskIds = deduped.filter((tid) => {
+      const entry = Object.values(multiCallsRef.current).find((s) => s.taskId === tid);
+      return !entry || entry.status === 'ended';
+    });
+
+    if (succeededTaskIds.length === 0) {
+      setMultiSummaryState('error');
+      setMultiSummaryError('All calls ended without connecting. Try again or enter a number directly.');
+      addMessage({
+        role: 'ai',
+        text: 'All calls ended without connecting. Try again or enter a number directly.',
+      });
+      return;
+    }
+
+    const failedCount = deduped.length - succeededTaskIds.length;
+
+    const requestKey = `${objectiveText}::${succeededTaskIds.slice().sort().join(',')}`;
     if (
       !force
       && activeSummaryRequestRef.current === requestKey
@@ -1135,12 +1154,15 @@ export default function ChatPage() {
     setMultiSummaryError(null);
 
     try {
-      const response = await getMultiCallSummary(deduped, objectiveText);
+      const response = await getMultiCallSummary(succeededTaskIds, objectiveText);
       setMultiSummary(response.summary);
       setMultiSummaryState('ready');
+      const failedNote = failedCount > 0
+        ? ` (${failedCount} call${failedCount === 1 ? '' : 's'} couldn't connect)`
+        : '';
       addMessage({
         role: 'ai',
-        text: 'I compared every completed call and prepared one combined recommendation with all key pricing and terms.',
+        text: `I compared every completed call and prepared one combined recommendation with all key pricing and terms.${failedNote}`,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
@@ -1848,6 +1870,53 @@ export default function ChatPage() {
     refreshPastTasks();
   }
 
+  function buildCrossCallContext(excludePhone?: string): string {
+    const lines: string[] = [];
+    const excludeNormalized = excludePhone ? normalizePhone(excludePhone) : null;
+
+    // Pull from master summary price_comparison (richest data source)
+    if (multiSummary?.price_comparison) {
+      for (const item of multiSummary.price_comparison) {
+        const itemPhoneNormalized = item.phone ? normalizePhone(item.phone) : null;
+        if (excludeNormalized && itemPhoneNormalized === excludeNormalized) continue;
+        const vendor = item.vendor || formatPhone(item.phone || '');
+
+        let line = `- ${vendor}`;
+        if (item.quoted_prices?.length) line += ` quoted ${item.quoted_prices.join(', ')}`;
+        if (item.discounts?.length) line += ` with discounts: ${item.discounts.join(', ')}`;
+        if (item.key_takeaways?.length) line += `. Key info: ${item.key_takeaways.slice(0, 2).join('; ')}`;
+        lines.push(line);
+      }
+    }
+
+    // Fallback: use per-call analysis summaries if no price_comparison data
+    if (lines.length === 0) {
+      for (const [phone, state] of Object.entries(multiCallsRef.current)) {
+        const phoneNormalized = normalizePhone(phone);
+        if (excludeNormalized && phoneNormalized === excludeNormalized) continue;
+        if (state.status !== 'ended' || !state.analysis) continue;
+
+        const target = multiCallTargets[phone];
+        const vendor = target?.title || formatPhone(phone);
+        const line = `- ${vendor}: ${state.analysis.summary.slice(0, 150)}`;
+        lines.push(line);
+      }
+    }
+
+    if (lines.length === 0) return '';
+
+    const recommendation = multiSummary?.recommended_option
+      ? `\nBest option so far: ${multiSummary.recommended_option}`
+      : '';
+
+    return [
+      'LEVERAGE FROM PREVIOUS CALLS:',
+      ...lines,
+      recommendation,
+      'Use these competitor quotes as leverage to negotiate a better price.',
+    ].filter(Boolean).join('\n');
+  }
+
   function handleCallFromSearch(result: BusinessResult, phone: string) {
     setPhoneNumber(phone);
     addMessage({ role: 'user', text: `Call ${result.title || phone}` });
@@ -1860,6 +1929,81 @@ export default function ChatPage() {
       title: result.title ?? null,
       url: result.url ?? null,
       snippet: result.snippet ?? null,
+    });
+  }
+
+  function handleCallAllFromSearch(results: BusinessResult[], phones: string[]) {
+    setConcurrentTestMode(true);
+
+    const targetDirectory: Record<string, MultiCallTargetMeta> = {};
+    results.forEach((result) => {
+      const phone = result.phone_numbers[0];
+      if (!phone) return;
+      const normalized = normalizePhone(phone);
+      if (!normalized) return;
+      targetDirectory[normalized] = {
+        phone: normalized,
+        source: 'exa',
+        title: result.title ?? null,
+        url: result.url ?? null,
+        snippet: result.snippet ?? null,
+      };
+    });
+
+    // Build research context from all results
+    const snippets = results
+      .filter((r) => r.snippet)
+      .map((r) => `${r.title ?? ''}: ${r.snippet}`)
+      .join('\n');
+    if (snippets) {
+      setResearchContext(snippets);
+    }
+
+    const normalizedPhones = phones
+      .map((p) => normalizePhone(p))
+      .filter((p): p is string => Boolean(p))
+      .slice(0, MAX_CONCURRENT_TEST_CALLS);
+
+    addMessage({ role: 'user', text: `Call all ${normalizedPhones.length} businesses` });
+
+    const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    void startConcurrentTestCalls(normalizedPhones, objective, 'real', runId, targetDirectory);
+  }
+
+  function handleCallBackFromSummary(item: MultiCallPriceComparison) {
+    const phone = item.phone;
+    if (!phone) return;
+    const normalized = normalizePhone(phone);
+    if (!normalized) {
+      addMessage({ role: 'ai', text: 'Could not parse the phone number for this vendor.' });
+      return;
+    }
+
+    // Build cross-call leverage context (exclude this vendor)
+    const leverageContext = buildCrossCallContext(normalized);
+    if (leverageContext) {
+      setResearchContext(leverageContext);
+    }
+
+    // Exit concurrent mode for single call, but keep multiCalls/summary visible
+    setConcurrentTestMode(false);
+
+    const vendorName = item.vendor || formatPhone(normalized);
+    addMessage({ role: 'user', text: `Call back ${vendorName}` });
+
+    setPhoneNumber(normalized);
+    setPhase('connecting');
+
+    // Find matching target metadata
+    const target = Object.values(multiCallTargets).find(
+      (t) => normalizePhone(t.phone) === normalized,
+    );
+
+    void startNegotiation(normalized, objective, {
+      title: item.vendor ?? target?.title ?? null,
+      url: target?.url ?? null,
+      snippet: target?.snippet ?? null,
+      source: target?.source ?? 'search',
     });
   }
 
@@ -2144,106 +2288,6 @@ export default function ChatPage() {
       const objectiveText = text.trim();
       setObjective(objectiveText);
 
-      if (concurrentTestMode) {
-        const phonesFromText = parsePhonesFromText(text);
-        const requestedCount = extractConcurrentCountFromText(text);
-        const desiredCount = clampConcurrentCount(requestedCount ?? concurrentTargetCount);
-        if (requestedCount !== null) {
-          setConcurrentTargetCount(desiredCount);
-        }
-        if (phonesFromText.length > 0) {
-          setManualPhones((prev) => Array.from(new Set([...prev, ...phonesFromText])));
-        }
-        let targetPhones = Array.from(new Set([...manualPhones, ...phonesFromText]));
-        const targetDirectory: Record<string, MultiCallTargetMeta> = { ...multiCallTargets };
-        targetPhones.forEach((phone) => {
-          if (!targetDirectory[phone]) {
-            targetDirectory[phone] = { phone, source: 'manual', title: null, url: null, snippet: null };
-          }
-        });
-
-        if (autoSourceNumbers && targetPhones.length < desiredCount) {
-          addMessage({
-            role: 'status',
-            text: `Exa is finding phone numbers for ${desiredCount} concurrent call${desiredCount === 1 ? '' : 's'}...`,
-          });
-          const searchQuery = userLocation
-            ? `${objectiveText} ${userLocation} phone number`
-            : `${objectiveText} phone number`;
-          try {
-            const lookupLimit = Math.max(12, desiredCount * 6);
-            const research = await searchResearch(searchQuery, lookupLimit);
-            if (research.ok && research.results.length > 0) {
-              const discoveredTargets = collectTargetsFromResearch(research.results, desiredCount * 2);
-              if (discoveredTargets.length > 0) {
-                const discoveredPhones = discoveredTargets.map((item) => item.phone);
-                targetPhones = Array.from(new Set([...targetPhones, ...discoveredPhones]));
-                setManualPhones((prev) => Array.from(new Set([...prev, ...discoveredPhones])));
-                setMultiCallTargets((prev) => {
-                  const next = { ...prev };
-                  discoveredTargets.forEach((item) => {
-                    const targetMeta: MultiCallTargetMeta = {
-                      phone: item.phone,
-                      source: 'exa',
-                      title: item.title,
-                      url: item.url,
-                      snippet: item.snippet,
-                    };
-                    next[item.phone] = targetMeta;
-                    targetDirectory[item.phone] = targetMeta;
-                  });
-                  return next;
-                });
-                addMessage({
-                  role: 'status',
-                  text: `Exa found ${discoveredPhones.length} usable number${discoveredPhones.length === 1 ? '' : 's'} across ${research.results.length} place${research.results.length === 1 ? '' : 's'}.`,
-                });
-              } else {
-                addMessage({
-                  role: 'status',
-                  text: 'Exa found results, but none had valid US phone numbers.',
-                });
-              }
-            } else {
-              addMessage({
-                role: 'status',
-                text: 'Exa did not return phone-ready results for this objective.',
-              });
-            }
-          } catch {
-            addMessage({
-              role: 'status',
-              text: 'Auto number discovery failed. You can still add numbers manually.',
-            });
-          }
-        }
-
-        if (targetPhones.length === 0) {
-          setPhase('phone');
-          addMessage({
-            role: 'ai',
-            text: autoSourceNumbers
-              ? 'I could not auto-find valid US numbers. Add numbers manually and send again.'
-              : 'Add manual numbers first, then send your objective to start concurrent test calls.',
-          });
-          return;
-        }
-        if (targetPhones.length < desiredCount) {
-          addMessage({
-            role: 'status',
-            text: `Only found ${targetPhones.length} valid number${targetPhones.length === 1 ? '' : 's'}. Starting with available numbers.`,
-          });
-        }
-        const selectedPhones = targetPhones.slice(0, desiredCount);
-        const selectedTargets = selectedPhones.reduce<Record<string, MultiCallTargetMeta>>((acc, phone) => {
-          const fromState = targetDirectory[phone];
-          acc[phone] = fromState ?? { phone, source: 'manual', title: null, url: null, snippet: null };
-          return acc;
-        }, {});
-        await startConcurrentTestCalls(selectedPhones, objectiveText, concurrentRunMode, undefined, selectedTargets);
-        return;
-      }
-
       // If the user already included a phone number, skip discovery and use it directly.
       // Still fire Exa in the background for research context.
       if (looksLikePhone(text)) {
@@ -2443,8 +2487,6 @@ export default function ChatPage() {
 
   const placeholderText = inputDisabled
     ? 'Setting up your negotiation...'
-    : concurrentTestMode && phase === 'objective'
-      ? 'Describe the objective (e.g., "3 concurrent voice agents to compare pricing")...'
     : phase === 'discovery'
       ? 'Or type a phone number...'
       : phase === 'phone'
@@ -2655,6 +2697,7 @@ export default function ChatPage() {
                         results={msg.searchResults}
                         onCall={handleCallFromSearch}
                         onSkip={handleSkipDiscovery}
+                        onCallAll={handleCallAllFromSearch}
                       />
                     </div>
                   ) : msg.role === 'status' ? (
@@ -2768,7 +2811,19 @@ export default function ChatPage() {
                                   <div className="text-[11.5px] font-semibold text-gray-800">
                                     {item.vendor || formatPhone(item.phone || '')}
                                   </div>
-                                  <span className="text-[10px] text-gray-500">{item.confidence} confidence</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10px] text-gray-500">{item.confidence} confidence</span>
+                                    {item.phone && phase === 'ended' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCallBackFromSummary(item)}
+                                        className="flex items-center gap-1 rounded-lg bg-gray-900 px-2 py-1 text-[10px] font-medium text-white transition-all duration-150 hover:bg-gray-700 active:scale-[0.96]"
+                                      >
+                                        <Phone size={10} strokeWidth={2.5} />
+                                        Call back
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
                                 <div className="mt-1 text-[11px] text-gray-600">
                                   Prices: {item.quoted_prices?.length ? item.quoted_prices.join(' | ') : 'Not captured'}
@@ -2914,41 +2969,6 @@ export default function ChatPage() {
                           {state.taskId && (state.status === 'ended' || state.status === 'failed') && (
                             <AudioPlayer taskId={state.taskId} />
                           )}
-                          {state.analysisState === 'loading' && (
-                            <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
-                              Generating end-of-call summary...
-                            </div>
-                          )}
-                          {state.analysisState === 'error' && state.analysisError && (
-                            <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[11px] text-red-700">
-                              Summary unavailable: {state.analysisError}
-                            </div>
-                          )}
-                          {state.analysis && (
-                            <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-[11px] font-semibold text-gray-700">Call Summary</span>
-                                <span className="rounded-full bg-white border border-gray-200 px-2 py-0.5 text-[10px] text-gray-600">
-                                  {state.analysis.outcome}
-                                </span>
-                              </div>
-                              <p className="mt-1 text-[12px] text-gray-700 leading-relaxed">
-                                {state.analysis.summary}
-                              </p>
-                              {state.analysis.key_moments?.length > 0 && (
-                                <div className="mt-2">
-                                  <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">What it learned</div>
-                                  <div className="mt-1 space-y-1">
-                                    {state.analysis.key_moments.slice(0, 3).map((moment, idx) => (
-                                      <div key={`${phone}-moment-${idx}`} className="text-[11px] text-gray-600">
-                                        • {moment}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          )}
                         </div>
                       </div>
                     );
@@ -3042,70 +3062,7 @@ export default function ChatPage() {
           <form onSubmit={onSubmit} className="mx-auto max-w-2xl">
             {phase === 'objective' && !inputDisabled && (
               <div className="mb-2.5 rounded-xl border border-gray-200 bg-white p-2.5 shadow-soft">
-                <label className="inline-flex items-center gap-2 text-[12.5px] text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={concurrentTestMode}
-                    onChange={(e) => setConcurrentTestMode(e.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-gray-300 text-gray-900 focus:ring-0"
-                  />
-                  Concurrent mode (dial multiple users at once)
-                </label>
-                <p className="mt-1 text-[11.5px] text-gray-500">
-                  Choose test or real mode, enter an objective, then start concurrent calls.
-                </p>
-                {concurrentTestMode && (
-                  <div className="mt-2 flex flex-wrap items-center gap-3">
-                    <div className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1">
-                      <button
-                        type="button"
-                        onClick={() => setConcurrentRunMode('test')}
-                        className={`rounded-md px-2 py-1 text-[11.5px] font-medium ${
-                          concurrentRunMode === 'test'
-                            ? 'bg-white text-gray-900 shadow-soft'
-                            : 'text-gray-600 hover:text-gray-800'
-                        }`}
-                      >
-                        Test mode
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setConcurrentRunMode('real')}
-                        className={`rounded-md px-2 py-1 text-[11.5px] font-medium ${
-                          concurrentRunMode === 'real'
-                            ? 'bg-white text-gray-900 shadow-soft'
-                            : 'text-gray-600 hover:text-gray-800'
-                        }`}
-                      >
-                        Real mode
-                      </button>
-                    </div>
-                    <label className="inline-flex items-center gap-2 text-[12px] text-gray-700">
-                      <span>Concurrent agents</span>
-                      <input
-                        type="number"
-                        min={1}
-                        max={MAX_CONCURRENT_TEST_CALLS}
-                        value={concurrentTargetCount}
-                        onChange={(e) => {
-                          const parsed = Number.parseInt(e.target.value || '1', 10);
-                          setConcurrentTargetCount(clampConcurrentCount(parsed));
-                        }}
-                        className="w-16 rounded-lg border border-gray-200 px-2 py-1 text-[12px] text-gray-800 outline-none focus:border-gray-300"
-                      />
-                    </label>
-                    <label className="inline-flex items-center gap-2 text-[12px] text-gray-700">
-                      <input
-                        type="checkbox"
-                        checked={autoSourceNumbers}
-                        onChange={(e) => setAutoSourceNumbers(e.target.checked)}
-                        className="h-3.5 w-3.5 rounded border-gray-300 text-gray-900 focus:ring-0"
-                      />
-                      Auto-find numbers with Exa
-                    </label>
-                  </div>
-                )}
-                <div className="mt-2.5 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2">
+                <div className="rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2">
                   <label className="block text-[11px] font-semibold uppercase tracking-wide text-gray-600">
                     Personal Handoff Number (Optional)
                   </label>
@@ -3121,53 +3078,6 @@ export default function ChatPage() {
                     During a live call, you can hand off to this number or send keypad digits for IVR menus.
                   </p>
                 </div>
-              </div>
-            )}
-            {concurrentTestMode && (phase === 'discovery' || phase === 'phone' || phase === 'objective') && !inputDisabled && (
-              <div className="mb-2.5 rounded-xl border border-gray-200 bg-white p-2.5 shadow-soft">
-                <div className="flex items-center gap-2">
-                  <input
-                    value={manualPhoneInput}
-                    onChange={(e) => setManualPhoneInput(e.target.value)}
-                    placeholder={concurrentTestMode ? `Add ${concurrentRunMode === 'real' ? 'real targets' : 'test participants'} (comma/newline separated)` : 'Add manual numbers (comma/newline separated)'}
-                    className="flex-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[12.5px] text-gray-800 outline-none focus:border-gray-300"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleManualAdd}
-                    className="rounded-lg bg-gray-900 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-gray-700"
-                  >
-                    Add
-                  </button>
-                </div>
-                {concurrentTestMode && phase === 'objective' && (
-                  <p className="mt-1.5 text-[11.5px] text-gray-500">
-                    Tip: {concurrentRunMode === 'real' ? 'real' : 'test'} mode supports prompts like &quot;3 concurrent voice agents&quot;. Exa can auto-fill numbers.
-                  </p>
-                )}
-                {manualPhones.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {manualPhones.map((phone) => (
-                      <div key={phone} className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2 py-1">
-                        <button
-                          type="button"
-                          onClick={() => handleManualCall(phone)}
-                          className="text-[11.5px] font-medium text-gray-700 hover:text-gray-900"
-                        >
-                          {formatPhone(phone)}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveManualPhone(phone)}
-                          className="text-gray-400 hover:text-gray-600"
-                          aria-label={`Remove ${phone}`}
-                        >
-                          <X size={11} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             )}
             {canControlSingleCall && taskId && (

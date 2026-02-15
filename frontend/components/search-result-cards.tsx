@@ -9,6 +9,7 @@ type Props = {
   results: BusinessResult[];
   onCall: (result: BusinessResult, phone: string) => void;
   onSkip: () => void;
+  onCallAll?: (results: BusinessResult[], phones: string[]) => void;
 };
 
 /** Strip markdown artifacts, image refs, nav junk from Exa snippets. */
@@ -95,9 +96,11 @@ function BizIcon({ url, title }: { url?: string; title: string }) {
 
 const ease = [0.16, 1, 0.3, 1] as const;
 
-export default function SearchResultCards({ results, onCall, onSkip }: Props) {
+export default function SearchResultCards({ results, onCall, onSkip, onCallAll }: Props) {
   const withPhone = results.filter((r) => r.phone_numbers.length > 0);
   const display = (withPhone.length > 0 ? withPhone : results).slice(0, 4);
+  const callableResults = display.filter((r) => r.phone_numbers.length > 0);
+  const showCallAll = onCallAll && callableResults.length >= 2;
 
   return (
     <div className="space-y-2">
@@ -164,16 +167,35 @@ export default function SearchResultCards({ results, onCall, onSkip }: Props) {
         })}
       </div>
 
-      <motion.button
+      <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: display.length * 0.05 + 0.08, duration: 0.25 }}
-        onClick={onSkip}
-        className="flex items-center gap-1 mx-auto text-[11px] text-gray-400 hover:text-gray-600 transition-colors pt-0.5 pb-1"
+        className="flex items-center justify-center gap-3 pt-0.5 pb-1"
       >
-        I have my own number
-        <ArrowRight size={10} />
-      </motion.button>
+        {showCallAll && (
+          <button
+            onClick={() => {
+              const phones = callableResults.map((r) => r.phone_numbers[0]);
+              onCallAll(callableResults, phones);
+            }}
+            className="flex items-center gap-1.5 rounded-lg bg-gray-900 px-3 py-1.5 text-[11.5px] font-medium text-white transition-all duration-150 hover:bg-gray-700 active:scale-[0.96]"
+          >
+            <Phone size={10} strokeWidth={2.5} />
+            Call All ({callableResults.length})
+          </button>
+        )}
+        {showCallAll && (
+          <span className="text-[10px] text-gray-300">&middot;</span>
+        )}
+        <button
+          onClick={onSkip}
+          className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          I have my own number
+          <ArrowRight size={10} />
+        </button>
+      </motion.div>
     </div>
   );
 }
