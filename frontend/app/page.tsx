@@ -178,7 +178,7 @@ export default function LandingPage() {
               <div className="rounded-2xl overflow-hidden border border-gray-200/60 shadow-card aspect-video">
                 <iframe
                   className="w-full h-full"
-                  src="https://www.youtube.com/embed/YOUR_VIDEO_ID"
+                  src="https://www.youtube.com/embed/73PZw1LwPow"
                   title="Kiru Demo"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
