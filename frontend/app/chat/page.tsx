@@ -3099,7 +3099,7 @@ export default function ChatPage() {
                 </div>
               </div>
             )}
-            {(phase === 'discovery' || phase === 'phone' || (concurrentTestMode && phase === 'objective')) && !inputDisabled && (
+            {concurrentTestMode && (phase === 'discovery' || phase === 'phone' || phase === 'objective') && !inputDisabled && (
               <div className="mb-2.5 rounded-xl border border-gray-200 bg-white p-2.5 shadow-soft">
                 <div className="flex items-center gap-2">
                   <input
