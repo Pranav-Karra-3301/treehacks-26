@@ -1557,6 +1557,7 @@ export default function ChatPage() {
     phone: string,
     objectiveText?: string,
     targetMeta?: { title?: string | null; url?: string | null; snippet?: string | null; source?: 'manual' | 'exa' | 'search' },
+    contextOverride?: string,
   ) {
     const resolvedPhone = normalizePhone(phone);
     if (!resolvedPhone) {
@@ -1581,7 +1582,7 @@ export default function ChatPage() {
         objective: resolvedObjective,
         task_type: 'custom',
         style: 'collaborative',
-        ...(researchContext && { context: researchContext }),
+        ...((contextOverride || researchContext) && { context: contextOverride || researchContext }),
         ...(userLocation && { location: userLocation }),
         ...(targetMeta?.title && { target_name: targetMeta.title }),
         ...(targetMeta?.url && { target_url: targetMeta.url }),
@@ -2417,12 +2418,13 @@ export default function ChatPage() {
       (t) => normalizePhone(t.phone) === normalized,
     );
 
+    // Pass leverage context directly to avoid stale closure from setResearchContext
     void startNegotiation(normalized, objective, {
       title: item.vendor ?? target?.title ?? null,
       url: target?.url ?? null,
       snippet: target?.snippet ?? null,
       source: target?.source ?? 'search',
-    });
+    }, leverageContext || undefined);
   }
 
   function addManualNumbers(raw: string): string[] {
@@ -2942,7 +2944,20 @@ export default function ChatPage() {
         return; // Exit early - don't reset or continue to objective phase
       }
 
-      // Not a follow-up - proceed with normal reset
+      // If we have multi-call context, stay in context instead of resetting
+      const hasMultiCallContext = Object.keys(multiCallsRef.current).length > 0;
+      if (hasMultiCallContext) {
+        addMessage({ role: 'user', text });
+        setInput('');
+        setObjective(text);
+        addMessage({
+          role: 'ai',
+          text: 'Got it — I\'ve updated the objective. Click "Call back" on any business above to negotiate with the new goal, using the other offers as leverage.',
+        });
+        return;
+      }
+
+      // No multi-call context — proceed with normal reset
       resetNegotiationState();
       currentPhase = 'objective';
     }
