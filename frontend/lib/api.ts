@@ -115,7 +115,13 @@ export async function sendCallDtmf(id: string, digits: string): Promise<ActionRe
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    return { ok: false, message: body.detail ?? `Failed to send keypad digits: ${res.status}`, session_id: null };
+    const detail = body.detail;
+    const message = typeof detail === 'string'
+      ? detail
+      : Array.isArray(detail)
+        ? detail.map((d: { msg?: string }) => d.msg || JSON.stringify(d)).join('; ')
+        : `Failed to send keypad digits: ${res.status}`;
+    return { ok: false, message, session_id: null };
   }
   return res.json();
 }

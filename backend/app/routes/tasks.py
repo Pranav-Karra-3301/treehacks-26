@@ -408,11 +408,13 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
             if not task_ids:
                 raise HTTPException(status_code=400, detail="task_ids cannot be empty")
 
-            calls: List[dict[str, object]] = []
-            for task_id in task_ids:
+            # Gather task data and generate missing analyses in parallel
+            import asyncio as _asyncio
+
+            async def _prepare_call(task_id: str) -> dict[str, object] | None:
                 row = store.get_task(task_id)
                 if not row:
-                    continue
+                    return None
 
                 transcript_raw = store.get_artifact(task_id, "transcript") or []
                 transcript: List[TranscriptTurn] = [TranscriptTurn(**entry) for entry in transcript_raw]
@@ -422,22 +424,23 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
                     analysis = await _summarize_transcript(transcript, row)
                     store.save_artifact(task_id, "analysis", analysis)
 
-                calls.append(
-                    {
-                        "task_id": task_id,
-                        "target_phone": row.get("target_phone", ""),
-                        "target_name": row.get("target_name"),
-                        "target_url": row.get("target_url"),
-                        "target_source": row.get("target_source"),
-                        "target_snippet": row.get("target_snippet"),
-                        "location": row.get("location"),
-                        "status": row.get("status", "unknown"),
-                        "outcome": row.get("outcome", analysis.get("outcome", "unknown")),
-                        "duration_seconds": row.get("duration_seconds", 0),
-                        "analysis": analysis,
-                        "transcript_excerpt": transcript_raw[-40:],
-                    }
-                )
+                return {
+                    "task_id": task_id,
+                    "target_phone": row.get("target_phone", ""),
+                    "target_name": row.get("target_name"),
+                    "target_url": row.get("target_url"),
+                    "target_source": row.get("target_source"),
+                    "target_snippet": row.get("target_snippet"),
+                    "location": row.get("location"),
+                    "status": row.get("status", "unknown"),
+                    "outcome": row.get("outcome", (analysis or {}).get("outcome", "unknown")),
+                    "duration_seconds": row.get("duration_seconds", 0),
+                    "analysis": analysis,
+                    "transcript_excerpt": transcript_raw[-40:],
+                }
+
+            prepared = await _asyncio.gather(*[_prepare_call(tid) for tid in task_ids])
+            calls: List[dict[str, object]] = [c for c in prepared if c is not None]
 
             if not calls:
                 raise HTTPException(status_code=404, detail="No tasks found for multi-analysis")

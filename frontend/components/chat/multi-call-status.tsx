@@ -243,7 +243,7 @@ const MultiCallStatus = React.memo(function MultiCallStatus({
                     </div>
                   </div>
                 ) : null}
-                {state.taskId && (state.status === 'ended' || state.status === 'failed') ? (
+                {state.taskId && state.status === 'ended' && state.transcript.length > 1 ? (
                   <AudioPlayer taskId={state.taskId} />
                 ) : null}
               </div>

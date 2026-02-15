@@ -1246,6 +1246,8 @@ export default function ChatPage() {
     Object.entries(multiCalls).forEach(([phone, state]) => {
       if (!state.taskId) return;
       if (state.status !== 'ended' && state.status !== 'failed') return;
+      // Skip hydration for failed calls with no real transcript (no audio to fetch)
+      if (state.status === 'failed' && state.transcript.length <= 1) return;
       if (state.analysisState === 'idle') {
         void hydrateMultiCallArtifacts(phone, state.taskId);
       }
@@ -1253,7 +1255,6 @@ export default function ChatPage() {
   }, [hydrateMultiCallArtifacts, multiCalls]);
 
   // Trigger combined summary once all concurrent calls are done.
-  // Uses a 5-second delay to let the backend finish processing per-call analyses.
   useEffect(() => {
     if (!concurrentTestMode) return;
     const states = Object.values(multiCalls);
@@ -1265,10 +1266,10 @@ export default function ChatPage() {
     if (multiSummaryState === 'ready' && multiSummary) return;
     if (multiSummaryState === 'loading') return;
 
-    // Give backend 5s to finish processing before requesting summary
+    // Short delay — backend generates missing per-call analyses in parallel
     const timer = setTimeout(() => {
       void loadMultiSummary(taskIds, objective);
-    }, 5000);
+    }, 2000);
 
     return () => clearTimeout(timer);
   }, [concurrentTestMode, loadMultiSummary, multiCalls, multiSummary, multiSummaryState, objective]);
@@ -1840,22 +1841,31 @@ export default function ChatPage() {
       return;
     }
 
-    const result = await sendCallDtmf(callTaskId, normalizedDigits);
-    if (result.ok) {
-      const targetLabel = phoneLabel ? ` for ${formatPhone(phoneLabel)}` : '';
-      addMessage({
-        role: 'status',
-        text: `Sent keypad digits${targetLabel}: ${normalizedDigits}`,
-      });
-      if (phoneLabel) {
-        appendMultiTranscript(phoneLabel, 'status', `Sent keypad digits: ${normalizedDigits}`);
+    try {
+      const result = await sendCallDtmf(callTaskId, normalizedDigits);
+      if (result.ok) {
+        const targetLabel = phoneLabel ? ` for ${formatPhone(phoneLabel)}` : '';
+        addMessage({
+          role: 'status',
+          text: `Sent keypad digits${targetLabel}: ${normalizedDigits}`,
+        });
+        if (phoneLabel) {
+          appendMultiTranscript(phoneLabel, 'status', `Sent keypad digits: ${normalizedDigits}`);
+        }
+        return;
       }
-      return;
-    }
 
-    addMessage({ role: 'ai', text: `Keypad send failed: ${result.message}` });
-    if (phoneLabel) {
-      appendMultiTranscript(phoneLabel, 'status', `Keypad send failed: ${result.message}`);
+      const errorText = typeof result.message === 'string' ? result.message : 'Unknown error';
+      addMessage({ role: 'ai', text: `Keypad send failed: ${errorText}` });
+      if (phoneLabel) {
+        appendMultiTranscript(phoneLabel, 'status', `Keypad send failed: ${errorText}`);
+      }
+    } catch (err) {
+      const errorText = err instanceof Error ? err.message : 'Network error';
+      addMessage({ role: 'ai', text: `Keypad send failed: ${errorText}` });
+      if (phoneLabel) {
+        appendMultiTranscript(phoneLabel, 'status', `Keypad send failed: ${errorText}`);
+      }
     }
   }
 
