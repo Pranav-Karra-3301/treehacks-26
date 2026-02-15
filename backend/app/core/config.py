@@ -138,6 +138,10 @@ class Settings:
         if path.strip()
     )
 
+    # Bright Data
+    BRIGHTDATA_API_TOKEN = os.getenv("BRIGHTDATA_API_TOKEN", "").strip()
+    BRIGHTDATA_ENABLED = bool(BRIGHTDATA_API_TOKEN)
+
     # Exa / web lookup
     EXA_SEARCH_ENABLED = (
         os.getenv("EXA_SEARCH_ENABLED", "false").strip().lower() == "true"

@@ -5,8 +5,8 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
-        serif: ['"Instrument Serif"', 'Georgia', 'serif'],
+        sans: ['"Soehne"', 'system-ui', '-apple-system', 'sans-serif'],
+        serif: ['"Martina Plantijn"', 'Georgia', 'serif'],
       },
       fontSize: {
         'hero': ['4rem', { lineHeight: '1.05', letterSpacing: '-0.04em', fontWeight: '700' }],

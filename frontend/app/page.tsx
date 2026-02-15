@@ -8,7 +8,14 @@ import { ArrowRight, ArrowUpRight, Phone, Mic, BarChart3, Shield, Sparkles, Tren
 // ─── Branded wordmark ──────────────────────────────────────────────────────────
 
 function Kiru({ className = '' }: { className?: string }) {
-  return <span className={`font-serif italic ${className}`}>kiru</span>;
+  return (
+    <span
+      className={`italic ${className}`}
+      style={{ fontFamily: '"Martina Plantijn", Georgia, serif' }}
+    >
+      kiru
+    </span>
+  );
 }
 
 // ─── Animated counter ───────────────────────────────────────────────────────────
@@ -68,7 +75,7 @@ function ChatMockup() {
   useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight; }, [messages, typing]);
 
   return (
-    <div className="relative w-full min-w-[420px] max-w-[420px]">
+    <div className="relative w-full min-w-[520px] max-w-[520px]">
       {/* Soft ambient glow */}
       <div className="absolute -inset-16 bg-gradient-to-br from-violet-100/40 via-rose-50/30 to-amber-50/30 rounded-[80px] blur-3xl -z-10" />
       <div className="rounded-2xl border border-gray-200/60 bg-white/90 backdrop-blur-sm shadow-elevated overflow-hidden">
@@ -226,18 +233,18 @@ function BentoAutomationVisual() {
   );
 }
 
-// ─── Companies marquee ──────────────────────────────────────────────────────────
+// ─── Categories marquee ─────────────────────────────────────────────────────────
 
-const companies = ['Comcast', 'AT&T', 'Spectrum', 'Verizon', 'T-Mobile', 'Blue Cross', 'Aetna', 'Kaiser', 'State Farm', 'Geico', 'Chase', 'Citi'];
+const categories = ['Car Deals', 'Home Loans', 'Insurance', 'Medical Bills', 'Refunds', 'Returns', 'Subscriptions', 'Cable Bills', 'Phone Plans', 'Rent', 'Hotel Rates', 'Bank Fees', 'Internet Plans', 'Gym Memberships', 'Warranties', 'Credit Cards'];
 
-function CompanyMarquee() {
+function CategoryMarquee() {
   return (
-    <div className="relative overflow-hidden">
+    <div className="mx-auto max-w-5xl relative overflow-hidden">
       <div className="absolute left-0 top-0 bottom-0 w-20 bg-gradient-to-r from-white to-transparent z-10" />
       <div className="absolute right-0 top-0 bottom-0 w-20 bg-gradient-to-l from-white to-transparent z-10" />
-      <div className="flex animate-marquee">
-        {[...companies, ...companies].map((name, i) => (
-          <span key={i} className="shrink-0 px-6 text-[14px] font-medium text-gray-300 tracking-wide whitespace-nowrap">
+      <div className="flex animate-marquee w-max">
+        {[...categories, ...categories, ...categories, ...categories].map((name, i) => (
+          <span key={i} className="shrink-0 px-5 text-[14px] font-medium text-gray-300 tracking-wide whitespace-nowrap">
             {name}
           </span>
         ))}
@@ -258,21 +265,23 @@ export default function LandingPage() {
     <div className="min-h-screen bg-white">
 
       {/* ── Nav ─────────────────────────────────── */}
-      <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-gray-100/60">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 h-14">
-          <Link href="/" className="text-[18px] tracking-tight text-gray-950">
-            <Kiru />
-          </Link>
-          <div className="flex items-center gap-6">
-            <a href="#how-it-works" className="hidden sm:block text-[13px] text-gray-500 transition hover:text-gray-900">How it works</a>
-            <a href="#features" className="hidden sm:block text-[13px] text-gray-500 transition hover:text-gray-900">Features</a>
-            <Link href="/dashboard" className="hidden sm:block text-[13px] text-gray-500 transition hover:text-gray-900">Dashboard</Link>
-            <Link href="/chat" className="group inline-flex items-center gap-1.5 rounded-full bg-gray-950 px-4 py-1.5 text-[13px] font-medium text-white transition hover:bg-gray-800">
-              Launch App <ArrowUpRight size={12} strokeWidth={2.5} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+      <div className="sticky top-0 z-50 flex justify-center px-4 pt-3">
+        <nav className="w-full max-w-5xl rounded-2xl bg-white/80 backdrop-blur-xl border border-gray-200/60 shadow-soft">
+          <div className="flex items-center justify-between px-6 h-14">
+            <Link href="/" className="tracking-tight text-gray-950">
+              <span className="font-serif italic text-[28px]">kiru</span>
             </Link>
+            <div className="flex items-center gap-6">
+              <Link href="/how-it-works" className="hidden sm:block text-[13px] text-gray-500 transition hover:text-gray-900">How it works</Link>
+              <a href="#features" className="hidden sm:block text-[13px] text-gray-500 transition hover:text-gray-900">Features</a>
+              <Link href="/dashboard" className="hidden sm:block text-[13px] text-gray-500 transition hover:text-gray-900">Dashboard</Link>
+              <Link href="/chat" className="group inline-flex items-center gap-1.5 rounded-full bg-gray-950 px-4 py-1.5 text-[13px] font-medium text-white transition hover:bg-gray-800">
+                Launch App <ArrowUpRight size={12} strokeWidth={2.5} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+              </Link>
+            </div>
           </div>
-        </div>
-      </nav>
+        </nav>
+      </div>
 
       {/* ── Hero ────────────────────────────────── */}
       <section ref={heroRef} className="relative overflow-hidden">
@@ -282,8 +291,8 @@ export default function LandingPage() {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,white_70%)]" />
 
         <motion.div style={{ opacity: heroOpacity, y: heroY }} className="relative px-6 pt-24 sm:pt-32 pb-8">
-          <div className="mx-auto max-w-6xl lg:flex lg:items-center lg:justify-between lg:gap-16">
-            <div className="max-w-xl lg:shrink-0">
+          <div className="mx-auto max-w-5xl">
+            <div className="max-w-xl mx-auto text-center lg:text-left lg:mx-0">
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}
                 className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[12px] font-medium text-gray-500 mb-6 shadow-soft"
               >
@@ -301,46 +310,55 @@ export default function LandingPage() {
               <motion.p
                 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.7, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
-                className="mt-5 text-[17px] leading-relaxed text-gray-500 max-w-md"
+                className="mt-5 text-[17px] leading-relaxed text-gray-500 max-w-md mx-auto lg:mx-0"
               >
                 Tell <Kiru className="text-gray-700" /> what you want. It calls, negotiates in real-time, and saves you money — while you do literally anything else.
               </motion.p>
               <motion.div
                 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.7, delay: 0.25, ease: [0.16, 1, 0.3, 1] }}
-                className="mt-8 flex items-center gap-3"
+                className="mt-8 flex items-center gap-3 justify-center lg:justify-start"
               >
                 <Link href="/chat" className="group inline-flex items-center gap-2 rounded-full bg-gray-950 pl-5 pr-4 py-2.5 text-[14px] font-medium text-white transition-all hover:bg-gray-800 hover:shadow-card active:scale-[0.98]">
                   Start negotiating <ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" />
                 </Link>
-                <a href="#how-it-works" className="inline-flex items-center gap-1 rounded-full px-4 py-2.5 text-[14px] font-medium text-gray-500 transition hover:text-gray-900">
+                <Link href="/how-it-works" className="inline-flex items-center gap-1 rounded-full px-4 py-2.5 text-[14px] font-medium text-gray-500 transition hover:text-gray-900">
                   See how it works <ChevronRight size={14} />
-                </a>
+                </Link>
               </motion.div>
             </div>
 
+            {/* YouTube demo video */}
             <motion.div
               initial={{ opacity: 0, y: 30, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.9, delay: 0.35, ease: [0.16, 1, 0.3, 1] }}
-              className="mt-16 lg:mt-0"
+              className="mt-12"
             >
-              <ChatMockup />
+              <div className="rounded-2xl overflow-hidden border border-gray-200/60 shadow-card aspect-video">
+                <iframe
+                  className="w-full h-full"
+                  src="https://www.youtube.com/embed/YOUR_VIDEO_ID"
+                  title="Kiru Demo"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
             </motion.div>
           </div>
         </motion.div>
       </section>
 
-      {/* ── Logo marquee ──────────────────────── */}
+      {/* ── Category marquee ─────────────────── */}
       <Reveal className="py-10 border-t border-gray-100/60">
         <p className="text-center text-[12px] font-medium text-gray-400 tracking-wide uppercase mb-5">
-          Negotiates with any company
+          Negotiate anything
         </p>
-        <CompanyMarquee />
+        <CategoryMarquee />
       </Reveal>
 
       {/* ── Stats bar ───────────────────────────── */}
       <section className="px-6 py-16 sm:py-20">
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto max-w-5xl">
           <div className="grid grid-cols-3 divide-x divide-gray-100">
             {[
               { end: 2400000, prefix: '$', suffix: '+', label: 'Saved for users', display: '$2.4M+' },
@@ -355,6 +373,15 @@ export default function LandingPage() {
               </Reveal>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* ── Chat mockup showcase ────────────── */}
+      <section className="px-6 pb-20">
+        <div className="mx-auto max-w-5xl flex justify-center">
+          <Reveal>
+            <ChatMockup />
+          </Reveal>
         </div>
       </section>
 
@@ -411,7 +438,7 @@ export default function LandingPage() {
 
       {/* ── Bento Feature Grid ──────────────────── */}
       <section id="features" className="px-6 py-20 sm:py-28">
-        <div className="mx-auto max-w-6xl">
+        <div className="mx-auto max-w-5xl">
           <Reveal>
             <p className="text-[13px] font-medium text-gray-400 tracking-wide uppercase mb-3">Capabilities</p>
             <h2 className="text-[clamp(1.75rem,4vw,2.5rem)] font-bold tracking-[-0.03em] text-gray-950 max-w-lg">
@@ -483,7 +510,7 @@ export default function LandingPage() {
 
       {/* ── Use Cases ───────────────────────────── */}
       <section className="px-6 py-20 sm:py-28 bg-gray-50/60">
-        <div className="mx-auto max-w-6xl">
+        <div className="mx-auto max-w-5xl">
           <div className="grid gap-12 lg:grid-cols-5 lg:gap-16 items-start">
             <Reveal className="lg:col-span-2">
               <p className="text-[13px] font-medium text-gray-400 tracking-wide uppercase mb-3">Use cases</p>
@@ -585,14 +612,14 @@ export default function LandingPage() {
 
       {/* ── Smooth white → dark transition ─────────── */}
       <div
-        className="h-48 sm:h-64 -mb-px"
+        className="h-64 sm:h-96 -mb-px"
         style={{
-          background: 'linear-gradient(180deg, #ffffff 0%, #f4f4f5 20%, #a1a1aa 45%, #3f3f46 65%, #18181b 82%, #09090b 100%)',
+          background: 'linear-gradient(180deg, #ffffff 0%, #fefefe 8%, #f9f9fa 16%, #f0f0f2 24%, #dddde2 32%, #c4c4cc 40%, #9a9aa6 48%, #6e6e7a 56%, #4a4a54 64%, #2e2e36 72%, #1a1a22 80%, #101018 88%, #09090b 96%)',
         }}
       />
 
       {/* ── Bottom CTA + Gradient ─────────────────── */}
-      <section className="relative px-6 pt-16 sm:pt-24 pb-0 overflow-hidden bg-gray-950">
+      <section className="relative px-6 pt-32 sm:pt-44 pb-0 overflow-hidden bg-gray-950 min-h-screen flex flex-col">
 
         {/* Animated aurora gradient orbs */}
         <div className="absolute inset-0 overflow-hidden">
@@ -608,7 +635,7 @@ export default function LandingPage() {
         <div className="absolute inset-0 grain" />
 
         <Reveal>
-          <div className="mx-auto max-w-6xl relative z-10">
+          <div className="mx-auto max-w-5xl relative z-10">
             <h2 className="text-[clamp(2rem,5vw,3.75rem)] font-bold tracking-[-0.04em] leading-[1.08] text-white max-w-xl">
               Stop leaving money{' '}<br className="hidden sm:block" />
               <span className="font-serif italic font-normal">on the table.</span>
@@ -625,25 +652,39 @@ export default function LandingPage() {
           </div>
         </Reveal>
 
-        {/* Spacer for gradient to breathe */}
-        <div className="h-[280px] sm:h-[340px]" aria-hidden="true" />
-      </section>
+        {/* Flex spacer pushes footer to bottom */}
+        <div className="flex-1" aria-hidden="true" />
 
-      {/* ── Footer ──────────────────────────────── */}
-      <footer className="relative bg-gray-950 px-6 py-8 border-t border-white/5">
-        <div className="mx-auto max-w-6xl">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-6">
-              <span className="text-[15px] text-gray-500"><Kiru /></span>
-              <span className="text-[12px] text-gray-600">AI-powered phone negotiation</span>
-            </div>
-            <div className="flex items-center gap-6">
-              <Link href="/chat" className="text-[13px] text-gray-500 transition hover:text-gray-300">Launch App</Link>
-              <span className="text-[12px] text-gray-600">Built at TreeHacks 2026</span>
+        {/* ── Footer (seamless, inside CTA section) ─── */}
+        <div className="relative z-10 pb-10">
+          {/* Giant "kiru" with mix-blend-difference */}
+          <div className="flex justify-center overflow-hidden pointer-events-none select-none mix-blend-difference">
+            <span className="font-serif italic text-white text-[clamp(12rem,42vw,36rem)] leading-[0.82] tracking-[-0.04em]">
+              kiru
+            </span>
+          </div>
+
+          {/* Team + meta row */}
+          <div className="mx-auto max-w-5xl mt-10 px-6">
+            <div className="flex flex-col items-center gap-6">
+              {/* Team */}
+              <div className="flex items-center gap-2 text-[13px] text-white/50">
+                <span>Built by</span>
+                <span className="text-white/80 font-medium">Pranav</span>
+                <span>&middot;</span>
+                <span className="text-white/80 font-medium">Ethan</span>
+                <span>&middot;</span>
+                <span className="text-white/80 font-medium">Jayanth</span>
+              </div>
+              {/* Links */}
+              <div className="flex items-center gap-6">
+                <Link href="/chat" className="text-[13px] text-white/60 transition hover:text-white">Launch App</Link>
+                <span className="text-[12px] text-white/40">TreeHacks 2026</span>
+              </div>
             </div>
           </div>
         </div>
-      </footer>
+      </section>
     </div>
   );
 }
