@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback, type FormEvent, type Keyboard
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowUp, ArrowLeft, Phone, RotateCcw, AlertTriangle, Plus, PanelLeftClose, PanelLeft, BarChart3, X } from 'lucide-react';
+import { ArrowUp, ArrowLeft, Phone, RotateCcw, AlertTriangle, Plus, PanelLeftClose, PanelLeft, BarChart3, X, MapPin } from 'lucide-react';
 import { createTask, startCall, stopCall, transferCall, sendCallDtmf, createCallSocket, checkVoiceReadiness, searchResearch, getTaskAnalysis, getTaskTranscript, getTask, listTasks, getMultiCallSummary, getChatSessionById, getChatSessionLatest, upsertChatSession } from '../../lib/api';
 import { readActiveLocalSession, writeLocalSessionWithAttempts, type PersistedChatSessionEnvelope } from '../../lib/chat-session-store';
 import type { CallEvent, CallStatus, AnalysisPayload, TaskSummary, CallOutcome, BusinessResult, VoiceReadiness, MultiCallSummaryPayload, MultiCallPriceComparison, ChatSessionMode, ChatSessionRecord } from '../../lib/types';
@@ -527,9 +527,11 @@ export default function ChatPage() {
   const [multiSummaryState, setMultiSummaryState] = useState<MultiSummaryState>('idle');
   const [multiSummaryError, setMultiSummaryError] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<string | null>(null);
+  const [locationMode, setLocationMode] = useState<'auto' | 'timesquare'>('auto');
   const [personalHandoffNumber, setPersonalHandoffNumber] = useState('');
   const [singleDtmfInput, setSingleDtmfInput] = useState('');
   const [multiDtmfInputs, setMultiDtmfInputs] = useState<Record<string, string>>({});
+  const autoLocationRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const socketRef = useRef<WebSocket | null>(null);
@@ -811,7 +813,17 @@ export default function ChatPage() {
 
   // Grab user location on mount (reverse geocode to city, state)
   useEffect(() => {
+    if (locationMode === 'timesquare') {
+      setUserLocation('Times Square, New York, NY');
+      return;
+    }
+    // Auto mode — use browser geolocation
     if (!navigator.geolocation) return;
+    // If we already resolved auto location, reuse it
+    if (autoLocationRef.current) {
+      setUserLocation(autoLocationRef.current);
+      return;
+    }
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         try {
@@ -826,7 +838,9 @@ export default function ChatPage() {
           const city = addr.city || addr.town || addr.village || addr.county || '';
           const state = addr.state || '';
           if (city || state) {
-            setUserLocation([city, state].filter(Boolean).join(', '));
+            const loc = [city, state].filter(Boolean).join(', ');
+            autoLocationRef.current = loc;
+            setUserLocation(loc);
           }
         } catch {
           // Location enrichment is best-effort
@@ -835,7 +849,7 @@ export default function ChatPage() {
       () => {}, // denied — no-op
       { timeout: 5000, maximumAge: 600000 },
     );
-  }, []);
+  }, [locationMode]);
 
   // Cleanup WebSocket on unmount
   useEffect(() => {
@@ -2711,17 +2725,31 @@ export default function ChatPage() {
             </div>
 
             {/* Sidebar footer */}
-            <div className="shrink-0 border-t border-gray-100 px-3 py-2.5 flex items-center justify-between">
-              <Link href="/dashboard" className="flex items-center gap-1.5 text-[12px] text-gray-400 hover:text-gray-600 transition-colors duration-150">
-                <BarChart3 size={13} />
-                Dashboard
-              </Link>
-              <button
-                onClick={() => setSidebarOpen(false)}
-                className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-all duration-150"
-              >
-                <PanelLeftClose size={14} />
-              </button>
+            <div className="shrink-0 border-t border-gray-100 px-3 py-2.5 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => setLocationMode((m) => m === 'auto' ? 'timesquare' : 'auto')}
+                  className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-600 transition-colors duration-150 group"
+                >
+                  <MapPin size={12} className={locationMode === 'timesquare' ? 'text-amber-500' : 'text-gray-400 group-hover:text-gray-600'} />
+                  <span className="truncate max-w-[160px]">
+                    {locationMode === 'timesquare' ? 'Times Square, NY' : userLocation ?? 'Auto-detecting...'}
+                  </span>
+                  <span className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${
+                    locationMode === 'timesquare'
+                      ? 'bg-amber-50 text-amber-600'
+                      : 'bg-gray-100 text-gray-400'
+                  }`}>
+                    {locationMode === 'timesquare' ? 'NYC' : 'Auto'}
+                  </span>
+                </button>
+                <button
+                  onClick={() => setSidebarOpen(false)}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-all duration-150"
+                >
+                  <PanelLeftClose size={14} />
+                </button>
+              </div>
             </div>
           </motion.aside>
         ) : null}

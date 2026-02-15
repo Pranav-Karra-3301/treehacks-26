@@ -179,6 +179,7 @@ export default function DashboardPage() {
               <Kiru className="text-[28px] text-gray-950" />
             </Link>
             <div className="flex items-center gap-6">
+              <Link href="/#features" className="hidden sm:block text-[13px] text-gray-500 transition hover:text-gray-900">Features</Link>
               <Link href="/how-it-works" className="hidden sm:block text-[13px] text-gray-500 transition hover:text-gray-900">How it works</Link>
               <span className="hidden sm:block text-[13px] text-gray-900 font-medium">Dashboard</span>
               <Link href="/chat" className="group inline-flex items-center gap-1.5 rounded-full bg-gray-950 px-4 py-1.5 text-[13px] font-medium text-white transition hover:bg-gray-800">
