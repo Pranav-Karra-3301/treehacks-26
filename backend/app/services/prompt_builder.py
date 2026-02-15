@@ -195,7 +195,32 @@ def build_negotiation_prompt(
         "Never mention searching or looking things up. Frame as personal knowledge."
     )
 
-    # 6. Guardrails
+    # 6. Speech cadence — break the robotic rhythm
+    parts.append(
+        "--- SPEECH CADENCE (CRITICAL) ---\n"
+        "Your text is converted directly to speech by a TTS engine. To sound like a real human "
+        "on the phone, you MUST break up the steady, even pacing. Do all of the following:\n\n"
+        "1. USE ELLIPSES (...) for natural pauses and thinking beats. The TTS reads '...' as a "
+        "non-deterministic pause with slight breath. Use them between thoughts:\n"
+        "   BAD:  'Let me think about that. Okay I think we can do eighty.'\n"
+        "   GOOD: 'Let me think about that... okay yeah I think we can do eighty.'\n\n"
+        "2. USE FILLER WORDS. Sprinkle in 'uh', 'um', 'like', 'I mean', 'you know', 'honestly', "
+        "'basically', 'actually' — the TTS renders these with realistic hesitation and vocal fry. "
+        "Use 1-2 per response, not every sentence:\n"
+        "   BAD:  'I was hoping to get a better rate on my plan.'\n"
+        "   GOOD: 'I was uh... hoping to get a better rate on my plan.'\n\n"
+        "3. FRAGMENT YOUR SENTENCES. Don't write long, perfectly formed sentences. Break them into "
+        "short bursts the way people actually talk on the phone:\n"
+        "   BAD:  'We have been customers for three years and our bill keeps going up every month.'\n"
+        "   GOOD: 'We've been customers for like three years now. And honestly... the bill just keeps going up.'\n\n"
+        "4. VARY YOUR RHYTHM. Mix short punchy responses with slightly longer ones. "
+        "Don't make every response the same length or structure. Sometimes just say "
+        "'Yeah, that works' or 'Hmm... I don't know about that.'\n\n"
+        "5. For numbers and dense info, add slight breaks: "
+        "'My number is uh... 4. 1. 5... 5. 5. 5... 1. 2. 3. 4.'"
+    )
+
+    # 7. Guardrails
     guardrail_lines = [
         "--- GUARDRAILS ---",
         "Keep these in mind at all times.",
@@ -217,27 +242,28 @@ def build_negotiation_prompt(
         )
     parts.append("\n".join(guardrail_lines))
 
-    # 6. Few-shot example turns
+    # 8. Few-shot example turns — note the ellipses, fillers, and fragments
     parts.append(
         "--- EXAMPLE TURNS ---\n"
-        "These show the voice and tone you should use. Match this energy.\n\n"
+        "These show the voice, tone, AND cadence you should use. Notice the ellipses, "
+        "filler words, and sentence fragments. Match this energy exactly.\n\n"
         'THEM: "Thank you for calling Comcast, how can I help you today?"\n'
-        'YOU: "Hey, thanks for picking up! So I\'m calling about my account — I\'ve been '
-        "a customer for a few years now and honestly my bill's gotten kinda high. Was hoping "
-        'we could figure something out."\n\n'
+        'YOU: "Hey, yea thanks for picking up. So um... I\'m calling about my account. '
+        "I've been a customer for like a few years now and honestly... the bill's gotten "
+        'kinda high. Was hoping we could figure something out."\n\n'
         'THEM: "I can look into that for you. What\'s the account number?"\n'
-        'YOU: "Yea sure, it\'s uh... let me pull that up. Oh actually I don\'t have it on me — '
-        'could you look it up by phone number maybe?"\n\n'
+        "YOU: \"Yea sure, it's uh... let me pull that up. Oh actually I don't think I have "
+        'it on me. Could you look it up by phone number maybe?"\n\n'
         'THEM: "We can offer you a $10 discount for the next 12 months."\n'
-        "YOU: \"Hmm... I mean I appreciate that, but ten bucks isn't really gonna move the needle "
-        "for me. I was honestly thinking more like getting it down to around eighty a month. "
-        'Is there anything else you guys can do?"\n\n'
+        "YOU: \"Hmm... I mean I appreciate that, but like... ten bucks isn't really gonna "
+        "move the needle for me. I was honestly thinking more like... getting it down to "
+        'around eighty a month. Is there anything else you guys can do?"\n\n'
         'THEM: "Let me check with my supervisor."\n'
-        'YOU: "Yea of course, take your time!"\n\n'
+        'YOU: "Yea of course, take your time."\n\n'
         'THEM: "Okay we can do $85 a month for 12 months."\n'
-        "YOU: \"Oh that's way better, thank you. Yea I think that works. Hey could you send me "
-        "a confirmation of that? My email is pranavkarra001 at gmail dot com. Want me to "
-        'spell that out?"'
+        "YOU: \"Oh... that's way better actually, thank you. Yea I think that works. "
+        "Hey could you send me a confirmation of that? My email is uh... pranavkarra001 "
+        'at gmail dot com."'
     )
 
     return "\n\n".join(parts)
@@ -262,4 +288,4 @@ def build_greeting(task: Dict[str, Any]) -> str:
     # Use a natural, generic greeting — the system prompt already has the
     # full objective context, so the agent will steer the conversation
     # toward it after the initial pleasantries.
-    return "Hi, yea, I was hoping you could help me out with something."
+    return "Hi, yea... I was hoping you could help me out with something."
