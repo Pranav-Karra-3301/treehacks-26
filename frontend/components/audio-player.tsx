@@ -82,7 +82,10 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
     if (!audio) return;
 
     const onTime = () => setCurrentTime(audio.currentTime);
-    const onDuration = () => setDuration(audio.duration || 0);
+    const onDuration = () => {
+      const d = audio.duration;
+      if (d && Number.isFinite(d) && d > 0) setDuration(d);
+    };
     const onEnded = () => { setPlaying(false); setCurrentTime(0); };
     const onLoadedData = () => setError(null);
     const onError = () => {
@@ -111,13 +114,24 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
 
     audio.addEventListener('timeupdate', onTime);
     audio.addEventListener('loadedmetadata', onDuration);
+    audio.addEventListener('durationchange', onDuration);
     audio.addEventListener('loadeddata', onLoadedData);
     audio.addEventListener('ended', onEnded);
     audio.addEventListener('error', onError);
 
+    // If metadata already loaded before listeners attached (cache / fast load),
+    // seed duration and currentTime immediately.
+    if (audio.readyState >= 1 && audio.duration && Number.isFinite(audio.duration)) {
+      setDuration(audio.duration);
+    }
+    if (!audio.paused) {
+      setCurrentTime(audio.currentTime);
+    }
+
     return () => {
       audio.removeEventListener('timeupdate', onTime);
       audio.removeEventListener('loadedmetadata', onDuration);
+      audio.removeEventListener('durationchange', onDuration);
       audio.removeEventListener('loadeddata', onLoadedData);
       audio.removeEventListener('ended', onEnded);
       audio.removeEventListener('error', onError);

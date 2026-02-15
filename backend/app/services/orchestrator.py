@@ -1007,7 +1007,45 @@ class CallOrchestrator:
             combined = max(-32768, min(32767, pcm_in + pcm_out))
             mixed[i] = _encode_mulaw_sample(combined)
 
-        mixed_path.write_bytes(bytes(mixed))
+        # Trim leading/trailing silence so the recording matches the actual
+        # conversation length.  Mulaw 0xFF ≈ 0 PCM; we use a small threshold
+        # on the decoded PCM magnitude and require a short window of consecutive
+        # non-silent samples to avoid triggering on single-sample noise spikes.
+        _SILENCE_THRESHOLD = 200  # ~0.6% of full-scale 16-bit
+        _PAD_SAMPLES = 4000  # 0.5s at 8 kHz
+        _WINDOW = 80  # 10ms of consecutive non-silence to trigger
+
+        first_voice = 0
+        for i in range(max_len - _WINDOW):
+            if all(abs(decode_table[mixed[i + j]]) > _SILENCE_THRESHOLD for j in range(_WINDOW)):
+                first_voice = i
+                break
+
+        last_voice = max_len
+        for i in range(max_len - 1, _WINDOW - 1, -1):
+            if all(abs(decode_table[mixed[i - j]]) > _SILENCE_THRESHOLD for j in range(_WINDOW)):
+                last_voice = i + 1
+                break
+
+        trim_start = max(0, first_voice - _PAD_SAMPLES)
+        trim_end = min(max_len, last_voice + _PAD_SAMPLES)
+        trimmed = mixed[trim_start:trim_end] if trim_end > trim_start else mixed
+
+        log_event(
+            "orchestrator",
+            "mixed_audio_trimmed",
+            task_id=task_id,
+            details={
+                "original_bytes": max_len,
+                "trimmed_bytes": len(trimmed),
+                "trim_start": trim_start,
+                "trim_end": trim_end,
+                "original_seconds": max_len / 8000,
+                "trimmed_seconds": len(trimmed) / 8000,
+            },
+        )
+
+        mixed_path.write_bytes(bytes(trimmed))
 
         # Update mixed byte count in stats
         for sid, stats in self._audio_stats.items():
