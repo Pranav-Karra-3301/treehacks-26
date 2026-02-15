@@ -28,7 +28,7 @@ export default function MessageList({ messages, typing, onCall, onSkip, ListFoot
 
   const renderItem = useCallback(
     ({ item }: { item: Message }) => (
-      <View className="mb-2">
+      <View style={{ marginBottom: 10 }}>
         <MessageBubble message={item} onCall={onCall} onSkip={onSkip} />
       </View>
     ),
@@ -43,13 +43,13 @@ export default function MessageList({ messages, typing, onCall, onSkip, ListFoot
       data={messages}
       renderItem={renderItem}
       keyExtractor={keyExtractor}
-      contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 16 }}
+      contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 }}
       showsVerticalScrollIndicator={false}
       onContentSizeChange={scrollToEnd}
       ListFooterComponent={
         <>
           {typing && (
-            <View className="mb-2">
+            <View style={{ marginBottom: 10 }}>
               <TypingIndicator />
             </View>
           )}

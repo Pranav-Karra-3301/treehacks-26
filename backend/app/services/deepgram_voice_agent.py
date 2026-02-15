@@ -274,6 +274,18 @@ class DeepgramVoiceAgentSession:
             "tags": [self._task_id],
         }
 
+        # === DEEPGRAM SETTINGS DEBUG LOGGING ===
+        prompt_text = think.get("prompt", "")
+        print(f"\n{'='*60}")
+        print(f"[DEEPGRAM] Sending settings for task: {self._task_id}")
+        print(f"[DEEPGRAM] Provider: {think.get('provider', {}).get('type')} | Model: {think.get('provider', {}).get('model')}")
+        print(f"[DEEPGRAM] Greeting: {settings_message.get('agent', {}).get('greeting', 'N/A')}")
+        print(f"[DEEPGRAM] System prompt ({len(prompt_text)} chars):")
+        print(f"  {prompt_text[:600]}{'...' if len(prompt_text) > 600 else ''}")
+        if think.get("functions"):
+            print(f"[DEEPGRAM] Functions enabled: {[f['name'] for f in think['functions']]}")
+        print(f"{'='*60}\n")
+
         with timed_step(
             "deepgram",
             "send_settings",
@@ -345,6 +357,9 @@ class DeepgramVoiceAgentSession:
             content = (payload.get("content") or "").strip()
             if not content:
                 return
+            # === CONVERSATION DEBUG LOGGING ===
+            speaker = "CALLER" if role == "user" else "AGENT"
+            print(f"[CALL] {speaker}: {content}")
             log_event(
                 "deepgram",
                 "conversation_text",
@@ -360,6 +375,7 @@ class DeepgramVoiceAgentSession:
         if message_type == "AgentThinking":
             content = payload.get("content", "")
             if content:
+                print(f"[CALL] AGENT THINKING: {content[:200]}")
                 log_event(
                     "deepgram",
                     "agent_thinking",
@@ -431,6 +447,7 @@ class DeepgramVoiceAgentSession:
 
         if function_name == "web_research" and self._on_research is not None:
             query = parameters.get("query", "")
+            print(f"[CALL] RESEARCH REQUEST: query='{query}'")
             try:
                 with timed_step("deepgram", "function_web_research", task_id=self._task_id,
                                 details={"query": query}):

@@ -4,7 +4,6 @@ import Animated, {
   useSharedValue,
   useAnimatedProps,
   withTiming,
-  FadeIn,
 } from 'react-native-reanimated';
 import { useEffect } from 'react';
 import { colors, fonts } from '../../lib/theme';
@@ -55,12 +54,11 @@ export default function ScoreRing({ score }: { score: number }) {
         />
       </Svg>
       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
-        <Animated.Text
-          entering={FadeIn.delay(500).duration(400)}
+        <Text
           style={{ fontFamily: fonts.bold, fontSize: 22, color: colors.gray900, lineHeight: 24 }}
         >
           {score}
-        </Animated.Text>
+        </Text>
         <Text
           style={{
             fontFamily: fonts.medium,

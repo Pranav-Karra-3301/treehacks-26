@@ -137,6 +137,16 @@ class CallOrchestrator:
             await self._send_agent_audio_to_twilio(task_id, chunk)
 
     async def start_task_call(self, task_id: str, task: Dict[str, Any]) -> Dict[str, Any]:
+        # === CALL START DEBUG LOGGING ===
+        print(f"\n{'='*60}")
+        print(f"[CALL START] Task: {task_id}")
+        print(f"[CALL START] Objective: {task.get('objective', 'N/A')}")
+        print(f"[CALL START] Target phone: {task.get('target_phone', 'N/A')}")
+        print(f"[CALL START] Style: {task.get('style', 'N/A')}")
+        print(f"[CALL START] Context: {task.get('context', 'N/A')}")
+        print(f"[CALL START] Walkaway: {task.get('walkaway_point', 'N/A')}")
+        print(f"[CALL START] Voice mode: {self._voice_mode_enabled()}")
+        print(f"{'='*60}\n")
         with timed_step("orchestrator", "start_task_call", task_id=task_id):
             session = await self._sessions.create_session(task_id)
             self._task_to_session[task_id] = session.session_id

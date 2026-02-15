@@ -11,6 +11,7 @@ type AudioState = {
 export function useAudioPlayer(uri: string) {
   const soundRef = useRef<Audio.Sound | null>(null);
   const playingRef = useRef(false);
+  const loadingRef = useRef(false);
   const [state, setState] = useState<AudioState>({
     playing: false,
     duration: 0,
@@ -19,13 +20,12 @@ export function useAudioPlayer(uri: string) {
   });
 
   useEffect(() => {
-    // Configure audio mode for playback
     Audio.setAudioModeAsync({
       allowsRecordingIOS: false,
       playsInSilentModeIOS: true,
       staysActiveInBackground: false,
       shouldDuckAndroid: true,
-    }).catch(() => {});
+    }).catch((e) => console.warn('[AudioPlayer] setAudioModeAsync failed:', e));
 
     return () => {
       soundRef.current?.unloadAsync();
@@ -33,11 +33,29 @@ export function useAudioPlayer(uri: string) {
   }, []);
 
   const load = useCallback(async () => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
     try {
       if (soundRef.current) {
         await soundRef.current.unloadAsync();
         soundRef.current = null;
       }
+      console.log('[AudioPlayer] Loading audio from:', uri);
+
+      // First check if the URL is reachable
+      try {
+        const headRes = await fetch(uri, { method: 'HEAD' });
+        console.log('[AudioPlayer] HEAD response:', headRes.status, headRes.headers.get('content-type'));
+        if (!headRes.ok) {
+          console.warn('[AudioPlayer] Audio URL returned', headRes.status);
+          setState((prev) => ({ ...prev, error: true }));
+          return;
+        }
+      } catch (headErr) {
+        console.warn('[AudioPlayer] HEAD check failed:', headErr);
+        // Continue anyway — some servers don't support HEAD
+      }
+
       const { sound } = await Audio.Sound.createAsync(
         { uri },
         { shouldPlay: false, progressUpdateIntervalMillis: 250 },
@@ -58,8 +76,12 @@ export function useAudioPlayer(uri: string) {
       );
       soundRef.current = sound;
       setState((prev) => ({ ...prev, error: false }));
-    } catch {
+      console.log('[AudioPlayer] Sound loaded successfully');
+    } catch (e) {
+      console.warn('[AudioPlayer] Load error:', e);
       setState((prev) => ({ ...prev, error: true }));
+    } finally {
+      loadingRef.current = false;
     }
   }, [uri]);
 
@@ -68,8 +90,10 @@ export function useAudioPlayer(uri: string) {
   }, [load]);
 
   const togglePlay = useCallback(async () => {
+    console.log('[AudioPlayer] togglePlay called, playing:', playingRef.current);
     let sound = soundRef.current;
     if (!sound) {
+      console.log('[AudioPlayer] No sound ref, attempting reload...');
       try {
         await load();
         sound = soundRef.current;
@@ -77,11 +101,16 @@ export function useAudioPlayer(uri: string) {
         return;
       }
     }
-    if (!sound) return;
+    if (!sound) {
+      console.warn('[AudioPlayer] Still no sound after reload');
+      return;
+    }
 
     try {
       const status = await sound.getStatusAsync();
+      console.log('[AudioPlayer] Status:', JSON.stringify(status).slice(0, 200));
       if (!status.isLoaded) {
+        console.log('[AudioPlayer] Sound not loaded, reloading...');
         await load();
         sound = soundRef.current;
         if (!sound) return;
@@ -89,14 +118,16 @@ export function useAudioPlayer(uri: string) {
 
       if (playingRef.current) {
         await sound.pauseAsync();
+        console.log('[AudioPlayer] Paused');
       } else {
-        // If at end, seek to start before playing
         if (status.isLoaded && status.positionMillis === status.durationMillis) {
           await sound.setPositionAsync(0);
         }
         await sound.playAsync();
+        console.log('[AudioPlayer] Playing');
       }
-    } catch {
+    } catch (e) {
+      console.warn('[AudioPlayer] Toggle error:', e);
       try {
         await load();
       } catch {

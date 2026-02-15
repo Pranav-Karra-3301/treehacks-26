@@ -20,12 +20,12 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
     return (
       <View
         style={{
-          borderRadius: 12,
+          borderRadius: 14,
           backgroundColor: colors.gray50,
           borderWidth: 0.5,
           borderColor: 'rgba(0,0,0,0.06)',
           paddingHorizontal: 16,
-          paddingVertical: 10,
+          paddingVertical: 14,
         }}
       >
         <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.gray400 }}>
@@ -38,63 +38,88 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
   return (
     <View
       style={{
-        borderRadius: 12,
+        borderRadius: 14,
         backgroundColor: colors.gray50,
         borderWidth: 0.5,
         borderColor: 'rgba(0,0,0,0.06)',
-        paddingHorizontal: 12,
-        paddingVertical: 10,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
       }}
     >
-      <Pressable
-        onPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          togglePlay();
-        }}
+      {/* Play button + slider row — vertically centered */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <Pressable
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            console.log('[AudioPlayer] togglePlay, src:', src);
+            togglePlay();
+          }}
+          style={{
+            height: 40,
+            width: 40,
+            borderRadius: 20,
+            backgroundColor: colors.gray900,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {playing ? (
+            <Pause size={14} color="#fff" />
+          ) : (
+            <Play size={14} color="#fff" style={{ marginLeft: 2 }} />
+          )}
+        </Pressable>
+
+        <View style={{ flex: 1 }}>
+          <Slider
+            value={position}
+            minimumValue={0}
+            maximumValue={duration || 1}
+            onSlidingComplete={seek}
+            minimumTrackTintColor={colors.gray900}
+            maximumTrackTintColor={colors.gray200}
+            thumbTintColor={colors.gray900}
+            style={{ height: 28 }}
+          />
+        </View>
+      </View>
+
+      {/* Time labels + recording label */}
+      <View
         style={{
-          height: 36,
-          width: 36,
-          borderRadius: 18,
-          backgroundColor: colors.gray900,
+          flexDirection: 'row',
           alignItems: 'center',
-          justifyContent: 'center',
+          justifyContent: 'space-between',
+          marginTop: 6,
+          paddingLeft: 52,
         }}
       >
-        {playing ? (
-          <Pause size={14} color="#fff" />
-        ) : (
-          <Play size={14} color="#fff" style={{ marginLeft: 2 }} />
-        )}
-      </Pressable>
-
-      <View style={{ flex: 1 }}>
-        <Slider
-          value={position}
-          minimumValue={0}
-          maximumValue={duration || 1}
-          onSlidingComplete={seek}
-          minimumTrackTintColor={colors.gray900}
-          maximumTrackTintColor={colors.gray200}
-          thumbTintColor={colors.gray900}
-          style={{ height: 24 }}
-        />
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
-          <Text style={{ fontFamily: fonts.regular, fontSize: 10, color: colors.gray400, fontVariant: ['tabular-nums'] }}>
-            {formatTime(position)}
-          </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Volume2 size={10} color={colors.gray400} />
-            <Text style={{ fontFamily: fonts.medium, fontSize: 10, color: colors.gray400 }}>
-              Call Recording
-            </Text>
-          </View>
-          <Text style={{ fontFamily: fonts.regular, fontSize: 10, color: colors.gray400, fontVariant: ['tabular-nums'] }}>
-            {duration > 0 ? formatTime(duration) : '--:--'}
+        <Text
+          style={{
+            fontFamily: fonts.regular,
+            fontSize: 10,
+            color: colors.gray400,
+            fontVariant: ['tabular-nums'],
+          }}
+        >
+          {formatTime(position)}
+        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <Volume2 size={10} color={colors.gray400} />
+          <Text style={{ fontFamily: fonts.medium, fontSize: 10, color: colors.gray400 }}>
+            Call Recording
           </Text>
         </View>
+        <Text
+          style={{
+            fontFamily: fonts.regular,
+            fontSize: 10,
+            color: colors.gray400,
+            fontVariant: ['tabular-nums'],
+          }}
+        >
+          {duration > 0 ? formatTime(duration) : '--:--'}
+        </Text>
       </View>
     </View>
   );

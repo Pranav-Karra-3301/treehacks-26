@@ -13,7 +13,6 @@ type Props = {
   icon: LucideIcon;
   title: string;
   children: React.ReactNode;
-  delay?: number;
   defaultOpen?: boolean;
 };
 
@@ -33,8 +32,8 @@ export default function ExpandableSection({
 
   const contentStyle = useAnimatedStyle(() => ({
     opacity: height.value,
-    maxHeight: height.value * 600,
-    marginTop: height.value * 8,
+    maxHeight: height.value * 800,
+    marginTop: height.value * 10,
     overflow: 'hidden' as const,
   }));
 
@@ -49,7 +48,12 @@ export default function ExpandableSection({
     <View>
       <Pressable
         onPress={toggle}
-        style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 6,
+          paddingVertical: 4,
+        }}
       >
         <Icon size={12} color={colors.gray400} />
         <Text
@@ -59,17 +63,17 @@ export default function ExpandableSection({
             color: colors.gray400,
             textTransform: 'uppercase',
             letterSpacing: 0.8,
+            flex: 1,
           }}
         >
           {title}
         </Text>
-        <View style={{ flex: 1 }} />
         <Animated.View style={chevronStyle}>
-          <ChevronDown size={12} color={colors.gray300} />
+          <ChevronDown size={14} color={colors.gray300} />
         </Animated.View>
       </Pressable>
       <Animated.View style={contentStyle}>
-        <View style={{ paddingTop: 8 }}>{children}</View>
+        <View>{children}</View>
       </Animated.View>
     </View>
   );
