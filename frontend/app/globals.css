@@ -170,6 +170,8 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -180,6 +182,15 @@ body {
   font-family: 'Soehne', system-ui, -apple-system, sans-serif;
   overflow-x: hidden;
   width: 100%;
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
+}
+
+/* Mobile viewport fix */
+@supports (-webkit-touch-callout: none) {
+  body {
+    min-height: -webkit-fill-available;
+  }
 }
 
 h1,

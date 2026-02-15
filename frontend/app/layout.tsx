@@ -7,6 +7,12 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://kiru.chat'),
   title: 'kiru — Never sit on hold again',
   description: 'Tell kiru what you want. It calls the company, negotiates your bill or price, and gets you a better deal. You save money; you skip the hold music.',
+  viewport: {
+    width: 'device-width',
+    initialScale: 1,
+    maximumScale: 5,
+    userScalable: true,
+  },
   openGraph: {
     title: 'kiru — Never sit on hold again',
     description: 'Tell kiru what you want. It calls the company, negotiates your bill or price, and gets you a better deal. You save money; you skip the hold music.',
@@ -26,7 +32,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-white text-gray-950 font-sans">
+      <body className="min-h-[100dvh] bg-white text-gray-950 font-sans">
         {children}
         <Analytics />
       </body>
