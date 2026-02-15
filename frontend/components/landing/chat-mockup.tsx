@@ -40,10 +40,18 @@ export default function ChatMockup() {
   useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight; }, [messages, typing]);
 
   return (
-    <div className="relative w-full min-w-[520px] max-w-[520px]">
-      {/* Soft ambient glow */}
-      <div className="absolute -inset-16 bg-gradient-to-br from-violet-100/40 via-rose-50/30 to-amber-50/30 rounded-[80px] blur-3xl -z-10" />
-      <div className="rounded-2xl border border-gray-200/60 bg-white/90 backdrop-blur-sm shadow-elevated overflow-hidden">
+    <div
+      className="relative w-full min-h-[458px] rounded-2xl flex items-center justify-center overflow-hidden"
+      style={{
+        backgroundImage: "url('/bg.png')",
+        backgroundSize: 'cover',
+        backgroundPosition: 'center center',
+        backgroundRepeat: 'no-repeat',
+      }}
+    >
+      {/* Soft ambient glow over wallpaper */}
+      <div className="absolute inset-0 bg-gradient-to-br from-violet-100/20 via-rose-50/10 to-amber-50/10 pointer-events-none" />
+      <div className="rounded-2xl border border-gray-200/60 bg-white/90 backdrop-blur-sm shadow-elevated overflow-hidden relative w-[520px] shrink-0">
         {/* Title bar */}
         <div className="flex items-center gap-2 border-b border-gray-100 px-4 py-2.5">
           <div className="flex gap-1.5">
