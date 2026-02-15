@@ -7,8 +7,9 @@ from pathlib import Path
 from typing import List
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.services.cache import CacheService
@@ -62,6 +63,12 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
                 "size_bytes": path.stat().st_size if path.exists() else 0,
             }
         return file_stats
+
+    class TransferRequest(BaseModel):
+        to_phone: str = Field(min_length=8, max_length=20)
+
+    class DtmfRequest(BaseModel):
+        digits: str = Field(min_length=1, max_length=64)
 
     @router.post("", response_model=TaskSummary)
     async def create_task(task: NegotiationTaskCreate):
@@ -148,6 +155,40 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
                 await local_cache.delete(_analysis_cache_key(task_id))
             await orchestrator.stop_task_call(task_id, stop_reason="user_stop")
             return ActionResponse(ok=True, message="call stopped")
+
+    @router.post("/{task_id}/transfer", response_model=ActionResponse)
+    async def transfer_call(task_id: str, payload: TransferRequest):
+        with timed_step("api", "transfer_call", task_id=task_id):
+            row = store.get_task(task_id)
+            if not row:
+                raise HTTPException(status_code=404, detail="Task not found")
+            if local_cache is not None:
+                await local_cache.delete(_task_cache_key(task_id))
+                await local_cache.delete(_tasks_cache_key())
+            try:
+                await orchestrator.transfer_task_call(task_id, payload.to_phone)
+            except LookupError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            return ActionResponse(ok=True, message=f"transfer initiated to {payload.to_phone}")
+
+    @router.post("/{task_id}/dtmf", response_model=ActionResponse)
+    async def send_dtmf(task_id: str, payload: DtmfRequest):
+        with timed_step("api", "send_dtmf", task_id=task_id, details={"digits": payload.digits}):
+            row = store.get_task(task_id)
+            if not row:
+                raise HTTPException(status_code=404, detail="Task not found")
+            if local_cache is not None:
+                await local_cache.delete(_task_cache_key(task_id))
+                await local_cache.delete(_tasks_cache_key())
+            try:
+                await orchestrator.send_task_dtmf(task_id, payload.digits)
+            except LookupError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            return ActionResponse(ok=True, message=f"sent keypad digits: {payload.digits}")
 
     @router.get("/{task_id}/transcript")
     async def get_transcript(task_id: str):
@@ -353,5 +394,114 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
                     ttl_seconds=settings.CACHE_ANALYSIS_TTL_SECONDS,
                 )
             return response
+
+    @router.post("/multi-analysis")
+    async def multi_analysis(request: Request):
+        try:
+            raw_payload = await request.json()
+        except Exception:
+            raw_payload = {}
+        if not isinstance(raw_payload, dict):
+            raw_payload = {}
+
+        raw_task_ids = raw_payload.get("task_ids")
+        if raw_task_ids is None:
+            raw_task_ids = raw_payload.get("taskIds")
+        if isinstance(raw_task_ids, str):
+            raw_task_ids = [raw_task_ids]
+        if not isinstance(raw_task_ids, (list, tuple, set)):
+            raw_task_ids = []
+
+        objective = raw_payload.get("objective", "")
+        if objective is None:
+            objective = ""
+        if not isinstance(objective, str):
+            objective = str(objective)
+
+        with timed_step(
+            "api",
+            "multi_analysis",
+            details={"requested_tasks": len(raw_task_ids)},
+        ):
+            normalized_ids: List[str] = []
+            for tid in raw_task_ids:
+                if tid is None:
+                    continue
+                if not isinstance(tid, str):
+                    tid = str(tid)
+                tid = tid.strip()
+                if tid:
+                    normalized_ids.append(tid)
+
+            task_ids = list(dict.fromkeys(normalized_ids))
+            if not task_ids:
+                raise HTTPException(status_code=400, detail="task_ids cannot be empty")
+
+            calls: List[dict[str, object]] = []
+            for task_id in task_ids:
+                row = store.get_task(task_id)
+                if not row:
+                    continue
+
+                call_dir = store.get_task_dir(task_id)
+                transcript_file = call_dir / "transcript.json"
+                transcript: List[TranscriptTurn] = []
+                transcript_raw: List[dict[str, object]] = []
+                if transcript_file.exists():
+                    with open(transcript_file, "r", encoding="utf-8") as f:
+                        transcript_raw = json.load(f)
+                    transcript = [TranscriptTurn(**entry) for entry in transcript_raw]
+
+                analysis_path = call_dir / "analysis.json"
+                if analysis_path.exists():
+                    with open(analysis_path, "r", encoding="utf-8") as f:
+                        analysis = json.load(f)
+                else:
+                    analysis = await _summarize_transcript(transcript, row)
+                    with open(analysis_path, "w", encoding="utf-8") as f:
+                        json.dump(analysis, f, indent=2)
+
+                calls.append(
+                    {
+                        "task_id": task_id,
+                        "target_phone": row.get("target_phone", ""),
+                        "target_name": row.get("target_name"),
+                        "target_url": row.get("target_url"),
+                        "target_source": row.get("target_source"),
+                        "target_snippet": row.get("target_snippet"),
+                        "location": row.get("location"),
+                        "status": row.get("status", "unknown"),
+                        "outcome": row.get("outcome", analysis.get("outcome", "unknown")),
+                        "duration_seconds": row.get("duration_seconds", 0),
+                        "analysis": analysis,
+                        "transcript_excerpt": transcript_raw[-40:],
+                    }
+                )
+
+            if not calls:
+                raise HTTPException(status_code=404, detail="No tasks found for multi-analysis")
+
+            summary = await orchestrator._engine.summarize_multi_calls(
+                calls,
+                objective=objective,
+            )
+            return {
+                "ok": True,
+                "call_count": len(calls),
+                "summary": summary,
+                "calls": [
+                    {
+                        "task_id": call.get("task_id"),
+                        "target_phone": call.get("target_phone"),
+                        "target_name": call.get("target_name"),
+                        "target_url": call.get("target_url"),
+                        "location": call.get("location"),
+                        "status": call.get("status"),
+                        "outcome": call.get("outcome"),
+                        "score": int((call.get("analysis") or {}).get("score", 0)),
+                    }
+                    for call in calls
+                ],
+            }
 
     return router

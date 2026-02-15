@@ -33,38 +33,28 @@ def _normalize_openai_endpoint(base_url: str) -> str:
 
 def _build_think_payload(task: Dict[str, Any], endpoint_url: str) -> Dict[str, Any]:
     model = settings.DEEPGRAM_VOICE_AGENT_THINK_MODEL
-    provider = settings.DEEPGRAM_VOICE_AGENT_THINK_PROVIDER.lower() if settings.DEEPGRAM_VOICE_AGENT_THINK_PROVIDER else ""
-
-    if not provider:
-        provider = settings.LLM_PROVIDER
+    configured_provider = (
+        settings.DEEPGRAM_VOICE_AGENT_THINK_PROVIDER.lower()
+        if settings.DEEPGRAM_VOICE_AGENT_THINK_PROVIDER
+        else settings.LLM_PROVIDER
+    )
+    if configured_provider != "openai":
+        task_id = str(task.get("id") or task.get("task_id") or "unknown")
+        log_event(
+            "deepgram",
+            "think_provider_forced_openai",
+            task_id=task_id,
+            status="warning",
+            details={"configured_provider": configured_provider},
+        )
 
     think_headers = {}
-    if provider == "openai":
-        if not model:
-            model = settings.OPENAI_MODEL
-        if not endpoint_url:
-            endpoint_url = _normalize_openai_endpoint(settings.OPENAI_BASE_URL)
-        if settings.OPENAI_API_KEY:
-            think_headers["Authorization"] = f"Bearer {settings.OPENAI_API_KEY}"
-    elif provider == "anthropic":
-        if not model:
-            model = settings.ANTHROPIC_MODEL
-        if settings.ANTHROPIC_API_KEY and not think_headers:
-            think_headers["x-api-key"] = settings.ANTHROPIC_API_KEY
-    elif provider in ("local", "ollama"):
-        if not model:
-            model = settings.VLLM_MODEL
-        if not endpoint_url:
-            # Deepgram's cloud must reach the LLM endpoint.  A localhost URL
-            # is unreachable from their servers, so route through our public
-            # reverse-proxy (served by the FastAPI backend via ngrok).
-            if settings.TWILIO_WEBHOOK_HOST:
-                endpoint_url = f"{settings.TWILIO_WEBHOOK_HOST.rstrip('/')}/api/llm-proxy/v1/chat/completions"
-            else:
-                endpoint_url = _normalize_openai_endpoint(settings.VLLM_BASE_URL)
-    else:
-        if not model:
-            model = settings.OPENAI_MODEL
+    if not model:
+        model = settings.OPENAI_MODEL
+    if not endpoint_url:
+        endpoint_url = _normalize_openai_endpoint(settings.OPENAI_BASE_URL)
+    if settings.OPENAI_API_KEY:
+        think_headers["Authorization"] = f"Bearer {settings.OPENAI_API_KEY}"
 
     think_headers = think_headers or _coerce_headers(settings.DEEPGRAM_VOICE_AGENT_THINK_ENDPOINT_HEADERS)
 
@@ -74,7 +64,7 @@ def _build_think_payload(task: Dict[str, Any], endpoint_url: str) -> Dict[str, A
 
     think: Dict[str, Any] = {
         "provider": {
-            "type": "open_ai" if provider in {"openai", "local", "ollama"} else provider,
+            "type": "open_ai",
             "model": model,
             "temperature": settings.DEEPGRAM_VOICE_AGENT_THINK_TEMPERATURE,
         },
@@ -93,29 +83,61 @@ def _build_think_payload(task: Dict[str, Any], endpoint_url: str) -> Dict[str, A
     return think
 
 
-def _build_function_definitions() -> list[Dict[str, Any]]:
+def _build_function_definitions(
+    *,
+    research_enabled: bool,
+    dtmf_enabled: bool,
+) -> list[Dict[str, Any]]:
     """Build function definitions for Deepgram voice agent tool use."""
-    return [
-        {
-            "name": "web_research",
-            "description": (
-                "Search the web for real-time information during the call. "
-                "Use this when you need current pricing, competitor rates, market data, "
-                "company policies, promotions, or any factual information to strengthen "
-                "your negotiation position. Also use it to verify claims the other party makes."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Concise search query for finding relevant information",
-                    }
+    functions: list[Dict[str, Any]] = []
+    if research_enabled:
+        functions.append(
+            {
+                "name": "web_research",
+                "description": (
+                    "Search the web for real-time information during the call. "
+                    "Use this when you need current pricing, competitor rates, market data, "
+                    "company policies, promotions, or any factual information to strengthen "
+                    "your negotiation position. Also use it to verify claims the other party makes."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Concise search query for finding relevant information",
+                        }
+                    },
+                    "required": ["query"],
                 },
-                "required": ["query"],
-            },
-        },
-    ]
+            }
+        )
+    if dtmf_enabled:
+        functions.append(
+            {
+                "name": "send_keypad_tones",
+                "description": (
+                    "Send DTMF keypad tones on the active call to navigate IVR phone menus. "
+                    "Use only when the other side requests a menu selection (for example: "
+                    "'press 1 for sales', 'enter extension', or 'press # to confirm')."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "digits": {
+                            "type": "string",
+                            "description": "DTMF digits sequence using 0-9, *, #, A-D, and optional pauses with w or comma.",
+                        },
+                        "reason": {
+                            "type": "string",
+                            "description": "Short reason for the keypad action.",
+                        },
+                    },
+                    "required": ["digits"],
+                },
+            }
+        )
+    return functions
 
 
 class DeepgramVoiceAgentSession:
@@ -130,6 +152,7 @@ class DeepgramVoiceAgentSession:
         on_thinking: Callable[[str], Awaitable[None]],
         on_event: Callable[[Dict[str, Any]], Awaitable[None]],
         on_research: Optional[Callable[[str], Awaitable[Dict[str, Any]]]] = None,
+        on_send_dtmf: Optional[Callable[[str], Awaitable[Dict[str, Any]]]] = None,
     ) -> None:
         self._task_id = task_id
         self._task = task
@@ -138,6 +161,7 @@ class DeepgramVoiceAgentSession:
         self._on_thinking = on_thinking
         self._on_event = on_event
         self._on_research = on_research
+        self._on_send_dtmf = on_send_dtmf
 
         self._ws: Optional[websockets.WebSocketClientProtocol] = None
         self._receive_task: Optional[asyncio.Task[None]] = None
@@ -153,6 +177,8 @@ class DeepgramVoiceAgentSession:
         self._audio_bytes_received = 0
         self._messages_received = 0
         self._session_start_time: Optional[float] = None
+        self._last_dtmf_digits = ""
+        self._last_dtmf_at = 0.0
 
     async def start(self) -> None:
         if self._closed:
@@ -252,9 +278,13 @@ class DeepgramVoiceAgentSession:
         think_endpoint = settings.DEEPGRAM_VOICE_AGENT_THINK_ENDPOINT_URL
         think = _build_think_payload(self._task, think_endpoint)
 
-        # Add function calling if research callback is available
-        if self._on_research is not None:
-            think["functions"] = _build_function_definitions()
+        # Add function calling when callbacks are available.
+        function_definitions = _build_function_definitions(
+            research_enabled=self._on_research is not None,
+            dtmf_enabled=self._on_send_dtmf is not None,
+        )
+        if function_definitions:
+            think["functions"] = function_definitions
 
         settings_message = {
             "type": "Settings",
@@ -468,6 +498,57 @@ class DeepgramVoiceAgentSession:
                 log_event("deepgram", "function_call_error", task_id=self._task_id,
                           status="error", details={"error": f"{type(exc).__name__}: {exc}"})
                 result = {"query": query, "findings": "Search temporarily unavailable.", "result_count": 0}
+        elif function_name == "send_keypad_tones" and self._on_send_dtmf is not None:
+            digits = str(parameters.get("digits", "") or "")
+            reason = str(parameters.get("reason", "") or "")
+            now = time.monotonic()
+            if digits == self._last_dtmf_digits and (now - self._last_dtmf_at) < 2.0:
+                result = {
+                    "ok": False,
+                    "digits": digits,
+                    "error": "duplicate keypad request blocked (too soon)",
+                }
+                # Send immediate response without replaying the same tones repeatedly.
+                response = {
+                    "type": "FunctionCallResponse",
+                    "function_call_id": function_call_id,
+                    "output": json.dumps(result),
+                }
+                if self._ws and not self._closed:
+                    try:
+                        await self._ws.send(json.dumps(response))
+                    except Exception:
+                        pass
+                return
+            try:
+                with timed_step(
+                    "deepgram",
+                    "function_send_keypad_tones",
+                    task_id=self._task_id,
+                    details={"digits": digits, "reason": reason[:120]},
+                ):
+                    send_result = await self._on_send_dtmf(digits)
+                    self._last_dtmf_digits = digits
+                    self._last_dtmf_at = now
+                    result = {
+                        "ok": True,
+                        "digits": digits,
+                        "reason": reason,
+                        "status": send_result.get("status", "sent"),
+                    }
+            except Exception as exc:
+                log_event(
+                    "deepgram",
+                    "function_call_error",
+                    task_id=self._task_id,
+                    status="error",
+                    details={"error": f"{type(exc).__name__}: {exc}", "function": function_name},
+                )
+                result = {
+                    "ok": False,
+                    "digits": digits,
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
         else:
             result = {"error": f"Unknown function: {function_name}"}
 
@@ -485,4 +566,3 @@ class DeepgramVoiceAgentSession:
             except Exception as exc:
                 log_event("deepgram", "function_call_response_error", task_id=self._task_id,
                           status="error", details={"error": f"{type(exc).__name__}: {exc}"})
-
