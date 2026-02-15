@@ -7,12 +7,12 @@ import type { AnalysisPayload, CallOutcome } from '../lib/types';
 
 const ease = [0.16, 1, 0.3, 1] as const;
 
-const outcomeConfig: Record<CallOutcome, { gradient: string; ring: string; label: string; icon: string }> = {
-  success: { gradient: 'from-emerald-500 to-emerald-600', ring: 'ring-emerald-500/20', label: 'Success', icon: '~' },
-  partial: { gradient: 'from-amber-500 to-orange-500', ring: 'ring-amber-500/20', label: 'Partial', icon: '~' },
-  failed: { gradient: 'from-red-500 to-red-600', ring: 'ring-red-500/20', label: 'Failed', icon: '~' },
-  walkaway: { gradient: 'from-red-400 to-red-500', ring: 'ring-red-400/20', label: 'Walk-away', icon: '~' },
-  unknown: { gradient: 'from-gray-400 to-gray-500', ring: 'ring-gray-400/20', label: 'Pending', icon: '~' },
+const outcomeConfig: Record<CallOutcome, { textColor: string; label: string; icon: string }> = {
+  success: { textColor: 'text-emerald-600', label: 'Success', icon: '~' },
+  partial: { textColor: 'text-amber-600', label: 'Partial', icon: '~' },
+  failed: { textColor: 'text-red-600', label: 'Failed', icon: '~' },
+  walkaway: { textColor: 'text-red-500', label: 'Walk-away', icon: '~' },
+  unknown: { textColor: 'text-gray-500', label: 'Pending', icon: '~' },
 };
 
 function scoreGradient(score: number) {
@@ -22,28 +22,37 @@ function scoreGradient(score: number) {
 }
 
 function ScoreRing({ score }: { score: number }) {
-  const radius = 36;
+  const radius = 32;
+  const size = 76;
   const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (Math.min(score, 100) / 100) * circumference;
+  const normalizedScore = Math.min(Math.max(score, 0), 100);
+  const offset = circumference - (normalizedScore / 100) * circumference;
+  const isZero = normalizedScore === 0;
+  const trackColor = isZero ? '#e5e7eb' : '#f3f4f6';
+  const strokeWidth = 4;
 
   return (
-    <div className="relative w-[88px] h-[88px] shrink-0">
-      <svg viewBox="0 0 88 88" className="w-full h-full -rotate-90">
-        <circle cx="44" cy="44" r={radius} fill="none" stroke="#f3f4f6" strokeWidth="5" />
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg viewBox={`0 0 ${size} ${size}`} className="w-full h-full -rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={trackColor} strokeWidth={strokeWidth} />
         <motion.circle
-          cx="44" cy="44" r={radius} fill="none"
-          stroke="url(#scoreGrad)" strokeWidth="5"
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke={isZero ? 'transparent' : 'url(#scoreGrad)'}
+          strokeWidth={strokeWidth}
           strokeLinecap="round"
           strokeDasharray={circumference}
           initial={{ strokeDashoffset: circumference }}
           animate={{ strokeDashoffset: offset }}
-          transition={{ duration: 1.2, ease }}
+          transition={{ duration: 1, ease }}
         />
         <defs>
           <linearGradient id="scoreGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-            {score >= 70 ? (
+            {normalizedScore >= 70 ? (
               <><stop offset="0%" stopColor="#34d399" /><stop offset="100%" stopColor="#10b981" /></>
-            ) : score >= 40 ? (
+            ) : normalizedScore >= 40 ? (
               <><stop offset="0%" stopColor="#fbbf24" /><stop offset="100%" stopColor="#f59e0b" /></>
             ) : (
               <><stop offset="0%" stopColor="#f87171" /><stop offset="100%" stopColor="#ef4444" /></>
@@ -53,14 +62,14 @@ function ScoreRing({ score }: { score: number }) {
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <motion.span
-          initial={{ opacity: 0, scale: 0.5 }}
+          initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.5, duration: 0.4, ease }}
-          className="text-[22px] font-bold text-gray-900 leading-none tabular-nums"
+          transition={{ delay: 0.4, duration: 0.3, ease }}
+          className={`text-[20px] font-semibold leading-none tabular-nums ${isZero ? 'text-gray-400' : 'text-gray-900'}`}
         >
-          {score}
+          {normalizedScore}
         </motion.span>
-        <span className="text-[9px] font-medium text-gray-400 uppercase tracking-wider mt-0.5">score</span>
+        <span className="text-[9px] font-medium text-gray-400 mt-0.5">Score</span>
       </div>
     </div>
   );
@@ -154,14 +163,14 @@ export default function AnalysisCard({ analysis }: { analysis: AnalysisPayload }
       transition={{ duration: 0.5, ease }}
       className="rounded-2xl bg-white border border-gray-100 shadow-soft overflow-hidden"
     >
-      {/* Hero section — score ring + outcome + summary */}
+      {/* Hero section — outcome + score + summary */}
       <div className="px-5 pt-5 pb-4">
         <div className="flex items-start gap-4">
           <ScoreRing score={analysis.score} />
 
-          <div className="flex-1 min-w-0 pt-1">
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className={`inline-flex items-center gap-1 rounded-full bg-gradient-to-r ${outcome.gradient} px-2.5 py-0.5 text-[10.5px] font-semibold text-white shadow-sm`}>
+          <div className="flex-1 min-w-0 pt-0.5">
+            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+              <span className={`inline-flex items-center gap-1.5 rounded-full bg-white/80 backdrop-blur-sm border border-gray-200/50 px-3 py-1 text-[11px] font-medium shadow-soft ${outcome.textColor}`}>
                 {outcome.label}
               </span>
               {rapport ? (
