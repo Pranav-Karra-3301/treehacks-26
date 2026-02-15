@@ -2076,27 +2076,34 @@ export default function ChatPage() {
   ): FollowUpIntent | null {
     const lowerMsg = message.toLowerCase();
 
-    // Intent signals: references to previous calls
+    // Intent signals must require an explicit back-reference to previous calls.
+    // Avoid broad phrases like "the businesses" or "call back" that appear in
+    // normal new objectives — only match when user clearly refers to the same
+    // set of contacts from a prior run.
     const intentSignals = [
-      'these gyms',
-      'those gyms',
-      'these businesses',
-      'those businesses',
-      'the gyms',
-      'the businesses',
       'call them back',
-      'call back',
-      'follow up with them',
+      'call them again',
+      'call those same',
       'call the same',
-      'same places',
-      'same numbers',
-      'those places',
-      'those numbers',
+      'follow up with them',
+      'same places again',
+      'same numbers again',
+      'those same businesses',
+      'those same gyms',
+      'those same places',
       'them again',
     ];
 
     if (!intentSignals.some((signal) => lowerMsg.includes(signal))) {
       return null; // Not a follow-up intent
+    }
+
+    // Only consider follow-up if there is a completed multi-call session with a
+    // summary available — an ended run without a summary means the calls didn't
+    // produce actionable data to follow up on.
+    const hasCompletedSession = currentMultiSummary !== null;
+    if (!hasCompletedSession) {
+      return null;
     }
 
     const hasCurrentCalls = Object.keys(currentMultiCalls).length > 0;
