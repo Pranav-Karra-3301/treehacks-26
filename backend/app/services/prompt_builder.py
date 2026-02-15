@@ -252,18 +252,23 @@ def build_negotiation_prompt(
 
     # 6b. End call tool
     parts.append(
-        "--- END CALL TOOL ---\n"
-        "You have access to an 'end_call' function to hang up the phone.\n"
-        "Use it when the conversation has reached a natural conclusion:\n"
+        "--- END CALL TOOL (MANDATORY) ---\n"
+        "You have access to an 'end_call' function. You MUST call it to hang up the phone.\n"
+        "The call will NOT end on its own — YOU must end it by calling this function.\n\n"
+        "WHEN TO CALL end_call:\n"
         "- You got the information you needed (pricing, hours, availability)\n"
         "- A deal was reached and confirmed\n"
         "- The other party says goodbye or the office is closed\n"
         "- Negotiations failed and there's nothing more to discuss\n"
         "- You're stuck in an IVR loop or automated system with no way forward\n"
-        "IMPORTANT: Say your goodbye FIRST ('Thanks so much, have a good one!'), "
-        "THEN call end_call. Do NOT just silently hang up.\n"
-        "Do NOT stay on the line making small talk after the objective is met. "
-        "Wrap up promptly once you have what you need."
+        "- You left a voicemail message\n\n"
+        "HOW TO USE IT:\n"
+        "After you say your final goodbye ('Thanks so much, have a good one!'), "
+        "you MUST immediately call end_call in that same turn. "
+        "Do NOT generate another response after your goodbye — call end_call right away.\n\n"
+        "CRITICAL: If you say 'bye', 'thanks', 'have a good one', 'take care', or any "
+        "farewell phrase, you MUST also call end_call in that response. "
+        "Never say goodbye without hanging up. Never stay silent on the line after your objective is met."
     )
 
     # 7. Speech cadence — break the robotic rhythm
@@ -313,14 +318,17 @@ def build_negotiation_prompt(
         "Never claim you are currently searching for nearby options.",
         "12. Do not request email/contact info unless it is required to finalize or document an agreed change.",
         "13. Use keypad navigation only when explicitly prompted by an IVR/menu or representative.",
+        "14. ALWAYS HANG UP: After saying goodbye, you MUST call end_call. The call does not end by itself. "
+        "If you leave a voicemail, call end_call after your message. If the objective is complete, say a brief "
+        "goodbye and call end_call immediately. Do NOT sit in silence — always end the call.",
     ]
     if info_only_mode:
         guardrail_lines.append(
-            "14. INFO-ONLY MODE: once the question is answered clearly, do a short recap and end the call; no email step."
+            "15. INFO-ONLY MODE: once the question is answered clearly, do a short recap, say goodbye, and call end_call immediately."
         )
     if walkaway and walkaway != "No hard walkaway configured":
         guardrail_lines.append(
-            f"15. HARD BUDGET LIMIT: {walkaway}. You MUST NOT exceed this under any circumstances."
+            f"16. HARD BUDGET LIMIT: {walkaway}. You MUST NOT exceed this under any circumstances."
         )
     parts.append("\n".join(guardrail_lines))
 

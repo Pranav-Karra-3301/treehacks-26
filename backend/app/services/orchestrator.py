@@ -68,6 +68,10 @@ class CallOrchestrator:
         self._dtmf_in_flight: set[str] = set()
         # Pending end-call tasks (agent-initiated hangup after goodbye TTS)
         self._pending_end_call: dict[str, asyncio.Task[None]] = {}
+        # Last conversation activity timestamp per task (for silence auto-hangup)
+        self._last_activity: dict[str, float] = {}
+        self._silence_watchdogs: dict[str, asyncio.Task[None]] = {}
+        self._silence_timeout_seconds = 20.0  # auto-hangup after 20s silence
 
     def _session_recording_path(self, task_id: str) -> Path:
         # Legacy: kept for backward compat, prefer store.save_artifact("recording_stats", ...)
@@ -238,6 +242,12 @@ class CallOrchestrator:
 
     async def stop_task_call(self, task_id: str, *, from_status_callback: bool = False, stop_reason: str = "unknown") -> None:
         with timed_step("orchestrator", "stop_task_call", task_id=task_id):
+            self._cancel_silence_watchdog(task_id)
+            # Cancel any pending agent-initiated hangup
+            pending = self._pending_end_call.pop(task_id, None)
+            if pending and not pending.done():
+                pending.cancel()
+
             call_sid = self._task_to_call_sid.get(task_id)
             session_id = self._task_to_session.get(task_id)
             if session_id:
@@ -336,6 +346,35 @@ class CallOrchestrator:
             self._dtmf_in_flight.discard(task_id)
             return True
         return False
+
+    def _reset_silence_watchdog(self, task_id: str) -> None:
+        """Reset the silence watchdog timer for a task."""
+        existing = self._silence_watchdogs.pop(task_id, None)
+        if existing and not existing.done():
+            existing.cancel()
+
+        async def _silence_check() -> None:
+            await asyncio.sleep(self._silence_timeout_seconds)
+            # Double-check the task is still active
+            task = self._store.get_task(task_id)
+            status = str((task or {}).get("status", ""))
+            if status in {"ended", "failed"}:
+                return
+            last = self._last_activity.get(task_id, 0)
+            if time.time() - last >= self._silence_timeout_seconds - 1:
+                log_event("orchestrator", "silence_auto_hangup", task_id=task_id,
+                          details={"silence_seconds": time.time() - last})
+                await self.stop_task_call(task_id, stop_reason="silence_timeout")
+            self._silence_watchdogs.pop(task_id, None)
+
+        self._silence_watchdogs[task_id] = asyncio.create_task(_silence_check())
+
+    def _cancel_silence_watchdog(self, task_id: str) -> None:
+        """Cancel the silence watchdog for a task."""
+        watchdog = self._silence_watchdogs.pop(task_id, None)
+        if watchdog and not watchdog.done():
+            watchdog.cancel()
+        self._last_activity.pop(task_id, None)
 
     async def schedule_agent_hangup(self, task_id: str, delay_seconds: float = 2.0) -> None:
         """Schedule a delayed hangup after the agent says goodbye.
@@ -589,6 +628,10 @@ class CallOrchestrator:
             session_id = self._task_to_session.get(task_id)
             if not session_id:
                 return
+
+            # Track last conversation activity for silence auto-hangup
+            self._last_activity[task_id] = time.time()
+            self._reset_silence_watchdog(task_id)
 
             role = "user" if speaker == "caller" else "assistant"
             now = time.time()
