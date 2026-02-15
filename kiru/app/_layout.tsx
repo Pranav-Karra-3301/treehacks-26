@@ -1,15 +1,12 @@
+import '../lib/suppressWarnings';
 import '../global.css';
 import { useEffect, useCallback } from 'react';
-import { LogBox } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import ErrorBoundary from '../components/ErrorBoundary';
-
-// Suppress warnings from dependencies we can't control
-LogBox.ignoreLogs(['SafeAreaView has been deprecated']);
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
