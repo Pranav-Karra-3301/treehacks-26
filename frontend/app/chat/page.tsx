@@ -1698,29 +1698,16 @@ export default function ChatPage() {
       }
     }));
 
-    // #region agent log
-    fetch('http://127.0.0.1:7248/ingest/7295f040-090d-41f5-a445-399ebc98ac02',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/app/chat/page.tsx:1701',message:'Task creation results',data:{taskCount:taskCreationResults.length,tasks:taskCreationResults.map(t=>({ok:t.ok,phone:t.phone}))},timestamp:Date.now(),hypothesisId:'H1,H4'})}).catch(()=>{});
-    // #endregion
-
     // Start all calls in parallel for true concurrent execution
     const callPromises = taskCreationResults.map(async (taskResult, i) => {
-      // #region agent log
-      fetch('http://127.0.0.1:7248/ingest/7295f040-090d-41f5-a445-399ebc98ac02',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/app/chat/page.tsx:1706',message:'Starting call',data:{index:i,phone:taskResult.phone,ok:taskResult.ok},timestamp:Date.now(),hypothesisId:'H1,H5'})}).catch(()=>{});
-      // #endregion
       if (!taskResult.ok) {
         return taskResult;
       }
       try {
         const callResult = await startCall(taskResult.taskId);
-        // #region agent log
-        fetch('http://127.0.0.1:7248/ingest/7295f040-090d-41f5-a445-399ebc98ac02',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/app/chat/page.tsx:1715',message:'Call started',data:{index:i,phone:taskResult.phone,ok:callResult.ok,message:callResult.message},timestamp:Date.now(),hypothesisId:'H1,H5'})}).catch(()=>{});
-        // #endregion
         return { ok: true as const, phone: taskResult.phone, taskId: taskResult.taskId, sessionId: callResult.session_id ?? '', callResult };
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-        // #region agent log
-        fetch('http://127.0.0.1:7248/ingest/7295f040-090d-41f5-a445-399ebc98ac02',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/app/chat/page.tsx:1722',message:'Call start error',data:{index:i,phone:taskResult.phone,error:errorMsg},timestamp:Date.now(),hypothesisId:'H1,H5'})}).catch(()=>{});
-        // #endregion
         return { ok: false as const, phone: taskResult.phone, errorMsg };
       }
     });
