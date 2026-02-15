@@ -5,7 +5,6 @@ import base64
 import json
 from datetime import datetime
 import time
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 from app.core.config import settings
@@ -55,27 +54,18 @@ class CallOrchestrator:
 
         self._audio_stats: Dict[str, Dict[str, Any]] = {}
         self._voice_session_lock = asyncio.Lock()
-        # Limit concurrent Twilio call placements to avoid rate-limiting
         self._call_semaphore = asyncio.Semaphore(4)
-        # Suppress per-chunk warning spam when Twilio keeps sending media after session teardown.
         self._media_no_session_log_at: dict[str, float] = {}
         self._media_after_end_log_at: dict[str, float] = {}
-        # Track inbound byte counts so outbound can be time-aligned
+        # In-memory audio buffers keyed by task_id
+        self._audio_buffers: dict[str, dict[str, bytearray]] = {}
         self._inbound_bytes: dict[str, int] = {}
         self._outbound_bytes: dict[str, int] = {}
-        # DTMF in-flight tracking: prevents stream stop from ending the call
-        # when a TwiML update (for DTMF) causes the media stream to reconnect.
         self._dtmf_in_flight: set[str] = set()
-        # Pending end-call tasks (agent-initiated hangup after goodbye TTS)
         self._pending_end_call: dict[str, asyncio.Task[None]] = {}
-        # Last conversation activity timestamp per task (for silence auto-hangup)
         self._last_activity: dict[str, float] = {}
         self._silence_watchdogs: dict[str, asyncio.Task[None]] = {}
-        self._silence_timeout_seconds = 20.0  # auto-hangup after 20s silence
-
-    def _session_recording_path(self, task_id: str) -> Path:
-        # Legacy: kept for backward compat, prefer store.save_artifact("recording_stats", ...)
-        return self._store.get_task_dir(task_id) / "recording_stats.json"
+        self._silence_timeout_seconds = 20.0
 
     def _voice_mode_enabled(self) -> bool:
         return settings.DEEPGRAM_VOICE_AGENT_ENABLED and bool(settings.DEEPGRAM_API_KEY)
@@ -755,13 +745,8 @@ class CallOrchestrator:
             await dg_session.stop()
 
     async def _persist_messages(self, session_id: str) -> None:
-        session = await self._sessions.get(session_id)
-        if not session:
-            return
-
-        with timed_step("storage", "persist_messages", session_id=session_id, task_id=session.task_id):
-            self._store.save_artifact(session.task_id, "conversation", session.conversation)
-            self._store.save_artifact(session.task_id, "transcript", session.transcript)
+        # No-op: transcript is synced to Supabase at call end via stop_session.
+        pass
 
     async def save_audio_chunk(self, session_id: str, side: str, chunk: bytes) -> None:
         if not chunk:
@@ -770,32 +755,27 @@ class CallOrchestrator:
         if not session:
             return
 
+        task_id = session.task_id
         side_key = "agent" if side in {"agent", "outbound"} else side
-        filename = "inbound.wav" if side_key == "caller" else "outbound.wav"
-        call_dir = self._store.get_task_dir(session.task_id)
-        call_dir.mkdir(parents=True, exist_ok=True)
+        buf_key = "inbound" if side_key == "caller" else "outbound"
         if side_key not in {"caller", "agent"}:
             side_key = "agent"
+            buf_key = "outbound"
 
-        # For outbound (agent) audio: pad with mulaw silence (0xFF) so
-        # the outbound track stays time-aligned with the continuous inbound
-        # stream.  The inbound stream is a steady 8 kHz clock from Twilio,
-        # so its byte count represents elapsed call time.
-        if side_key == "agent":
+        bufs = self._audio_buffers.setdefault(task_id, {"inbound": bytearray(), "outbound": bytearray()})
+
+        # For outbound audio: pad with mulaw silence (0xFF) for time-alignment
+        if buf_key == "outbound":
             inbound_pos = self._inbound_bytes.get(session_id, 0)
             outbound_pos = self._outbound_bytes.get(session_id, 0)
             gap = inbound_pos - outbound_pos
             if gap > 0:
-                with open(call_dir / filename, "ab") as f:
-                    f.write(b"\xff" * gap)
+                bufs["outbound"].extend(b"\xff" * gap)
                 self._outbound_bytes[session_id] = outbound_pos + gap
 
-        # Write the actual audio data
-        with open(call_dir / filename, "ab") as f:
-            f.write(chunk)
+        bufs[buf_key].extend(chunk)
 
-        # Track byte positions for time alignment
-        if side_key == "caller":
+        if buf_key == "inbound":
             self._inbound_bytes[session_id] = self._inbound_bytes.get(session_id, 0) + len(chunk)
         else:
             self._outbound_bytes[session_id] = self._outbound_bytes.get(session_id, 0) + len(chunk)
@@ -803,7 +783,7 @@ class CallOrchestrator:
         stats = self._audio_stats.setdefault(
             session_id,
             {
-                "task_id": session.task_id,
+                "task_id": task_id,
                 "created_at": datetime.utcnow().isoformat(),
                 "started_at": datetime.utcnow().isoformat(),
                 "bytes_by_side": {"caller": 0, "agent": 0, "mixed": 0},
@@ -816,43 +796,27 @@ class CallOrchestrator:
             stats["bytes_by_side"][side_key] = stats["bytes_by_side"].get(side_key, 0) + len(chunk)
         stats["last_chunk_at"] = datetime.utcnow().isoformat()
 
-    def _create_mixed_audio(self, task_id: str) -> None:
-        """Mix inbound and outbound mulaw streams into a single mixed.wav file.
-
-        Decodes both streams from mulaw to 16-bit linear PCM, sums them
-        sample-by-sample (with clipping), then re-encodes to mulaw.
-        This produces a proper two-party mix instead of concatenating chunks.
-        """
-        call_dir = self._store.get_task_dir(task_id)
-        inbound_path = call_dir / "inbound.wav"
-        outbound_path = call_dir / "outbound.wav"
-        mixed_path = call_dir / "mixed.wav"
-
-        inbound_raw = inbound_path.read_bytes() if inbound_path.exists() else b""
-        outbound_raw = outbound_path.read_bytes() if outbound_path.exists() else b""
+    def _create_mixed_audio(self, task_id: str) -> bytes:
+        """Mix inbound and outbound mulaw streams from memory into a single bytes object."""
+        bufs = self._audio_buffers.get(task_id, {})
+        inbound_raw = bytes(bufs.get("inbound", b""))
+        outbound_raw = bytes(bufs.get("outbound", b""))
 
         log_event(
             "orchestrator",
             "create_mixed_audio",
             task_id=task_id,
-            details={
-                "inbound_bytes": len(inbound_raw),
-                "outbound_bytes": len(outbound_raw),
-                "inbound_exists": inbound_path.exists(),
-                "outbound_exists": outbound_path.exists(),
-            },
+            details={"inbound_bytes": len(inbound_raw), "outbound_bytes": len(outbound_raw)},
         )
 
-        # Strip any existing RIFF header (shouldn't be there, but be safe)
         if inbound_raw[:4] == b"RIFF":
-            inbound_raw = inbound_raw[44:]  # skip standard WAV header
+            inbound_raw = inbound_raw[44:]
         if outbound_raw[:4] == b"RIFF":
             outbound_raw = outbound_raw[44:]
 
         if not inbound_raw and not outbound_raw:
-            return
+            return b""
 
-        # Mulaw decode table (ITU G.711)
         def _build_mulaw_decode_table():
             table = []
             for byte_val in range(256):
@@ -867,8 +831,6 @@ class CallOrchestrator:
             return table
 
         decode_table = _build_mulaw_decode_table()
-
-        # Mulaw encode: linear 16-bit → mulaw byte
         _MULAW_BIAS = 132
         _MULAW_CLIP = 32635
 
@@ -887,14 +849,12 @@ class CallOrchestrator:
             mantissa = (sample >> (exponent + 3)) & 0x0F
             return ~(sign | (exponent << 4) | mantissa) & 0xFF
 
-        # Pad shorter stream with mulaw silence (0xFF)
         max_len = max(len(inbound_raw), len(outbound_raw))
         if len(inbound_raw) < max_len:
             inbound_raw += b"\xff" * (max_len - len(inbound_raw))
         if len(outbound_raw) < max_len:
             outbound_raw += b"\xff" * (max_len - len(outbound_raw))
 
-        # Mix: decode → sum → clip → encode
         mixed = bytearray(max_len)
         for i in range(max_len):
             pcm_in = decode_table[inbound_raw[i]]
@@ -902,34 +862,46 @@ class CallOrchestrator:
             combined = max(-32768, min(32767, pcm_in + pcm_out))
             mixed[i] = _encode_mulaw_sample(combined)
 
-        mixed_path.write_bytes(bytes(mixed))
-
-        # Update mixed byte count in stats
         for sid, stats in self._audio_stats.items():
             if stats.get("task_id") == task_id:
                 stats["bytes_by_side"]["mixed"] = max_len
                 break
 
+        return bytes(mixed)
+
     async def stop_session(self, session_id: str, *, stop_reason: str = "unknown") -> None:
         session = await self._sessions.get(session_id)
         if not session or session.status == "ended":
-            return  # Already ended — skip duplicate
+            return
 
         task_id = session.task_id
         with timed_step("orchestrator", "stop_session", session_id=session_id, task_id=task_id):
             await self._stop_voice_session(session_id)
-            # Allow any in-flight audio writes to flush before mixing
             await asyncio.sleep(0.5)
             await self._sessions.set_status(session_id, "ended")
             duration = await self._sessions.get_duration_seconds(session_id)
             self._store.update_duration(task_id, duration)
             self._store.update_status(task_id, "ended")
             self._store.update_ended_at(task_id)
+
             stats = self._audio_stats.get(session_id)
             if stats is not None:
                 stats["stop_reason"] = stop_reason
-            await self._persist_recording_stats(session_id)
-            self._create_mixed_audio(task_id)
+
+            # Build recording stats and mixed audio, then write all to Supabase
+            recording = self._build_recording_stats(session_id, session)
+            mixed_audio = self._create_mixed_audio(task_id)
+            audio_bufs = self._audio_buffers.get(task_id)
+
+            self._store.upsert_call_artifacts_direct(
+                task_id,
+                transcript=session.transcript,
+                recording=recording,
+                audio_buffers=audio_bufs,
+                mixed_audio=mixed_audio,
+                reason="stop_session",
+            )
+
             await self._ws.broadcast(
                 task_id,
                 {"type": "call_status", "data": {"status": "ended", "session_id": session_id}},
@@ -942,23 +914,22 @@ class CallOrchestrator:
         self._audio_stats.pop(session_id, None)
         self._inbound_bytes.pop(session_id, None)
         self._outbound_bytes.pop(session_id, None)
+        self._audio_buffers.pop(task_id, None)
 
-        # Auto-generate analysis in background so outcome is always set
         asyncio.create_task(self._auto_analyze(task_id))
 
     async def _auto_analyze(self, task_id: str) -> None:
         """Generate analysis and persist outcome immediately after call ends."""
         try:
             with timed_step("orchestrator", "auto_analyze", task_id=task_id):
-                transcript_raw = self._store.get_artifact(task_id, "transcript")
-                transcript = []
-                if transcript_raw:
-                    transcript = [TranscriptTurn(**entry) for entry in transcript_raw]
+                artifact = self._store.get_call_artifact(task_id)
+                transcript_raw = (artifact or {}).get("transcript", [])
+                transcript = [TranscriptTurn(**entry) for entry in transcript_raw] if transcript_raw else []
 
                 task = self._store.get_task(task_id)
                 analysis = await self._engine.summarize_turn(transcript, task)
 
-                self._store.save_artifact(task_id, "analysis", analysis)
+                self._store.upsert_call_artifact_partial(task_id, analysis=analysis, reason="auto_analyze")
 
                 outcome = analysis.get("outcome", "unknown")
                 valid = {"unknown", "success", "partial", "failed", "walkaway"}
@@ -968,14 +939,9 @@ class CallOrchestrator:
         except Exception as exc:
             log_event("orchestrator", "auto_analyze_error", task_id=task_id, details={"error": str(exc)})
 
-    async def _persist_recording_stats(self, session_id: str) -> None:
-        session = await self._sessions.get(session_id)
-        if not session:
-            return
-        stats = self._audio_stats.get(session_id)
-        if not stats:
-            return
-
+    def _build_recording_stats(self, session_id: str, session: Any) -> Dict[str, Any]:
+        """Build recording stats dict (returned, not written to disk)."""
+        stats = dict(self._audio_stats.get(session_id) or {})
         stats["task_id"] = session.task_id
         if session.started_at:
             stats["started_at"] = session.started_at.isoformat()
@@ -983,8 +949,6 @@ class CallOrchestrator:
         stats["duration_seconds"] = int(
             ((session.ended_at or datetime.utcnow()) - (session.started_at or datetime.utcnow())).total_seconds()
         )
-
-        # Transcript completeness
         stats["transcript_turns"] = len(session.transcript)
         if session.transcript:
             last_at = session.transcript[-1].get("created_at")
@@ -995,13 +959,11 @@ class CallOrchestrator:
         else:
             stats["last_turn_at"] = None
 
-        # Twilio correlation IDs (persist runs BEFORE _clear_*)
         task_id = session.task_id
         stats["call_sid"] = self._task_to_call_sid.get(task_id)
         stats["stream_sid"] = self._task_to_stream_sid.get(task_id)
         stats["stop_reason"] = stats.get("stop_reason", "unknown")
 
-        # Deepgram session counters
         dg = self._deepgram_sessions.get(session_id)
         if dg is not None:
             stats["deepgram"] = {
@@ -1011,5 +973,4 @@ class CallOrchestrator:
                 "audio_bytes_received": getattr(dg, "_audio_bytes_received", 0),
                 "messages_received": getattr(dg, "_messages_received", 0),
             }
-
-        self._store.save_artifact(session.task_id, "recording_stats", stats)
+        return stats

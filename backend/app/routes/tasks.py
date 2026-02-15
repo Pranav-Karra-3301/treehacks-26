@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-import json
+import asyncio
+import base64
 import inspect
 import struct
-from pathlib import Path
 from typing import List
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
@@ -54,15 +54,20 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
             return await summarize_fn(transcript, task)
         return await summarize_fn(transcript)
 
-    def _build_recording_files(call_dir: Path) -> dict[str, object]:
-        file_stats = {}
-        for name in ("inbound.wav", "outbound.wav", "mixed.wav", "recording_stats.json"):
-            path = call_dir / name
-            file_stats[name] = {
-                "exists": path.exists(),
-                "size_bytes": path.stat().st_size if path.exists() else 0,
-            }
-        return file_stats
+    def _artifact_audio_bytes(task_id: str, side: str) -> bytes | None:
+        """Read audio bytes from Supabase call artifact."""
+        artifact = store.get_call_artifact(task_id)
+        if not artifact:
+            return None
+        audio_payload = artifact.get("audio_payload") or {}
+        entry = audio_payload.get(side) or {}
+        payload_b64 = entry.get("payload_b64")
+        if not payload_b64:
+            return None
+        try:
+            return base64.b64decode(payload_b64)
+        except Exception:
+            return None
 
     class TransferRequest(BaseModel):
         to_phone: str = Field(min_length=8, max_length=20)
@@ -236,68 +241,77 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
         )
         return header + bytes(pcm_samples)
 
+    @router.delete("/{task_id}", response_model=ActionResponse)
+    async def delete_task(task_id: str):
+        with timed_step("api", "delete_task", task_id=task_id):
+            row = store.get_task(task_id)
+            if not row:
+                raise HTTPException(status_code=404, detail="Task not found")
+            status = str(row.get("status") or "")
+            if status not in {"ended", "failed"}:
+                try:
+                    await orchestrator.stop_task_call(task_id, stop_reason="task_deleted")
+                except Exception:
+                    pass
+            store.delete_task(task_id)
+            if local_cache is not None:
+                await local_cache.delete(_task_cache_key(task_id))
+                await local_cache.delete(_tasks_cache_key())
+                await local_cache.delete(_analysis_cache_key(task_id))
+            return ActionResponse(ok=True, message="task deleted")
+
     @router.get("/{task_id}/audio")
     async def get_audio(task_id: str, side: str = Query(default="mixed")):
         with timed_step("api", "get_audio", task_id=task_id, details={"side": side}):
-            call_dir = store.get_task_dir(task_id)
-            if not call_dir.exists():
-                raise HTTPException(status_code=404, detail="Task recordings not found")
+            selected = side if side in {"mixed", "inbound", "outbound"} else "mixed"
+            raw_data = _artifact_audio_bytes(task_id, selected)
+            if not raw_data:
+                # Try fallback sides
+                for fallback_side in ["mixed", "inbound", "outbound"]:
+                    raw_data = _artifact_audio_bytes(task_id, fallback_side)
+                    if raw_data:
+                        break
+            if not raw_data:
+                raise HTTPException(status_code=404, detail="No audio for task")
 
-            files = {
-                "mixed": call_dir / "mixed.wav",
-                "inbound": call_dir / "inbound.wav",
-                "outbound": call_dir / "outbound.wav",
-            }
-
-            selected = side if side in files else "mixed"
-            file_path = files[selected]
-            if not file_path.exists():
-                fallback = next(iter(sorted(call_dir.glob("*.wav"))), None)
-                if not fallback:
-                    raise HTTPException(status_code=404, detail="No audio for task")
-                file_path = fallback
-
-            raw_data = file_path.read_bytes()
-            # If the file lacks a RIFF header, it's raw mulaw — decode to PCM WAV
-            if not raw_data[:4] == b'RIFF':
+            if raw_data[:4] != b'RIFF':
                 raw_data = _mulaw_to_pcm_wav(raw_data)
-            # If it has a RIFF header but mulaw format tag, also decode to PCM
             elif raw_data[20:22] == b'\x07\x00':
-                # Strip existing header, decode payload to PCM
                 raw_data = _mulaw_to_pcm_wav(raw_data[44:])
 
             return Response(
                 content=raw_data,
                 media_type="audio/wav",
-                headers={"Content-Disposition": f'inline; filename="{file_path.name}"'},
+                headers={"Content-Disposition": f'inline; filename="{selected}.wav"'},
             )
 
     @router.get("/{task_id}/recording-metadata")
     async def get_recording_metadata(task_id: str):
         with timed_step("api", "get_recording_metadata", task_id=task_id):
-            metadata = store.get_artifact(task_id, "recording_stats")
-            if not metadata:
-                metadata = {
-                    "task_id": task_id,
-                    "status": "missing",
-                    "bytes_by_side": {"caller": 0, "agent": 0, "mixed": 0},
-                    "chunks_by_side": {"caller": 0, "agent": 0},
-                    "last_chunk_at": None,
-                }
-            call_dir = store.get_task_dir(task_id)
-            metadata["files"] = _build_recording_files(call_dir)
+            artifact = store.get_call_artifact(task_id)
+            recording = (artifact or {}).get("recording", {})
+            metadata = recording if recording else {
+                "task_id": task_id,
+                "status": "missing",
+                "bytes_by_side": {"caller": 0, "agent": 0, "mixed": 0},
+                "chunks_by_side": {"caller": 0, "agent": 0},
+                "last_chunk_at": None,
+            }
             return metadata
 
     @router.get("/{task_id}/recording-files")
     async def get_recording_files(task_id: str):
         with timed_step("api", "get_recording_files", task_id=task_id):
-            call_dir = store.get_task_dir(task_id)
-            if not call_dir.exists():
-                raise HTTPException(status_code=404, detail="Task recordings not found")
-            return {
-                "task_id": task_id,
-                "files": _build_recording_files(call_dir),
-            }
+            artifact = store.get_call_artifact(task_id)
+            audio_payload = (artifact or {}).get("audio_payload", {})
+            files = {}
+            for name in ("inbound", "outbound", "mixed"):
+                entry = audio_payload.get(name, {})
+                files[f"{name}.wav"] = {
+                    "exists": bool(entry.get("payload_b64")),
+                    "size_bytes": int(entry.get("byte_count", 0)),
+                }
+            return {"task_id": task_id, "files": files}
 
     @router.get("/{task_id}/transcript")
     async def get_transcript(task_id: str):
@@ -305,14 +319,9 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
             row = store.get_task(task_id)
             if not row:
                 raise HTTPException(status_code=404, detail="Task not found")
-            raw = store.get_artifact(task_id, "transcript")
-            if raw is None:
-                return {"task_id": task_id, "turns": [], "count": 0}
-            return {
-                "task_id": task_id,
-                "turns": raw,
-                "count": len(raw),
-            }
+            artifact = store.get_call_artifact(task_id)
+            raw = (artifact or {}).get("transcript", [])
+            return {"task_id": task_id, "turns": raw, "count": len(raw)}
 
     @router.get("/{task_id}/analysis", response_model=AnalysisPayload)
     async def get_analysis(task_id: str):
@@ -326,17 +335,16 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
             if not row:
                 raise HTTPException(status_code=404, detail="Task not found")
 
-            existing_analysis = store.get_artifact(task_id, "analysis")
+            artifact = store.get_call_artifact(task_id)
+            existing_analysis = (artifact or {}).get("analysis")
             if existing_analysis:
                 return AnalysisPayload(**existing_analysis)
 
-            transcript_raw = store.get_artifact(task_id, "transcript")
-            transcript: List[TranscriptTurn] = []
-            if transcript_raw:
-                transcript = [TranscriptTurn(**entry) for entry in transcript_raw]
+            transcript_raw = (artifact or {}).get("transcript", [])
+            transcript: List[TranscriptTurn] = [TranscriptTurn(**entry) for entry in transcript_raw] if transcript_raw else []
 
             analysis = await _summarize_transcript(transcript, row)
-            store.save_artifact(task_id, "analysis", analysis)
+            store.upsert_call_artifact_partial(task_id, analysis=analysis, reason="get_analysis")
             outcome_value = analysis.get("outcome", "unknown")
             valid_outcomes = {"unknown", "success", "partial", "failed", "walkaway"}
             outcome = outcome_value if outcome_value in valid_outcomes else "unknown"
@@ -408,21 +416,19 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
             if not task_ids:
                 raise HTTPException(status_code=400, detail="task_ids cannot be empty")
 
-            # Gather task data and generate missing analyses in parallel
-            import asyncio as _asyncio
-
             async def _prepare_call(task_id: str) -> dict[str, object] | None:
                 row = store.get_task(task_id)
                 if not row:
                     return None
 
-                transcript_raw = store.get_artifact(task_id, "transcript") or []
+                artifact = store.get_call_artifact(task_id)
+                transcript_raw = (artifact or {}).get("transcript", [])
                 transcript: List[TranscriptTurn] = [TranscriptTurn(**entry) for entry in transcript_raw]
 
-                analysis = store.get_artifact(task_id, "analysis")
+                analysis = (artifact or {}).get("analysis")
                 if not analysis:
                     analysis = await _summarize_transcript(transcript, row)
-                    store.save_artifact(task_id, "analysis", analysis)
+                    store.upsert_call_artifact_partial(task_id, analysis=analysis, reason="multi_analysis")
 
                 return {
                     "task_id": task_id,
@@ -439,7 +445,7 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
                     "transcript_excerpt": transcript_raw[-40:],
                 }
 
-            prepared = await _asyncio.gather(*[_prepare_call(tid) for tid in task_ids])
+            prepared = await asyncio.gather(*[_prepare_call(tid) for tid in task_ids])
             calls: List[dict[str, object]] = [c for c in prepared if c is not None]
 
             if not calls:

@@ -14,7 +14,6 @@ from app.services.orchestrator import CallOrchestrator
 from app.services.cache import CacheService
 from app.services.session_manager import SessionManager
 from app.services.storage import DataStore
-from app.services.supabase_store import SupabaseStore
 from app.services.ws_manager import ConnectionManager
 from app.routes import chat_sessions as chat_session_routes
 from app.routes import llm_proxy as llm_proxy_routes
@@ -36,30 +35,14 @@ def create_app(
     ws_manager: Optional[ConnectionManager] = None,
     orchestrator: Optional[CallOrchestrator] = None,
     cache: Optional[CacheService] = None,
-    data_root: str | Path | None = None,
-    sqlite_path: str | Path | None = None,
     allowed_origins: Optional[ALLOWED_ORIGINS_TYPE] = None,
     llm_overrides: Optional[dict[str, Any]] = None,
 ) -> FastAPI:
-    """Create the FastAPI app with injectable dependencies.
-
-    This makes it easy to create isolated app instances for tests, including
-    temporary data roots and mocked orchestrator/dependency objects.
-    """
-
-    if data_root is not None:
-        settings.DATA_ROOT = Path(data_root)
-    if sqlite_path is not None:
-        settings.SQLITE_PATH = Path(sqlite_path)
+    """Create the FastAPI app with injectable dependencies."""
 
     configure_logging()
 
-    if store:
-        local_store = store
-    elif settings.SUPABASE_URL and (settings.SUPABASE_SERVICE_ROLE_KEY or settings.SUPABASE_ANON_KEY):
-        local_store = SupabaseStore()
-    else:
-        local_store = DataStore(data_root=data_root, sqlite_path=sqlite_path)
+    local_store = store or DataStore()
     local_session_manager = session_manager or SessionManager()
     local_ws_manager = ws_manager or ConnectionManager()
     local_cache = cache or CacheService(

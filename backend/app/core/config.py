@@ -164,6 +164,22 @@ class Settings:
     SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "").strip()
     SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 
+    # Supabase sync — feature flags & table names
+    SUPABASE_CALLS_ENABLED = os.getenv("SUPABASE_CALLS_ENABLED", "true").strip().lower() == "true"
+    SUPABASE_CALLS_TABLE = os.getenv("SUPABASE_CALLS_TABLE", "calls").strip()
+    SUPABASE_CALL_ARTIFACTS_ENABLED = os.getenv("SUPABASE_CALL_ARTIFACTS_ENABLED", "true").strip().lower() == "true"
+    SUPABASE_CALL_ARTIFACTS_TABLE = os.getenv("SUPABASE_CALL_ARTIFACTS_TABLE", "call_artifacts").strip()
+    SUPABASE_CHAT_SESSIONS_ENABLED = os.getenv("SUPABASE_CHAT_SESSIONS_ENABLED", "true").strip().lower() == "true"
+    SUPABASE_CHAT_SESSIONS_TABLE = os.getenv("SUPABASE_CHAT_SESSIONS_TABLE", "chat_sessions").strip()
+    SUPABASE_VERBOSE_SYNC_LOGGING = os.getenv("SUPABASE_VERBOSE_SYNC_LOGGING", "false").strip().lower() == "true"
+    SUPABASE_CALL_ARTIFACT_MAX_AUDIO_BYTES = int(os.getenv("SUPABASE_CALL_ARTIFACT_MAX_AUDIO_BYTES", str(25 * 1024 * 1024)))
+
+    # DATA_ROOT is used exclusively for telemetry/logging.
+    # Task/call artifacts are stored in Supabase, NOT on disk.
+
+    # Auto IVR navigation
+    AUTO_IVR_NAVIGATION_ENABLED = os.getenv("AUTO_IVR_NAVIGATION_ENABLED", "true").strip().lower() == "true"
+
     # Redis / caching
     UPSTASH_REDIS_URL = os.getenv("UPSTASH_REDIS_URL", "").strip()
     REDIS_URL = os.getenv("REDIS_URL", "").strip() or UPSTASH_REDIS_URL

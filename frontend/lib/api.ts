@@ -20,6 +20,14 @@ import type {
   ChatSessionRecord,
 } from './types';
 
+function extractDetail(body: Record<string, unknown>, fallback: string): string {
+  const detail = body.detail;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail))
+    return detail.map((d: { msg?: string }) => d.msg || JSON.stringify(d)).join('; ');
+  return fallback;
+}
+
 export async function createTask(payload: unknown): Promise<TaskSummary> {
   const res = await fetch(`${BACKEND_API_URL}/api/tasks`, {
     method: 'POST',
@@ -72,13 +80,22 @@ export async function getTask(id: string): Promise<TaskDetail> {
   return res.json();
 }
 
+export async function deleteTask(id: string): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(`${BACKEND_API_URL}/api/tasks/${id}`, { method: 'DELETE' });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    return { ok: false, message: extractDetail(body, `Failed to delete task: ${res.status}`) };
+  }
+  return res.json();
+}
+
 export async function startCall(id: string): Promise<ActionResponse> {
   const res = await fetch(`${BACKEND_API_URL}/api/tasks/${id}/call`, {
     method: 'POST',
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    return { ok: false, message: body.detail ?? `Failed to start call: ${res.status}`, session_id: null };
+    return { ok: false, message: extractDetail(body, `Failed to start call: ${res.status}`), session_id: null };
   }
   return res.json();
 }
@@ -89,7 +106,7 @@ export async function stopCall(id: string): Promise<ActionResponse> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    return { ok: false, message: body.detail ?? `Failed to stop call: ${res.status}`, session_id: null };
+    return { ok: false, message: extractDetail(body, `Failed to stop call: ${res.status}`), session_id: null };
   }
   return res.json();
 }
@@ -102,7 +119,7 @@ export async function transferCall(id: string, toPhone: string): Promise<ActionR
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    return { ok: false, message: body.detail ?? `Failed to transfer call: ${res.status}`, session_id: null };
+    return { ok: false, message: extractDetail(body, `Failed to transfer call: ${res.status}`), session_id: null };
   }
   return res.json();
 }
@@ -115,13 +132,7 @@ export async function sendCallDtmf(id: string, digits: string): Promise<ActionRe
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    const detail = body.detail;
-    const message = typeof detail === 'string'
-      ? detail
-      : Array.isArray(detail)
-        ? detail.map((d: { msg?: string }) => d.msg || JSON.stringify(d)).join('; ')
-        : `Failed to send keypad digits: ${res.status}`;
-    return { ok: false, message, session_id: null };
+    return { ok: false, message: extractDetail(body, `Failed to send keypad digits: ${res.status}`), session_id: null };
   }
   return res.json();
 }

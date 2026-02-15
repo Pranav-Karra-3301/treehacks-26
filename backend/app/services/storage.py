@@ -1,210 +1,325 @@
 from __future__ import annotations
 
+import base64
 import json
-import sqlite3
-from contextlib import contextmanager
-from datetime import datetime
-from pathlib import Path
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from app.core.config import settings
+from app.core.telemetry import log_event
 from app.core.telemetry import timed_step
+from app.services.call_artifact_supabase import SupabaseCallArtifactSync
+from app.services.call_sync_supabase import SupabaseCallSync
+from app.services.chat_session_supabase import SupabaseChatSessionSync
 from app.models.schemas import CallOutcome, CallStatus
 
 
 class DataStore:
-    """SQLite metadata + filesystem session artifacts."""
+    """Supabase-backed task metadata and call artifact storage."""
 
-    def __init__(self, data_root: str | Path | None = None, sqlite_path: str | Path | None = None) -> None:
-        self._data_root = Path(data_root) if data_root is not None else settings.DATA_ROOT
-        self._path = Path(sqlite_path) if sqlite_path is not None else self._data_root / "calls.db"
-        self._data_root.mkdir(parents=True, exist_ok=True)
-        with self._connect() as conn:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS calls (
-                    id TEXT PRIMARY KEY,
-                    task_type TEXT,
-                    target_phone TEXT,
-                    objective TEXT,
-                    context TEXT,
-                    run_id TEXT,
-                    run_mode TEXT,
-                    location TEXT,
-                    target_name TEXT,
-                    target_url TEXT,
-                    target_source TEXT,
-                    target_snippet TEXT,
-                    target_outcome TEXT,
-                    walkaway_point TEXT,
-                    agent_persona TEXT,
-                    opening_line TEXT,
-                    style TEXT,
-                    status TEXT,
-                    outcome TEXT,
-                    duration_seconds INTEGER DEFAULT 0,
-                    created_at TEXT,
-                    ended_at TEXT
-                )
-                """
+    def __init__(self, **_kwargs: Any) -> None:
+        self._call_sync: Optional[SupabaseCallSync] = None
+        self._call_artifact_sync: Optional[SupabaseCallArtifactSync] = None
+        self._chat_session_sync: Optional[SupabaseChatSessionSync] = None
+        # Prefer service_role key (bypasses RLS) over anon key for server-side access
+        _supabase_key = settings.SUPABASE_SERVICE_ROLE_KEY or settings.SUPABASE_ANON_KEY
+        if (
+            settings.SUPABASE_CALLS_ENABLED
+            and settings.SUPABASE_URL
+            and _supabase_key
+        ):
+            self._call_sync = SupabaseCallSync(
+                base_url=settings.SUPABASE_URL,
+                anon_key=_supabase_key,
+                table=settings.SUPABASE_CALLS_TABLE,
             )
-            self._ensure_column(conn, "calls", "run_id", "TEXT")
-            self._ensure_column(conn, "calls", "run_mode", "TEXT")
-            self._ensure_column(conn, "calls", "target_name", "TEXT")
-            self._ensure_column(conn, "calls", "target_url", "TEXT")
-            self._ensure_column(conn, "calls", "target_source", "TEXT")
-            self._ensure_column(conn, "calls", "target_snippet", "TEXT")
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS chat_sessions (
-                    id TEXT PRIMARY KEY,
-                    mode TEXT NOT NULL,
-                    revision INTEGER NOT NULL DEFAULT 0,
-                    run_id TEXT,
-                    task_ids_json TEXT NOT NULL DEFAULT '[]',
-                    payload_json TEXT NOT NULL DEFAULT '{}',
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )
-                """
+        if (
+            settings.SUPABASE_CALL_ARTIFACTS_ENABLED
+            and settings.SUPABASE_URL
+            and _supabase_key
+        ):
+            self._call_artifact_sync = SupabaseCallArtifactSync(
+                base_url=settings.SUPABASE_URL,
+                anon_key=_supabase_key,
+                table=settings.SUPABASE_CALL_ARTIFACTS_TABLE,
             )
-            conn.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_chat_sessions_mode_updated_at
-                ON chat_sessions (mode, updated_at DESC)
-                """
+        if (
+            settings.SUPABASE_CHAT_SESSIONS_ENABLED
+            and settings.SUPABASE_URL
+            and _supabase_key
+        ):
+            self._chat_session_sync = SupabaseChatSessionSync(
+                base_url=settings.SUPABASE_URL,
+                anon_key=_supabase_key,
+                table=settings.SUPABASE_CHAT_SESSIONS_TABLE,
             )
 
-    def _ensure_column(self, conn: sqlite3.Connection, table: str, column: str, ddl_type: str) -> None:
-        existing = {
-            row["name"]
-            for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
-        }
-        if column in existing:
-            return
-        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}")
+        if not self._call_sync and not self._chat_session_sync and not self._call_artifact_sync:
+            log_event(
+                "storage",
+                "no_supabase_configured",
+                status="warning",
+                details={"message": "No Supabase sync configured. Data will not persist."},
+            )
 
-    @contextmanager
-    def _connect(self):
-        conn = sqlite3.connect(self._path)
-        try:
-            conn.row_factory = sqlite3.Row
-            yield conn
-            conn.commit()
-        finally:
-            conn.close()
+    # ── Tasks (calls) ───────────────────────────────────────────────────────
 
     def create_task(self, task_id: str, payload: Dict[str, str]) -> None:
         with timed_step("storage", "create_task", task_id=task_id, details={"target_phone": payload.get("target_phone")}):
             now = datetime.utcnow().isoformat()
-            with self._connect() as conn:
-                conn.execute(
-                    """
-                    INSERT INTO calls (
-                        id, task_type, target_phone, objective, context,
-                        run_id, run_mode,
-                        location, target_name, target_url, target_source, target_snippet,
-                        target_outcome, walkaway_point, agent_persona,
-                        opening_line, style, status, outcome, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        task_id,
-                        payload["task_type"],
-                        payload["target_phone"],
-                        payload["objective"],
-                        payload.get("context", ""),
-                        payload.get("run_id"),
-                        payload.get("run_mode"),
-                        payload.get("location"),
-                        payload.get("target_name"),
-                        payload.get("target_url"),
-                        payload.get("target_source"),
-                        payload.get("target_snippet"),
-                        payload.get("target_outcome"),
-                        payload.get("walkaway_point"),
-                        payload.get("agent_persona"),
-                        payload.get("opening_line"),
-                        payload.get("style", "collaborative"),
-                        "pending",
-                        "unknown",
-                        now,
-                    ),
-                )
-
-            call_dir = self._data_root / task_id
-            call_dir.mkdir(parents=True, exist_ok=True)
-            with open(call_dir / "task.json", "w", encoding="utf-8") as f:
-                json.dump(payload, f, indent=2)
+            row = self._build_call_row(
+                task_id=task_id,
+                payload=payload,
+                status="pending",
+                outcome="unknown",
+                created_at=now,
+                updated_at=now,
+            )
+            if self._call_sync is not None:
+                self._call_sync.upsert(row)
 
     def update_status(self, task_id: str, status: CallStatus, outcome: Optional[CallOutcome] = None) -> None:
         with timed_step("storage", "update_status", task_id=task_id, details={"status": status, "outcome": outcome}):
-            with self._connect() as conn:
-                conn.execute(
-                    "UPDATE calls SET status = ?, outcome = COALESCE(?, outcome) WHERE id = ?",
-                    (status, outcome, task_id),
-                )
+            updates: Dict[str, Any] = {
+                "status": status,
+                "updated_at": datetime.utcnow().isoformat(),
+            }
+            if outcome is not None:
+                updates["outcome"] = outcome
+            self._update_task_in_supabase(task_id, updates)
 
     def update_ended_at(self, task_id: str, ended_at: Optional[datetime] = None) -> None:
         with timed_step("storage", "update_ended_at", task_id=task_id):
+            now = datetime.utcnow().isoformat()
             ended_value = (ended_at or datetime.utcnow()).isoformat()
-            with self._connect() as conn:
-                conn.execute("UPDATE calls SET ended_at = ? WHERE id = ?", (ended_value, task_id))
+            self._update_task_in_supabase(task_id, {"ended_at": ended_value, "updated_at": now})
 
     def update_duration(self, task_id: str, seconds: int) -> None:
         with timed_step("storage", "update_duration", task_id=task_id, details={"seconds": seconds}):
-            with self._connect() as conn:
-                conn.execute("UPDATE calls SET duration_seconds = ? WHERE id = ?", (seconds, task_id))
+            now = datetime.utcnow().isoformat()
+            self._update_task_in_supabase(task_id, {"duration_seconds": seconds, "updated_at": now})
 
     def list_tasks(self) -> List[Dict]:
         with timed_step("storage", "list_tasks"):
-            with self._connect() as conn:
-                rows = conn.execute("SELECT * FROM calls ORDER BY created_at DESC").fetchall()
-            return [dict(row) for row in rows]
+            if self._call_sync is None:
+                return []
+            rows = self._call_sync.list()
+            return [self._normalize_call_row(r) for r in rows]
 
     def get_task(self, task_id: str) -> Optional[Dict]:
         with timed_step("storage", "get_task", task_id=task_id):
-            with self._connect() as conn:
-                row = conn.execute("SELECT * FROM calls WHERE id = ?", (task_id,)).fetchone()
-            return dict(row) if row else None
-
-    def get_task_dir(self, task_id: str) -> Path:
-        return self._data_root / task_id
-
-    def save_artifact(self, task_id: str, artifact_type: str, data: Any) -> None:
-        """Save JSON artifact to filesystem."""
-        filename_map = {
-            "transcript": "transcript.json",
-            "analysis": "analysis.json",
-            "conversation": "conversation.json",
-            "recording_stats": "recording_stats.json",
-        }
-        filename = filename_map.get(artifact_type)
-        if not filename:
-            return
-        with timed_step("storage", f"save_artifact_{artifact_type}", task_id=task_id):
-            call_dir = self.get_task_dir(task_id)
-            call_dir.mkdir(parents=True, exist_ok=True)
-            with open(call_dir / filename, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
-
-    def get_artifact(self, task_id: str, artifact_type: str) -> Optional[Any]:
-        """Read JSON artifact from filesystem."""
-        filename_map = {
-            "transcript": "transcript.json",
-            "analysis": "analysis.json",
-            "conversation": "conversation.json",
-            "recording_stats": "recording_stats.json",
-        }
-        filename = filename_map.get(artifact_type)
-        if not filename:
-            return None
-        with timed_step("storage", f"get_artifact_{artifact_type}", task_id=task_id):
-            path = self.get_task_dir(task_id) / filename
-            if not path.exists():
+            if self._call_sync is None:
                 return None
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
+            row = self._call_sync.get(task_id)
+            if row is None:
+                return None
+            return self._normalize_call_row(row)
+
+    def delete_task(self, task_id: str) -> bool:
+        """Delete a task and its artifacts from Supabase, and scrub from chat sessions."""
+        with timed_step("storage", "delete_task", task_id=task_id):
+            if self._call_sync is not None:
+                self._call_sync.delete(task_id)
+            if self._call_artifact_sync is not None:
+                self._call_artifact_sync.delete(task_id)
+
+            # Remove the task ID from any chat sessions that reference it
+            self._remove_task_from_chat_sessions(task_id)
+
+            log_event(
+                "storage",
+                "task_deleted",
+                task_id=task_id,
+            )
+            return True
+
+    def _remove_task_from_chat_sessions(self, task_id: str) -> None:
+        """Scrub a deleted task ID from all chat sessions that reference it."""
+        if self._chat_session_sync is None:
+            return
+        try:
+            sessions = self._chat_session_sync.list_containing_task(task_id)
+            for session in sessions:
+                session_id = session.get("session_id")
+                if not session_id:
+                    continue
+                old_ids = list(session.get("task_ids") or [])
+                new_ids = [tid for tid in old_ids if tid != task_id]
+                if len(new_ids) == len(old_ids):
+                    continue  # wasn't actually in there
+                # Also scrub from the snapshot inside data
+                data = dict(session.get("data") or {})
+                snapshot = data.get("snapshot")
+                if isinstance(snapshot, dict):
+                    snap_task_ids = snapshot.get("taskIds")
+                    if isinstance(snap_task_ids, list) and task_id in snap_task_ids:
+                        snapshot["taskIds"] = [tid for tid in snap_task_ids if tid != task_id]
+                        data["snapshot"] = snapshot
+                self.upsert_chat_session(
+                    session_id,
+                    mode=str(session.get("mode") or "single"),
+                    revision=int(session.get("revision") or 0) + 1,
+                    run_id=session.get("run_id"),
+                    task_ids=new_ids,
+                    data=data,
+                )
+                log_event(
+                    "storage",
+                    "task_scrubbed_from_session",
+                    task_id=task_id,
+                    details={"session_id": session_id, "remaining_tasks": len(new_ids)},
+                )
+        except Exception as exc:
+            log_event(
+                "storage",
+                "task_scrub_sessions_error",
+                task_id=task_id,
+                status="warning",
+                details={"error": f"{type(exc).__name__}: {exc}"},
+            )
+
+    def _update_task_in_supabase(self, task_id: str, updates: Dict[str, Any]) -> None:
+        if self._call_sync is None:
+            return
+        existing = self._call_sync.get(task_id)
+        if existing is None:
+            return
+        row = self._normalize_call_row(existing)
+        row.update(updates)
+        self._call_sync.upsert(row)
+
+    # ── Call artifacts ──────────────────────────────────────────────────────
+
+    def upsert_call_artifacts_direct(
+        self,
+        task_id: str,
+        *,
+        transcript: Optional[List[Dict[str, Any]]] = None,
+        analysis: Optional[Dict[str, Any]] = None,
+        recording: Optional[Dict[str, Any]] = None,
+        audio_buffers: Optional[Dict[str, bytearray]] = None,
+        mixed_audio: Optional[bytes] = None,
+        call_control: Optional[Dict[str, Any]] = None,
+        reason: str = "direct",
+    ) -> Optional[Dict[str, Any]]:
+        """Write call artifacts directly to Supabase from in-memory data."""
+        with timed_step(
+            "storage",
+            "upsert_call_artifacts_direct",
+            task_id=task_id,
+            details={"reason": reason},
+        ):
+            now = datetime.utcnow().isoformat()
+            existing: Optional[Dict[str, Any]] = None
+            if self._call_artifact_sync is not None:
+                existing = self._call_artifact_sync.get(task_id)
+
+            merged_recording = dict(recording or {})
+            if call_control:
+                merged_recording["call_control"] = call_control
+
+            audio_payload = self._build_audio_payload_from_memory(
+                audio_buffers=audio_buffers,
+                mixed_audio=mixed_audio,
+            )
+
+            row: Dict[str, Any] = {
+                "task_id": task_id,
+                "transcript": transcript or [],
+                "analysis": analysis or {},
+                "recording": merged_recording,
+                "audio_payload": audio_payload,
+                "created_at": existing.get("created_at") if existing else now,
+                "updated_at": now,
+            }
+            if self._call_artifact_sync is not None:
+                self._call_artifact_sync.upsert(row)
+
+            return self._decode_call_artifact_row(row)
+
+    def upsert_call_artifact_partial(
+        self,
+        task_id: str,
+        *,
+        transcript: Optional[List[Dict[str, Any]]] = None,
+        analysis: Optional[Dict[str, Any]] = None,
+        recording: Optional[Dict[str, Any]] = None,
+        reason: str = "partial",
+    ) -> Optional[Dict[str, Any]]:
+        """Merge partial updates into an existing call artifact row in Supabase."""
+        with timed_step(
+            "storage",
+            "upsert_call_artifact_partial",
+            task_id=task_id,
+            details={"reason": reason},
+        ):
+            if self._call_artifact_sync is None:
+                return None
+            now = datetime.utcnow().isoformat()
+            existing = self._call_artifact_sync.get(task_id)
+            if existing is None:
+                existing = {}
+
+            row: Dict[str, Any] = {
+                "task_id": task_id,
+                "transcript": transcript if transcript is not None else existing.get("transcript", []),
+                "analysis": analysis if analysis is not None else existing.get("analysis", {}),
+                "recording": recording if recording is not None else existing.get("recording", {}),
+                "audio_payload": existing.get("audio_payload", {}),
+                "created_at": existing.get("created_at") or now,
+                "updated_at": now,
+            }
+            self._call_artifact_sync.upsert(row)
+            return self._decode_call_artifact_row(row)
+
+    def get_call_artifact(self, task_id: str) -> Optional[Dict[str, Any]]:
+        with timed_step("storage", "get_call_artifact", task_id=task_id):
+            if self._call_artifact_sync is None:
+                return None
+            row = self._call_artifact_sync.get(task_id)
+            if row is None:
+                return None
+            return self._decode_call_artifact_row(row)
+
+    def _build_audio_payload_from_memory(
+        self,
+        *,
+        audio_buffers: Optional[Dict[str, bytearray]] = None,
+        mixed_audio: Optional[bytes] = None,
+    ) -> Dict[str, Any]:
+        """Base64-encode in-memory audio bytearrays for Supabase storage."""
+        payload: Dict[str, Any] = {}
+        max_bytes = settings.SUPABASE_CALL_ARTIFACT_MAX_AUDIO_BYTES
+
+        sources: Dict[str, bytes] = {}
+        if audio_buffers:
+            if "inbound" in audio_buffers:
+                sources["inbound"] = bytes(audio_buffers["inbound"])
+            if "outbound" in audio_buffers:
+                sources["outbound"] = bytes(audio_buffers["outbound"])
+        if mixed_audio:
+            sources["mixed"] = mixed_audio
+
+        for side, raw in sources.items():
+            if not raw:
+                continue
+            entry: Dict[str, Any] = {
+                "file_name": f"{side}.wav",
+                "mime_type": "audio/wav",
+                "byte_count": len(raw),
+                "encoding": "base64",
+                "truncated": False,
+            }
+            if len(raw) > max_bytes:
+                entry["truncated"] = True
+                entry["payload_b64"] = ""
+                entry["truncated_reason"] = f"file_exceeds_limit:{max_bytes}"
+            else:
+                entry["payload_b64"] = base64.b64encode(raw).decode("ascii")
+            payload[side] = entry
+        return payload
+
+    # ── Chat sessions ───────────────────────────────────────────────────────
 
     def upsert_chat_session(
         self,
@@ -222,46 +337,37 @@ class DataStore:
             details={"session_id": session_id, "mode": mode, "revision": revision},
         ):
             now = datetime.utcnow().isoformat()
-            task_ids_json = json.dumps(task_ids or [])
-            payload_json = json.dumps(data or {})
-            with self._connect() as conn:
-                existing = conn.execute(
-                    "SELECT * FROM chat_sessions WHERE id = ?",
-                    (session_id,),
-                ).fetchone()
-                if existing is not None:
-                    existing_row = dict(existing)
-                    existing_revision = int(existing_row.get("revision") or 0)
-                    if revision < existing_revision:
-                        return self._decode_chat_session_row(existing_row)
-                    conn.execute(
-                        """
-                        UPDATE chat_sessions
-                        SET mode = ?, revision = ?, run_id = ?, task_ids_json = ?, payload_json = ?, updated_at = ?
-                        WHERE id = ?
-                        """,
-                        (mode, revision, run_id, task_ids_json, payload_json, now, session_id),
-                    )
-                else:
-                    conn.execute(
-                        """
-                        INSERT INTO chat_sessions (
-                            id, mode, revision, run_id, task_ids_json, payload_json, created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        (session_id, mode, revision, run_id, task_ids_json, payload_json, now, now),
-                    )
-            row = self.get_chat_session(session_id)
-            return row or {
+            row = {
                 "session_id": session_id,
                 "mode": mode,
-                "revision": revision,
+                "revision": int(revision),
                 "run_id": run_id,
                 "task_ids": task_ids or [],
                 "data": data or {},
                 "created_at": now,
                 "updated_at": now,
             }
+
+            if self._chat_session_sync is not None:
+                # Check existing to preserve created_at
+                existing = self._chat_session_sync.get(session_id)
+                if existing:
+                    existing_revision = int(existing.get("revision") or 0)
+                    if revision < existing_revision:
+                        return existing
+                    row["created_at"] = existing.get("created_at") or now
+                self._chat_session_sync.upsert({
+                    "session_id": session_id,
+                    "mode": mode,
+                    "revision": int(revision),
+                    "run_id": run_id,
+                    "task_ids": task_ids or [],
+                    "payload": data or {},
+                    "created_at": row["created_at"],
+                    "updated_at": now,
+                })
+
+            return row
 
     def patch_chat_session(
         self,
@@ -291,58 +397,159 @@ class DataStore:
 
     def get_chat_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         with timed_step("storage", "get_chat_session", details={"session_id": session_id}):
-            with self._connect() as conn:
-                row = conn.execute("SELECT * FROM chat_sessions WHERE id = ?", (session_id,)).fetchone()
-            if row is None:
+            if self._chat_session_sync is None:
                 return None
-            return self._decode_chat_session_row(dict(row))
+            row = self._chat_session_sync.get(session_id)
+            return row
 
     def get_latest_chat_session(self, mode: Optional[str] = None) -> Optional[Dict[str, Any]]:
         with timed_step("storage", "get_latest_chat_session", details={"mode": mode}):
-            with self._connect() as conn:
-                if mode:
-                    row = conn.execute(
-                        "SELECT * FROM chat_sessions WHERE mode = ? ORDER BY updated_at DESC LIMIT 1",
-                        (mode,),
-                    ).fetchone()
-                else:
-                    row = conn.execute("SELECT * FROM chat_sessions ORDER BY updated_at DESC LIMIT 1").fetchone()
-            if row is None:
+            if self._chat_session_sync is None:
                 return None
-            return self._decode_chat_session_row(dict(row))
+            return self._chat_session_sync.get_latest(mode=mode)
 
     def touch_chat_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         with timed_step("storage", "touch_chat_session", details={"session_id": session_id}):
-            now = datetime.utcnow().isoformat()
-            with self._connect() as conn:
-                conn.execute(
-                    "UPDATE chat_sessions SET updated_at = ? WHERE id = ?",
-                    (now, session_id),
-                )
-            return self.get_chat_session(session_id)
+            current = self.get_chat_session(session_id)
+            if current is None:
+                return None
+            return self.upsert_chat_session(
+                session_id,
+                mode=str(current.get("mode") or "single"),
+                revision=int(current.get("revision") or 0),
+                run_id=current.get("run_id"),
+                task_ids=list(current.get("task_ids") or []),
+                data=dict(current.get("data") or {}),
+            )
 
-    def _decode_chat_session_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
-        task_ids_raw = row.get("task_ids_json")
-        payload_raw = row.get("payload_json")
-        try:
-            task_ids = json.loads(task_ids_raw) if isinstance(task_ids_raw, str) else []
-            if not isinstance(task_ids, list):
-                task_ids = []
-        except Exception:
-            task_ids = []
-        try:
-            payload = json.loads(payload_raw) if isinstance(payload_raw, str) else {}
-            if not isinstance(payload, dict):
-                payload = {}
-        except Exception:
-            payload = {}
+    def delete_chat_session(self, session_id: str) -> bool:
+        with timed_step("storage", "delete_chat_session", details={"session_id": session_id}):
+            if self._chat_session_sync is None:
+                return False
+            return self._chat_session_sync.delete(session_id)
+
+    # ── Helpers ─────────────────────────────────────────────────────────────
+
+    def _build_call_row(
+        self,
+        task_id: str,
+        payload: Dict[str, str],
+        *,
+        status: str,
+        outcome: str,
+        created_at: Optional[str] = None,
+        ended_at: Optional[str] = None,
+        updated_at: Optional[str] = None,
+        duration_seconds: int = 0,
+    ) -> Dict[str, Any]:
+        now = datetime.utcnow().isoformat()
+        if created_at is None:
+            created_at = now
+        if updated_at is None:
+            updated_at = created_at
         return {
-            "session_id": row.get("id"),
-            "mode": row.get("mode"),
-            "revision": int(row.get("revision") or 0),
+            "id": task_id,
+            "task_type": payload["task_type"],
+            "target_phone": payload["target_phone"],
+            "objective": payload["objective"],
+            "context": payload.get("context", ""),
+            "run_id": payload.get("run_id"),
+            "run_mode": payload.get("run_mode"),
+            "location": payload.get("location"),
+            "target_name": payload.get("target_name"),
+            "target_url": payload.get("target_url"),
+            "target_source": payload.get("target_source"),
+            "target_snippet": payload.get("target_snippet"),
+            "target_outcome": payload.get("target_outcome"),
+            "walkaway_point": payload.get("walkaway_point"),
+            "agent_persona": payload.get("agent_persona"),
+            "opening_line": payload.get("opening_line"),
+            "style": payload.get("style", "collaborative"),
+            "status": status,
+            "outcome": outcome,
+            "duration_seconds": int(duration_seconds),
+            "created_at": created_at,
+            "ended_at": ended_at,
+            "updated_at": updated_at,
+        }
+
+    def _normalize_call_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        created_at = row.get("created_at")
+        return {
+            "id": row.get("id"),
+            "task_type": row.get("task_type", "custom"),
+            "target_phone": row.get("target_phone", ""),
+            "objective": row.get("objective", ""),
+            "context": row.get("context", ""),
             "run_id": row.get("run_id"),
-            "task_ids": task_ids,
-            "data": payload,
+            "run_mode": row.get("run_mode"),
+            "location": row.get("location"),
+            "target_name": row.get("target_name"),
+            "target_url": row.get("target_url"),
+            "target_source": row.get("target_source"),
+            "target_snippet": row.get("target_snippet"),
+            "target_outcome": row.get("target_outcome"),
+            "walkaway_point": row.get("walkaway_point"),
+            "agent_persona": row.get("agent_persona"),
+            "opening_line": row.get("opening_line"),
+            "style": row.get("style", "collaborative"),
+            "status": row.get("status") or "pending",
+            "outcome": row.get("outcome") or "unknown",
+            "duration_seconds": int(row.get("duration_seconds") or 0),
+            "created_at": created_at,
+            "ended_at": row.get("ended_at"),
+            "updated_at": row.get("updated_at") or created_at,
+        }
+
+    def _decode_call_artifact_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        task_id = row.get("task_id")
+        transcript = self._coerce_json_array(row.get("transcript_json"))
+        analysis = self._coerce_json_object(row.get("analysis_json"))
+        recording = self._coerce_json_object(row.get("recording_json"))
+        audio_payload = self._coerce_json_object(row.get("audio_payload_json"))
+
+        # Accept already-decoded dictionaries from Supabase sync clients.
+        if isinstance(row.get("transcript"), list):
+            transcript = list(row.get("transcript", []))
+        if isinstance(row.get("analysis"), dict):
+            analysis = dict(row.get("analysis", {}))
+        if isinstance(row.get("recording"), dict):
+            recording = dict(row.get("recording", {}))
+        if isinstance(row.get("audio_payload"), dict):
+            audio_payload = dict(row.get("audio_payload", {}))
+
+        return {
+            "task_id": task_id,
+            "transcript": transcript,
+            "analysis": analysis,
+            "recording": recording,
+            "audio_payload": audio_payload,
             "created_at": row.get("created_at"),
             "updated_at": row.get("updated_at"),
         }
+
+    @staticmethod
+    def _coerce_json_array(value: Any) -> List[Any]:
+        if isinstance(value, list):
+            return value
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+            except Exception:
+                return []
+            return parsed if isinstance(parsed, list) else []
+        return []
+
+    @staticmethod
+    def _coerce_json_object(value: Any) -> Dict[str, Any]:
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+            except Exception:
+                return {}
+            if isinstance(parsed, dict):
+                return parsed
+            return {}
+        return {}
