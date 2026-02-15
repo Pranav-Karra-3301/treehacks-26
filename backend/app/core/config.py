@@ -148,7 +148,7 @@ class Settings:
     )
     EXA_API_KEY = os.getenv("EXA_API_KEY", "")
     EXA_SEARCH_URL = os.getenv("EXA_SEARCH_URL", "https://api.exa.ai/search")
-    EXA_SEARCH_RESULTS_LIMIT = int(os.getenv("EXA_SEARCH_RESULTS_LIMIT", "5"))
+    EXA_SEARCH_RESULTS_LIMIT = int(os.getenv("EXA_SEARCH_RESULTS_LIMIT", "8"))
     EXA_SEARCH_TYPE = os.getenv("EXA_SEARCH_TYPE", "auto")
 
     # Perplexity Sonar
