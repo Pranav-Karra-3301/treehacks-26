@@ -224,6 +224,15 @@ h6 {
   background: #a1a1aa;
 }
 
+/* Hide scrollbar while keeping scroll behavior */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 /* Dot grid pattern */
 .dot-grid {
   background-image: radial-gradient(circle at center, rgba(0, 0, 0, 0.07) 1px, transparent 1px);

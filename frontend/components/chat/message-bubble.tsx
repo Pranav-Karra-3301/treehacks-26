@@ -22,10 +22,12 @@ type MessageBubbleProps = {
     onCall: (result: BusinessResult, phone: string) => void;
     onSkip: () => void;
     onCallAll?: (results: BusinessResult[], phones: string[]) => void;
+    onSearchMore?: () => void;
   }>;
   onCallFromSearch: (result: BusinessResult, phone: string) => void;
   onSkipDiscovery: () => void;
   onCallAllFromSearch: (results: BusinessResult[], phones: string[]) => void;
+  onSearchMore: () => void;
 };
 
 const MessageBubble = React.memo(function MessageBubble({
@@ -36,6 +38,7 @@ const MessageBubble = React.memo(function MessageBubble({
   onCallFromSearch,
   onSkipDiscovery,
   onCallAllFromSearch,
+  onSearchMore,
 }: MessageBubbleProps) {
   if (message.role === 'analysis' && message.analysisData) {
     return (
@@ -61,6 +64,7 @@ const MessageBubble = React.memo(function MessageBubble({
           onCall={onCallFromSearch}
           onSkip={onSkipDiscovery}
           onCallAll={onCallAllFromSearch}
+          onSearchMore={onSearchMore}
         />
       </div>
     );

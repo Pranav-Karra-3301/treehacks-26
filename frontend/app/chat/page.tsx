@@ -2072,6 +2072,50 @@ export default function ChatPage() {
     void startConcurrentTestCalls(normalizedPhones, objective, 'real', runId, targetDirectory);
   }
 
+  async function handleSearchMore() {
+    setTyping(true);
+    const searchQuery = userLocation ? `${objective} near ${userLocation}` : objective;
+    
+    try {
+      const res = await searchResearch(searchQuery, 12); // Request more results
+      setTyping(false);
+      
+      if (res.ok && res.count > 0) {
+        // Update research context
+        const snippets = res.results
+          .filter((r) => r.snippet)
+          .map((r) => `${r.title ?? ''}: ${r.snippet}`)
+          .join('\n');
+        setResearchContext(snippets);
+        
+        // Find and update the search-results message
+        setMessages((prev) => {
+          const updated = [...prev];
+          const searchMsgIndex = updated.findIndex((m) => m.role === 'search-results');
+          if (searchMsgIndex >= 0) {
+            updated[searchMsgIndex] = {
+              ...updated[searchMsgIndex],
+              searchResults: res.results,
+              text: `I found ${res.count} businesses you can call directly. Pick one, or enter your own number.`,
+            };
+          }
+          return updated;
+        });
+      } else {
+        addMessage({
+          role: 'ai',
+          text: 'I couldn\'t find any additional results. Try a different search or enter a phone number directly.',
+        });
+      }
+    } catch (err) {
+      setTyping(false);
+      addMessage({
+        role: 'ai',
+        text: 'Sorry, I had trouble searching for more results. You can enter a phone number directly.',
+      });
+    }
+  }
+
   function handleCallBackFromSummary(item: MultiCallPriceComparison) {
     const phone = item.phone;
     if (!phone) return;
@@ -2680,7 +2724,7 @@ export default function ChatPage() {
 
             {/* Task list */}
             <div 
-              className="flex-1 overflow-y-auto px-2 pb-3"
+              className="flex-1 overflow-y-auto scrollbar-hide px-2 pb-3"
               onClick={() => setContextMenu(null)}
             >
               {/* Recent (successful) tasks */}
@@ -2804,12 +2848,12 @@ export default function ChatPage() {
                           title={entry.objective}
                         >
                           <div className="truncate font-medium">{entry.objective || 'Concurrent run'}</div>
-                          <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-gray-400">
-                            <span>{entry.calls.length} call{entry.calls.length === 1 ? '' : 's'}</span>
+                          <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-gray-400 flex-wrap">
+                            <span className="text-white px-0.5" style={{ backgroundColor: '#64748B' }}>
+                              {entry.calls.length} call{entry.calls.length === 1 ? '' : 's'}
+                            </span>
                             <span>•</span>
                             <span>{(entry.mode ?? 'test') === 'real' ? 'real' : 'test'}</span>
-                            <span>•</span>
-                            <span>chat {entry.id.slice(0, 8)}</span>
                           </div>
                         </button>
                       );
@@ -2921,6 +2965,11 @@ export default function ChatPage() {
             </span>
           </div>
           <div className="flex items-center gap-3">
+            {phoneNumber ? (
+              <span className="text-[13px] font-medium text-gray-600 tabular-nums" title={phoneNumber}>
+                {phoneNumber}
+              </span>
+            ) : null}
             {isOnCall ? (
               <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
@@ -2977,6 +3026,7 @@ export default function ChatPage() {
                     onCallFromSearch={handleCallFromSearch}
                     onSkipDiscovery={handleSkipDiscovery}
                     onCallAllFromSearch={handleCallAllFromSearch}
+                    onSearchMore={handleSearchMore}
                   />
                 </motion.div>
               ))}
@@ -3089,7 +3139,7 @@ export default function ChatPage() {
         </div>
 
         {/* Input */}
-        <div className="shrink-0 border-t border-gray-200/60 bg-white/80 backdrop-blur-xl px-5 py-3.5">
+        <div className="shrink-0 bg-[#fafaf9] px-5 py-3.5">
           <form onSubmit={onSubmit} className="mx-auto max-w-2xl">
             {canControlSingleCall && taskId ? (
               <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
@@ -3138,7 +3188,7 @@ export default function ChatPage() {
                 </button>
               </div>
             ) : null}
-            <div className="flex items-end gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-2.5 shadow-soft transition-all duration-200 focus-within:border-gray-300 focus-within:shadow-card">
+            <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-2.5 shadow-soft transition-all duration-200 focus-within:border-gray-300 focus-within:shadow-card">
               <textarea
                 ref={inputRef}
                 value={input}
@@ -3153,13 +3203,13 @@ export default function ChatPage() {
                 placeholder={placeholderText}
                 disabled={inputDisabled}
                 rows={1}
-                className="flex-1 resize-none bg-transparent text-[14px] leading-5 text-gray-900 placeholder-gray-400 outline-none disabled:text-gray-400"
-                style={{ maxHeight: '120px', minHeight: '20px', overflow: 'hidden' }}
+                className="flex-1 resize-none bg-transparent text-[14px] leading-5 text-gray-900 placeholder-gray-400 outline-none disabled:text-gray-400 py-1.5 min-h-[28px]"
+                style={{ maxHeight: '120px', overflow: 'hidden' }}
               />
               <button
                 type="submit"
                 disabled={!input.trim() || inputDisabled || typing}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-900 text-white shadow-soft transition-all duration-150 hover:bg-gray-700 hover:shadow-card active:scale-[0.93] disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none mb-px"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-900 text-white shadow-soft transition-all duration-150 hover:bg-gray-700 hover:shadow-card active:scale-[0.93] disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none"
               >
                 <ArrowUp size={15} strokeWidth={2.5} />
               </button>
