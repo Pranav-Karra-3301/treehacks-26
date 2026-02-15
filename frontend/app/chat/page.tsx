@@ -638,7 +638,7 @@ export default function ChatPage() {
     setDiscoveryResults(snapshot.discoveryResults ?? []);
     setManualPhones(snapshot.manualPhones ?? []);
     setManualPhoneInput(snapshot.manualPhoneInput ?? '');
-    setConcurrentTestMode(Boolean(snapshot.concurrentTestMode));
+    setConcurrentTestMode(false);
     setConcurrentRunMode(snapshot.concurrentRunMode === 'real' ? 'real' : 'test');
     setConcurrentTargetCount(clampConcurrentCount(snapshot.concurrentTargetCount ?? 3));
     setAutoSourceNumbers(snapshot.autoSourceNumbers ?? true);
