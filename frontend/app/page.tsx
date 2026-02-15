@@ -619,9 +619,9 @@ export default function LandingPage() {
               {/* Team */}
               <div className="flex items-center gap-2 text-[13px] text-white/50">
                 <span>Built by</span>
-                <span className="text-white/80 font-medium">Pranav</span>
+                <a href="https://x.com/pranavkarra" target="_blank" rel="noopener noreferrer" className="text-white/80 font-medium hover:text-white transition">Pranav</a>
                 <span>&middot;</span>
-                <span className="text-white/80 font-medium">Ethan</span>
+                <a href="https://x.com/_eth0n" target="_blank" rel="noopener noreferrer" className="text-white/80 font-medium hover:text-white transition">Ethan</a>
                 <span>&middot;</span>
                 <span className="text-white/80 font-medium">Jayanth</span>
               </div>
