@@ -38,16 +38,24 @@ const MessageBubble = React.memo(function MessageBubble({
   onCallAllFromSearch,
 }: MessageBubbleProps) {
   if (message.role === 'analysis' && message.analysisData) {
-    return <AnalysisCard analysis={message.analysisData} />;
+    return (
+      <div className="max-w-[85%]">
+        <AnalysisCard analysis={message.analysisData} />
+      </div>
+    );
   }
 
   if (message.role === 'audio' && message.audioTaskId) {
-    return <AudioPlayer taskId={message.audioTaskId} />;
+    return (
+      <div className="max-w-[85%]">
+        <AudioPlayer taskId={message.audioTaskId} />
+      </div>
+    );
   }
 
   if (message.role === 'search-results' && message.searchResults) {
     return (
-      <div className="py-1">
+      <div className="max-w-[85%] py-1">
         <SearchResultCards
           results={message.searchResults}
           onCall={onCallFromSearch}

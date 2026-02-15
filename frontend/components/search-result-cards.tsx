@@ -118,7 +118,7 @@ export default function SearchResultCards({ results, onCall, onSkip, onCallAll }
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05, duration: 0.25, ease }}
-              className="group flex items-center gap-2.5 rounded-xl bg-white border border-gray-100 pl-2.5 pr-2 py-2 transition-all duration-150 hover:border-gray-200 hover:shadow-soft"
+              className="group flex items-center gap-2.5 rounded-xl bg-white border border-gray-100 pl-2.5 pr-2 py-2 transition-all duration-150 hover:border-gray-200 hover:shadow-soft min-w-0"
             >
               {/* Favicon */}
               <BizIcon url={result.url ?? undefined} title={result.title || 'Untitled'} />
