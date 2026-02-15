@@ -671,6 +671,14 @@ export default function ChatPage() {
     inputRef.current?.focus();
   }, [phase]);
 
+  // Auto-resize textarea when input changes (e.g. after clearing)
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+  }, [input]);
+
   // Fetch past tasks on mount
   const refreshPastTasks = useCallback(() => {
     listTasks().then(setPastTasks).catch(() => {});
@@ -2929,24 +2937,32 @@ export default function ChatPage() {
                         </div>
                         <div className="border-t border-gray-100 px-3 py-2 space-y-2">
                           {canControlThisCall && state.taskId && (
-                            <div className="rounded-xl border border-gray-100 bg-gray-50 px-2.5 py-2">
-                              <div className="flex flex-wrap items-center gap-1.5">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <div className="inline-flex items-center gap-0.5 rounded-full border border-gray-200 bg-white overflow-hidden">
+                                <input
+                                  value={personalHandoffNumber}
+                                  onChange={(e) => setPersonalHandoffNumber(e.target.value)}
+                                  placeholder="Your #"
+                                  className="w-[80px] bg-transparent px-2 py-1 text-[10.5px] text-gray-800 placeholder-gray-400 outline-none"
+                                />
                                 <button
                                   type="button"
                                   onClick={() => { void handleTransferToPersonal(state.taskId, phone); }}
                                   disabled={!normalizePhone(personalHandoffNumber)}
-                                  className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-[10.5px] font-medium text-gray-700 hover:border-gray-300 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="shrink-0 rounded-full bg-gray-900 px-2 py-1 text-[10px] font-medium text-white hover:bg-gray-700 disabled:bg-gray-200 disabled:text-gray-400 transition-all duration-150"
                                 >
                                   Transfer
                                 </button>
+                              </div>
+                              <div className="inline-flex items-center gap-0.5 rounded-full border border-gray-200 bg-white overflow-hidden">
                                 <input
                                   value={multiDtmfInputs[phone] ?? ''}
                                   onChange={(e) => {
                                     const next = e.target.value;
                                     setMultiDtmfInputs((prev) => ({ ...prev, [phone]: next }));
                                   }}
-                                  placeholder="DTMF (1w2)"
-                                  className="min-w-[120px] flex-1 rounded-lg border border-gray-200 px-2 py-1 text-[10.5px] text-gray-800 outline-none focus:border-gray-300"
+                                  placeholder="DTMF"
+                                  className="w-[70px] bg-transparent px-2 py-1 text-[10.5px] text-gray-800 placeholder-gray-400 outline-none"
                                 />
                                 <button
                                   type="button"
@@ -2956,13 +2972,10 @@ export default function ChatPage() {
                                     setMultiDtmfInputs((prev) => ({ ...prev, [phone]: '' }));
                                   }}
                                   disabled={!(multiDtmfInputs[phone] ?? '').trim()}
-                                  className="rounded-lg bg-gray-900 px-2 py-1 text-[10.5px] font-medium text-white hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="shrink-0 rounded-full bg-gray-900 px-2 py-1 text-[10px] font-medium text-white hover:bg-gray-700 disabled:bg-gray-200 disabled:text-gray-400 transition-all duration-150"
                                 >
                                   Send
                                 </button>
-                              </div>
-                              <div className="mt-1 text-[10px] text-gray-500">
-                                IVR tips: use `w` to wait and `#` for submit.
                               </div>
                             </div>
                           )}
@@ -3060,42 +3073,30 @@ export default function ChatPage() {
         {/* Input */}
         <div className="shrink-0 border-t border-gray-200/60 bg-white/80 backdrop-blur-xl px-5 py-3.5">
           <form onSubmit={onSubmit} className="mx-auto max-w-2xl">
-            {phase === 'objective' && !inputDisabled && (
-              <div className="mb-2.5 rounded-xl border border-gray-200 bg-white p-2.5 shadow-soft">
-                <div className="rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2">
-                  <label className="block text-[11px] font-semibold uppercase tracking-wide text-gray-600">
-                    Personal Handoff Number (Optional)
-                  </label>
-                  <div className="mt-1 flex items-center gap-2">
-                    <input
-                      value={personalHandoffNumber}
-                      onChange={(e) => setPersonalHandoffNumber(e.target.value)}
-                      placeholder="+16505551212"
-                      className="flex-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[12px] text-gray-800 outline-none focus:border-gray-300"
-                    />
-                  </div>
-                  <p className="mt-1 text-[11px] text-gray-500">
-                    During a live call, you can hand off to this number or send keypad digits for IVR menus.
-                  </p>
-                </div>
-              </div>
-            )}
             {canControlSingleCall && taskId && (
-              <div className="mb-2.5 rounded-xl border border-gray-200 bg-white p-2.5 shadow-soft">
-                <div className="flex flex-wrap items-center gap-2">
+              <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
+                <div className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white shadow-soft overflow-hidden">
+                  <input
+                    value={personalHandoffNumber}
+                    onChange={(e) => setPersonalHandoffNumber(e.target.value)}
+                    placeholder="Your number"
+                    className="w-[110px] bg-transparent px-3 py-1.5 text-[12px] text-gray-800 placeholder-gray-400 outline-none"
+                  />
                   <button
                     type="button"
                     onClick={() => { void handleTransferToPersonal(taskId); }}
                     disabled={!normalizePhone(personalHandoffNumber)}
-                    className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[12px] font-medium text-gray-700 hover:border-gray-300 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="shrink-0 rounded-full bg-gray-900 px-3 py-1.5 text-[11.5px] font-medium text-white hover:bg-gray-700 disabled:bg-gray-200 disabled:text-gray-400 transition-all duration-150"
                   >
-                    Transfer to my number
+                    Transfer
                   </button>
+                </div>
+                <div className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white shadow-soft overflow-hidden">
                   <input
                     value={singleDtmfInput}
                     onChange={(e) => setSingleDtmfInput(e.target.value)}
-                    placeholder="Send keypad digits (e.g., 1w2)"
-                    className="min-w-[170px] flex-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[12px] text-gray-800 outline-none focus:border-gray-300"
+                    placeholder="Keypad (1w2)"
+                    className="w-[110px] bg-transparent px-3 py-1.5 text-[12px] text-gray-800 placeholder-gray-400 outline-none"
                   />
                   <button
                     type="button"
@@ -3104,32 +3105,35 @@ export default function ChatPage() {
                       setSingleDtmfInput('');
                     }}
                     disabled={!singleDtmfInput.trim()}
-                    className="rounded-lg bg-gray-900 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="shrink-0 rounded-full bg-gray-900 px-3 py-1.5 text-[11.5px] font-medium text-white hover:bg-gray-700 disabled:bg-gray-200 disabled:text-gray-400 transition-all duration-150"
                   >
-                    Send DTMF
+                    Send
                   </button>
                 </div>
-                <p className="mt-1 text-[11px] text-gray-500">
-                  Use this when calls hit an automated phone menu. `w` inserts a short wait between digits.
-                </p>
               </div>
             )}
             <div className="flex items-end gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-2.5 shadow-soft transition-all duration-200 focus-within:border-gray-300 focus-within:shadow-card">
               <textarea
                 ref={inputRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  // Auto-resize
+                  const el = e.target;
+                  el.style.height = 'auto';
+                  el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+                }}
                 onKeyDown={onKeyDown}
                 placeholder={placeholderText}
                 disabled={inputDisabled || phase === 'ended'}
                 rows={1}
-                className="flex-1 resize-none bg-transparent text-[14px] text-gray-900 placeholder-gray-400 outline-none disabled:text-gray-400"
-                style={{ maxHeight: '120px' }}
+                className="flex-1 resize-none bg-transparent text-[14px] leading-5 text-gray-900 placeholder-gray-400 outline-none disabled:text-gray-400"
+                style={{ maxHeight: '120px', minHeight: '20px', overflow: 'hidden' }}
               />
               <button
                 type="submit"
                 disabled={!input.trim() || inputDisabled || typing || phase === 'ended'}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-900 text-white shadow-soft transition-all duration-150 hover:bg-gray-700 hover:shadow-card active:scale-[0.93] disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-900 text-white shadow-soft transition-all duration-150 hover:bg-gray-700 hover:shadow-card active:scale-[0.93] disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none mb-px"
               >
                 <ArrowUp size={15} strokeWidth={2.5} />
               </button>
