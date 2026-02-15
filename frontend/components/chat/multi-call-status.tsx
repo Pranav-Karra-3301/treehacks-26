@@ -96,133 +96,8 @@ const MultiCallStatus = React.memo(function MultiCallStatus({
       <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-gray-500">
         Concurrent conversations
       </div>
-      <div className="mb-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-soft">
-        <div className="text-[12px] font-semibold text-gray-900">Call Targets</div>
-        <div className="mt-2 grid gap-2 md:grid-cols-2">
-          {multiTargetEntries.map(({ phone, target }) => (
-            <div key={`target-${phone}`} className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-              <div className="flex items-center justify-between gap-2">
-                <div className="truncate text-[11.5px] font-semibold text-gray-800">
-                  {target.title ? target.title : formatPhone(phone)}
-                </div>
-                <span className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[10px] text-gray-600">
-                  {target.source === 'exa' ? 'Exa' : 'Manual'}
-                </span>
-              </div>
-              <div className="mt-0.5 text-[11px] text-gray-600">{formatPhone(phone)}</div>
-              {target.url ? (
-                <a
-                  href={target.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-0.5 block truncate text-[10.5px] text-blue-600 hover:text-blue-700"
-                >
-                  {target.url}
-                </a>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="mb-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-soft">
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-[12px] font-semibold text-gray-900">Combined Decision Summary</div>
-          {multiSummaryState === 'ready' && multiSummary?.recommended_phone ? (
-            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-              Best: {formatPhone(multiSummary.recommended_phone)}
-            </span>
-          ) : null}
-        </div>
-        {multiSummaryState === 'loading' ? (
-          <div className="mt-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-[12px] text-amber-700">
-            Building one detailed recommendation across all calls...
-          </div>
-        ) : null}
-        {multiSummaryState === 'error' ? (
-          <div className="mt-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2">
-            <div className="text-[12px] text-red-700">
-              Combined summary unavailable: {multiSummaryError ? multiSummaryError : 'Unknown error'}
-            </div>
-            {multiSummaryTaskIds.length > 0 ? (
-              <button
-                type="button"
-                onClick={() => { void onLoadMultiSummary(multiSummaryTaskIds, objective, true); }}
-                className="mt-2 rounded-lg border border-red-200 bg-white px-2.5 py-1 text-[11px] font-medium text-red-700 hover:bg-red-50"
-              >
-                Retry summary
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-        {multiSummary && multiSummaryState === 'ready' ? (
-          <div className="mt-2 space-y-2">
-            <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">Recommendation</div>
-              <p className="mt-1 text-[12px] leading-relaxed text-gray-800">{multiSummary.recommended_option}</p>
-              <p className="mt-1 text-[11.5px] leading-relaxed text-gray-600">{multiSummary.decision_rationale}</p>
-            </div>
-            <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">Cross-call Summary</div>
-              <p className="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-gray-700">{multiSummary.overall_summary}</p>
-            </div>
-            {multiSummary.price_comparison?.length > 0 ? (
-              <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">Price + Terms</div>
-                <div className="mt-1 space-y-2">
-                  {multiSummary.price_comparison.map((item) => (
-                    <div key={item.task_id} className="rounded-lg border border-gray-100 bg-white px-2.5 py-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="text-[11.5px] font-semibold text-gray-800">
-                          {item.vendor ? item.vendor : formatPhone(item.phone || '')}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-gray-500">{item.confidence} confidence</span>
-                          {item.phone && phase === 'ended' ? (
-                            <button
-                              type="button"
-                              onClick={() => onCallBackFromSummary(item)}
-                              className="flex items-center gap-1 rounded-lg bg-gray-900 px-2 py-1 text-[10px] font-medium text-white transition-all duration-150 hover:bg-gray-700 active:scale-[0.96]"
-                            >
-                              <Phone size={10} strokeWidth={2.5} />
-                              Call back
-                            </button>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div className="mt-1 text-[11px] text-gray-600">
-                        Prices: {item.quoted_prices?.length ? item.quoted_prices.join(' | ') : 'Not captured'}
-                      </div>
-                      {item.location ? (
-                        <div className="mt-0.5 text-[11px] text-gray-600">Location: {item.location}</div>
-                      ) : null}
-                      {item.discounts?.length > 0 ? (
-                        <div className="mt-0.5 text-[11px] text-gray-600">Discounts: {item.discounts.join(' | ')}</div>
-                      ) : null}
-                      {item.fees?.length > 0 ? (
-                        <div className="mt-0.5 text-[11px] text-gray-600">Fees: {item.fees.join(' | ')}</div>
-                      ) : null}
-                      {item.constraints?.length > 0 ? (
-                        <div className="mt-0.5 text-[11px] text-gray-600">Constraints: {item.constraints.join(' | ')}</div>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-            {multiSummary.important_facts?.length > 0 ? (
-              <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">Important Facts</div>
-                <div className="mt-1 space-y-1">
-                  {multiSummary.important_facts.map((fact, idx) => (
-                    <div key={`fact-${idx}`} className="text-[11.5px] text-gray-700">{'\u2022'} {fact}</div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-      <div className="grid gap-3 md:grid-cols-2">
+      {/* Call cards first */}
+      <div className="grid gap-3 md:grid-cols-2 mb-3">
         {multiCallEntries.map(([phone, state]) => {
           const callTarget = multiCallTargets[phone];
           const statusLabel = MULTI_STATUS_LABEL[state.status] ?? state.status;
@@ -342,6 +217,139 @@ const MultiCallStatus = React.memo(function MultiCallStatus({
             </div>
           );
         })}
+      </div>
+      {/* Call Targets */}
+      <div className="mb-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-soft">
+        <div className="text-[12px] font-semibold text-gray-900">Call Targets</div>
+        <div className="mt-2 grid gap-2 md:grid-cols-2">
+          {multiTargetEntries.map(({ phone, target }) => (
+            <div key={`target-${phone}`} className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="truncate text-[11.5px] font-semibold text-gray-800">
+                  {target.title ? target.title : formatPhone(phone)}
+                </div>
+                <span className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[10px] text-gray-600">
+                  {target.source === 'exa' ? 'Exa' : 'Manual'}
+                </span>
+              </div>
+              <div className="mt-0.5 text-[11px] text-gray-600">{formatPhone(phone)}</div>
+              {target.url ? (
+                <a
+                  href={target.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-0.5 block truncate text-[10.5px] text-blue-600 hover:text-blue-700"
+                >
+                  {target.url}
+                </a>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </div>
+      {/* Combined Decision Summary — always at the bottom */}
+      <div className="mb-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-soft">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-[12px] font-semibold text-gray-900">Combined Decision Summary</div>
+          {multiSummaryState === 'ready' && multiSummary?.recommended_phone ? (
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+              Best: {formatPhone(multiSummary.recommended_phone)}
+            </span>
+          ) : null}
+        </div>
+        {multiSummaryState === 'loading' ? (
+          <div className="mt-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-[12px] text-amber-700">
+            Building one detailed recommendation across all calls...
+          </div>
+        ) : null}
+        {multiSummaryState === 'idle' ? (
+          <div className="mt-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-[12px] text-gray-500">
+            Summary will be generated when all calls complete.
+          </div>
+        ) : null}
+        {multiSummaryState === 'error' ? (
+          <div className="mt-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2">
+            <div className="text-[12px] text-red-700">
+              Combined summary unavailable: {multiSummaryError ? multiSummaryError : 'Unknown error'}
+            </div>
+            {multiSummaryTaskIds.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => { void onLoadMultiSummary(multiSummaryTaskIds, objective, true); }}
+                className="mt-2 rounded-lg border border-red-200 bg-white px-2.5 py-1 text-[11px] font-medium text-red-700 hover:bg-red-50"
+              >
+                Retry summary
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {multiSummary && multiSummaryState === 'ready' ? (
+          <div className="mt-2 space-y-2">
+            <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">Recommendation</div>
+              <p className="mt-1 text-[12px] leading-relaxed text-gray-800">{multiSummary.recommended_option}</p>
+              <p className="mt-1 text-[11.5px] leading-relaxed text-gray-600">{multiSummary.decision_rationale}</p>
+            </div>
+            <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">Cross-call Summary</div>
+              <p className="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-gray-700">{multiSummary.overall_summary}</p>
+            </div>
+            {multiSummary.price_comparison?.length > 0 ? (
+              <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">Price + Terms</div>
+                <div className="mt-1 space-y-2">
+                  {multiSummary.price_comparison.map((item) => (
+                    <div key={item.task_id} className="rounded-lg border border-gray-100 bg-white px-2.5 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-[11.5px] font-semibold text-gray-800">
+                          {item.vendor ? item.vendor : formatPhone(item.phone || '')}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-gray-500">{item.confidence} confidence</span>
+                          {item.phone && phase === 'ended' ? (
+                            <button
+                              type="button"
+                              onClick={() => onCallBackFromSummary(item)}
+                              className="flex items-center gap-1 rounded-lg bg-gray-900 px-2 py-1 text-[10px] font-medium text-white transition-all duration-150 hover:bg-gray-700 active:scale-[0.96]"
+                            >
+                              <Phone size={10} strokeWidth={2.5} />
+                              Call back
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="mt-1 text-[11px] text-gray-600">
+                        Prices: {item.quoted_prices?.length ? item.quoted_prices.join(' | ') : 'Not captured'}
+                      </div>
+                      {item.location ? (
+                        <div className="mt-0.5 text-[11px] text-gray-600">Location: {item.location}</div>
+                      ) : null}
+                      {item.discounts?.length > 0 ? (
+                        <div className="mt-0.5 text-[11px] text-gray-600">Discounts: {item.discounts.join(' | ')}</div>
+                      ) : null}
+                      {item.fees?.length > 0 ? (
+                        <div className="mt-0.5 text-[11px] text-gray-600">Fees: {item.fees.join(' | ')}</div>
+                      ) : null}
+                      {item.constraints?.length > 0 ? (
+                        <div className="mt-0.5 text-[11px] text-gray-600">Constraints: {item.constraints.join(' | ')}</div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {multiSummary.important_facts?.length > 0 ? (
+              <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">Important Facts</div>
+                <div className="mt-1 space-y-1">
+                  {multiSummary.important_facts.map((fact, idx) => (
+                    <div key={`fact-${idx}`} className="text-[11.5px] text-gray-700">{'\u2022'} {fact}</div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   );

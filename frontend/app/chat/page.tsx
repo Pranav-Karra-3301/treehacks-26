@@ -1072,8 +1072,10 @@ export default function ChatPage() {
     }
   }, []);
 
-  const updateMultiCall = useCallback((phone: string, patch: Partial<MultiCallState>) => {
+  const updateMultiCall = useCallback((phone: string, patch: Partial<MultiCallState>, allowCreate = false) => {
     const prev = multiCallsRef.current[phone];
+    // Prevent ghost entries: only update existing entries unless explicitly creating
+    if (!prev && !allowCreate) return;
     const next: MultiCallState = {
       taskId: patch.taskId ?? prev?.taskId ?? '',
       sessionId: patch.sessionId ?? prev?.sessionId ?? null,
@@ -1143,11 +1145,7 @@ export default function ChatPage() {
 
     if (succeededTaskIds.length === 0) {
       setMultiSummaryState('error');
-      setMultiSummaryError('All calls ended without connecting. Try again or enter a number directly.');
-      addMessage({
-        role: 'ai',
-        text: 'All calls ended without connecting. Try again or enter a number directly.',
-      });
+      setMultiSummaryError('No calls connected successfully. Try again or enter a number directly.');
       return;
     }
 
@@ -1157,7 +1155,7 @@ export default function ChatPage() {
     if (
       !force
       && activeSummaryRequestRef.current === requestKey
-      && (multiSummaryState === 'loading' || multiSummaryState === 'ready' || multiSummaryState === 'error')
+      && (multiSummaryState === 'loading' || multiSummaryState === 'ready')
     ) {
       return;
     }
@@ -1165,24 +1163,35 @@ export default function ChatPage() {
     setMultiSummaryState('loading');
     setMultiSummaryError(null);
 
-    try {
-      const response = await getMultiCallSummary(succeededTaskIds, objectiveText);
-      setMultiSummary(response.summary);
-      setMultiSummaryState('ready');
-      const failedNote = failedCount > 0
-        ? ` (${failedCount} call${failedCount === 1 ? '' : 's'} couldn't connect)`
-        : '';
-      addMessage({
-        role: 'ai',
-        text: `I compared every completed call and prepared one combined recommendation with all key pricing and terms.${failedNote}`,
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      setMultiSummary(null);
-      setMultiSummaryState('error');
-      setMultiSummaryError(message);
+    // Retry up to 3 times with increasing delay — backend may still be
+    // processing analyses when we first request the combined summary.
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        const response = await getMultiCallSummary(succeededTaskIds, objectiveText);
+        setMultiSummary(response.summary);
+        setMultiSummaryState('ready');
+        const failedNote = failedCount > 0
+          ? ` (${failedCount} call${failedCount === 1 ? '' : 's'} couldn't connect)`
+          : '';
+        addMessage({
+          role: 'ai',
+          text: `I compared every completed call and prepared one combined recommendation with all key pricing and terms.${failedNote}`,
+        });
+        return; // Success — exit retry loop
+      } catch (err) {
+        if (attempt < maxAttempts) {
+          // Wait before retrying (3s, then 6s)
+          await wait(attempt * 3000);
+          continue;
+        }
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        setMultiSummary(null);
+        setMultiSummaryState('error');
+        setMultiSummaryError(message);
+      }
     }
-  }, [addMessage, multiSummaryState]);
+  }, [addMessage, multiSummaryState, wait]);
 
   const hydrateMultiCallArtifacts = useCallback(async (phone: string, tid: string) => {
     if (!phone || !tid) return;
@@ -1225,9 +1234,13 @@ export default function ChatPage() {
     multiEndedAnnouncedRef.current = true;
     setCallStatus('ended');
     setPhase('ended');
+    // Show loading state immediately so users see something while summary loads
+    if (multiSummaryState === 'idle') {
+      setMultiSummaryState('loading');
+    }
     refreshPastTasks();
-    addMessage({ role: 'ai', text: 'All concurrent test calls have ended.' });
-  }, [addMessage, refreshPastTasks]);
+    addMessage({ role: 'ai', text: 'All calls have ended. Building combined summary...' });
+  }, [addMessage, multiSummaryState, refreshPastTasks]);
 
   useEffect(() => {
     Object.entries(multiCalls).forEach(([phone, state]) => {
@@ -1239,6 +1252,8 @@ export default function ChatPage() {
     });
   }, [hydrateMultiCallArtifacts, multiCalls]);
 
+  // Trigger combined summary once all concurrent calls are done.
+  // Uses a 5-second delay to let the backend finish processing per-call analyses.
   useEffect(() => {
     if (!concurrentTestMode) return;
     const states = Object.values(multiCalls);
@@ -1249,8 +1264,13 @@ export default function ChatPage() {
     if (taskIds.length === 0) return;
     if (multiSummaryState === 'ready' && multiSummary) return;
     if (multiSummaryState === 'loading') return;
-    if (multiSummaryState === 'error') return;
-    void loadMultiSummary(taskIds, objective);
+
+    // Give backend 5s to finish processing before requesting summary
+    const timer = setTimeout(() => {
+      void loadMultiSummary(taskIds, objective);
+    }, 5000);
+
+    return () => clearTimeout(timer);
   }, [concurrentTestMode, loadMultiSummary, multiCalls, multiSummary, multiSummaryState, objective]);
 
   // Live-update fallback: poll task status in concurrent mode so ended calls
