@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, Target, Zap, MessageCircle, ArrowUpRight, Lightbulb } from 'lucide-react';
+import { ChevronDown, Target, Zap, ArrowUpRight, Lightbulb, DollarSign, AlertTriangle } from 'lucide-react';
 import type { AnalysisPayload, CallOutcome } from '../lib/types';
 
 const ease = [0.16, 1, 0.3, 1] as const;
@@ -131,6 +131,21 @@ function ExpandableSection({ icon: Icon, title, children, delay = 0 }: {
 
 export default function AnalysisCard({ analysis }: { analysis: AnalysisPayload }) {
   const outcome = outcomeConfig[analysis.outcome] ?? outcomeConfig.unknown;
+  const decisionData = (analysis.details as Record<string, unknown>)?.decision_data as
+    | { vendor_name?: string; quoted_prices?: string[]; discounts?: string[]; fees?: string[]; terms?: string[]; risks?: string[]; important_numbers?: string[] }
+    | undefined;
+  const rapportConfig: Record<string, { color: string; label: string }> = {
+    excellent: { color: 'bg-emerald-50 text-emerald-700 border-emerald-100', label: 'Excellent' },
+    good: { color: 'bg-blue-50 text-blue-700 border-blue-100', label: 'Good' },
+    fair: { color: 'bg-amber-50 text-amber-700 border-amber-100', label: 'Fair' },
+    poor: { color: 'bg-red-50 text-red-700 border-red-100', label: 'Poor' },
+  };
+  const rapport = analysis.rapport_quality ? rapportConfig[analysis.rapport_quality.toLowerCase()] : null;
+  const hasDecisionData = decisionData && (
+    decisionData.quoted_prices?.length || decisionData.discounts?.length ||
+    decisionData.fees?.length || decisionData.terms?.length ||
+    decisionData.risks?.length || decisionData.important_numbers?.length
+  );
 
   return (
     <motion.div
@@ -149,6 +164,11 @@ export default function AnalysisCard({ analysis }: { analysis: AnalysisPayload }
               <span className={`inline-flex items-center gap-1 rounded-full bg-gradient-to-r ${outcome.gradient} px-2.5 py-0.5 text-[10.5px] font-semibold text-white shadow-sm`}>
                 {outcome.label}
               </span>
+              {rapport ? (
+                <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${rapport.color}`}>
+                  Rapport: {rapport.label}
+                </span>
+              ) : null}
             </div>
 
             {analysis.summary ? (
@@ -156,6 +176,10 @@ export default function AnalysisCard({ analysis }: { analysis: AnalysisPayload }
             ) : (
               <p className="text-[13px] text-gray-400 italic">No summary available</p>
             )}
+
+            {analysis.outcome_reasoning ? (
+              <p className="text-[12px] text-gray-500 mt-1.5 leading-relaxed">{analysis.outcome_reasoning}</p>
+            ) : null}
 
             {analysis.score_reasoning ? (
               <p className="text-[11.5px] text-gray-400 mt-1.5 leading-relaxed">{analysis.score_reasoning}</p>
@@ -204,6 +228,76 @@ export default function AnalysisCard({ analysis }: { analysis: AnalysisPayload }
                   <span className="text-[12.5px] text-gray-600 leading-relaxed">{m}</span>
                 </div>
               ))}
+            </div>
+          </Section>
+        ) : null}
+
+        {/* Decision Data — prices, fees, terms */}
+        {hasDecisionData ? (
+          <Section icon={DollarSign} title={decisionData.vendor_name ? `Pricing — ${decisionData.vendor_name}` : 'Pricing & Terms'} delay={0.18}>
+            <div className="space-y-2">
+              {decisionData.quoted_prices?.length ? (
+                <div className="rounded-lg bg-blue-50/60 px-3 py-2">
+                  <span className="text-[10px] font-semibold text-blue-500 uppercase tracking-wide">Quoted Prices</span>
+                  <div className="mt-1 space-y-0.5">
+                    {decisionData.quoted_prices.map((p, i) => (
+                      <p key={i} className="text-[12.5px] text-gray-700 leading-relaxed">{p}</p>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {decisionData.discounts?.length ? (
+                <div className="rounded-lg bg-emerald-50/60 px-3 py-2">
+                  <span className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wide">Discounts</span>
+                  <div className="mt-1 space-y-0.5">
+                    {decisionData.discounts.map((d, i) => (
+                      <p key={i} className="text-[12.5px] text-gray-700 leading-relaxed">{d}</p>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {decisionData.fees?.length ? (
+                <div className="rounded-lg bg-amber-50/60 px-3 py-2">
+                  <span className="text-[10px] font-semibold text-amber-500 uppercase tracking-wide">Fees</span>
+                  <div className="mt-1 space-y-0.5">
+                    {decisionData.fees.map((f, i) => (
+                      <p key={i} className="text-[12.5px] text-gray-700 leading-relaxed">{f}</p>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {decisionData.terms?.length ? (
+                <div className="rounded-lg bg-gray-50 px-3 py-2">
+                  <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Terms & Constraints</span>
+                  <div className="mt-1 space-y-0.5">
+                    {decisionData.terms.map((t, i) => (
+                      <p key={i} className="text-[12.5px] text-gray-600 leading-relaxed">{t}</p>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {decisionData.risks?.length ? (
+                <div className="rounded-lg bg-red-50/60 px-3 py-2">
+                  <span className="text-[10px] font-semibold text-red-500 uppercase tracking-wide flex items-center gap-1">
+                    <AlertTriangle size={10} /> Risks
+                  </span>
+                  <div className="mt-1 space-y-0.5">
+                    {decisionData.risks.map((r, i) => (
+                      <p key={i} className="text-[12.5px] text-gray-700 leading-relaxed">{r}</p>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {decisionData.important_numbers?.length ? (
+                <div className="rounded-lg bg-purple-50/60 px-3 py-2">
+                  <span className="text-[10px] font-semibold text-purple-500 uppercase tracking-wide">Key Numbers</span>
+                  <div className="mt-1 space-y-0.5">
+                    {decisionData.important_numbers.map((n, i) => (
+                      <p key={i} className="text-[12.5px] text-gray-700 leading-relaxed">{n}</p>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </Section>
         ) : null}
