@@ -53,10 +53,11 @@ def _build_think_payload(task: Dict[str, Any], endpoint_url: str) -> Dict[str, A
         model = settings.OPENAI_MODEL
     if not endpoint_url:
         endpoint_url = _normalize_openai_endpoint(settings.OPENAI_BASE_URL)
+    # Start with any custom endpoint headers, then layer on API key auth.
+    # The API key takes precedence over custom headers if both set.
+    think_headers = _coerce_headers(settings.DEEPGRAM_VOICE_AGENT_THINK_ENDPOINT_HEADERS)
     if settings.OPENAI_API_KEY:
         think_headers["Authorization"] = f"Bearer {settings.OPENAI_API_KEY}"
-
-    think_headers = think_headers or _coerce_headers(settings.DEEPGRAM_VOICE_AGENT_THINK_ENDPOINT_HEADERS)
 
     if settings.LLM_PROXY_API_KEY and endpoint_url and "/api/llm-proxy/" in endpoint_url:
         think_headers = {**think_headers}
@@ -325,22 +326,26 @@ class DeepgramVoiceAgentSession:
                 "speak": {
                     "provider": {"type": "deepgram", "model": settings.DEEPGRAM_VOICE_AGENT_SPEAK_MODEL}
                 },
+                # Greeting is intentionally empty — the callee always speaks first
+                # per prompt guardrails. See build_greeting() in prompt_builder.py
+                # if a greeting is ever needed.
                 "greeting": "",
             },
             "tags": [self._task_id],
         }
 
-        # === DEEPGRAM SETTINGS DEBUG LOGGING ===
         prompt_text = think.get("prompt", "")
-        print(f"\n{'='*60}")
-        print(f"[DEEPGRAM] Sending settings for task: {self._task_id}")
-        print(f"[DEEPGRAM] Provider: {think.get('provider', {}).get('type')} | Model: {think.get('provider', {}).get('model')}")
-        print(f"[DEEPGRAM] Greeting: {settings_message.get('agent', {}).get('greeting', 'N/A')}")
-        print(f"[DEEPGRAM] System prompt ({len(prompt_text)} chars):")
-        print(f"  {prompt_text[:600]}{'...' if len(prompt_text) > 600 else ''}")
-        if think.get("functions"):
-            print(f"[DEEPGRAM] Functions enabled: {[f['name'] for f in think['functions']]}")
-        print(f"{'='*60}\n")
+        log_event(
+            "deepgram",
+            "send_settings_debug",
+            task_id=self._task_id,
+            details={
+                "provider": think.get("provider", {}).get("type"),
+                "model": think.get("provider", {}).get("model"),
+                "prompt_chars": len(prompt_text),
+                "functions": [f["name"] for f in think.get("functions", [])],
+            },
+        )
 
         with timed_step(
             "deepgram",
@@ -413,9 +418,7 @@ class DeepgramVoiceAgentSession:
             content = (payload.get("content") or "").strip()
             if not content:
                 return
-            # === CONVERSATION DEBUG LOGGING ===
-            speaker = "CALLER" if role == "user" else "AGENT"
-            print(f"[CALL] {speaker}: {content}")
+            speaker = "caller" if role == "user" else "agent"
             log_event(
                 "deepgram",
                 "conversation_text",
@@ -431,7 +434,7 @@ class DeepgramVoiceAgentSession:
         if message_type == "AgentThinking":
             content = payload.get("content", "")
             if content:
-                print(f"[CALL] AGENT THINKING: {content[:200]}")
+
                 log_event(
                     "deepgram",
                     "agent_thinking",
@@ -503,7 +506,7 @@ class DeepgramVoiceAgentSession:
 
         if function_name == "web_research" and self._on_research is not None:
             query = parameters.get("query", "")
-            print(f"[CALL] RESEARCH REQUEST: query='{query}'")
+            log_event("deepgram", "research_request", task_id=self._task_id, details={"query": query})
             try:
                 with timed_step("deepgram", "function_web_research", task_id=self._task_id,
                                 details={"query": query}):
@@ -577,7 +580,7 @@ class DeepgramVoiceAgentSession:
                 }
         elif function_name == "end_call" and self._on_end_call is not None:
             reason = str(parameters.get("reason", "") or "conversation ended")
-            print(f"[CALL] AGENT HANGUP: reason='{reason}'")
+            log_event("deepgram", "agent_hangup", task_id=self._task_id, details={"reason": reason})
             try:
                 await self._on_end_call(reason)
                 result = {"ok": True, "reason": reason, "status": "call_ending"}

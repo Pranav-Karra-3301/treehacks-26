@@ -72,7 +72,6 @@ class OpenAICompatibleProvider:
         self, messages: List[Dict[str, str]], max_tokens: int = 200
     ) -> AsyncGenerator[str, None]:
         start_ts = time.perf_counter()
-        started_at = time.perf_counter()
         first_token_ms = None
         token_count = 0
         total_chars = 0
@@ -102,7 +101,7 @@ class OpenAICompatibleProvider:
                     content = delta.get("content")
                     if content:
                         if first_token_ms is None:
-                            first_token_ms = (time.perf_counter() - started_at) * 1000.0
+                            first_token_ms = (time.perf_counter() - start_ts) * 1000.0
                         token_count += 1
                         total_chars += len(content)
                         yield content
@@ -152,7 +151,6 @@ class AnthropicProvider:
         self, messages: List[Dict[str, str]], max_tokens: int = 200
     ) -> AsyncGenerator[str, None]:
         start_ts = time.perf_counter()
-        started_at = time.perf_counter()
         first_token_ms = None
         token_count = 0
         total_chars = 0
@@ -175,7 +173,7 @@ class AnthropicProvider:
         }
 
         url = f"{self._base_url}/messages"
-        async with httpx.AsyncClient(timeout=None, headers=headers) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=settings.LLM_STREAM_TIMEOUT_SECONDS, write=5.0, pool=5.0), headers=headers) as client:
             try:
                 async with client.stream("POST", url, json=payload) as resp:
                     resp.raise_for_status()
@@ -200,7 +198,7 @@ class AnthropicProvider:
                             text = delta.get("text") if isinstance(delta, dict) else None
                             if text:
                                 if first_token_ms is None:
-                                    first_token_ms = (time.perf_counter() - started_at) * 1000.0
+                                    first_token_ms = (time.perf_counter() - start_ts) * 1000.0
                                 token_count += 1
                                 total_chars += len(text)
                                 yield text

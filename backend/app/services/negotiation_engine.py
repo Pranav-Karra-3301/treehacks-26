@@ -123,17 +123,18 @@ class NegotiationEngine:
             messages.extend(conversation)
             messages.append({"role": "user", "content": user_utterance})
 
-            # === CALL DEBUG LOGGING ===
-            print(f"\n{'='*60}")
-            print(f"[NEGOTIATE] Task: {task.get('id')} | Turn: {turn_count}")
-            print(f"[NEGOTIATE] Objective: {task.get('objective', 'N/A')}")
-            print(f"[NEGOTIATE] Caller said: {user_utterance}")
-            print(f"[NEGOTIATE] System prompt ({len(system_prompt)} chars):")
-            print(f"  {system_prompt[:500]}{'...' if len(system_prompt) > 500 else ''}")
-            print(f"[NEGOTIATE] Conversation history: {len(conversation)} messages")
-            for msg in conversation[-4:]:
-                print(f"  [{msg.get('role')}]: {str(msg.get('content', ''))[:120]}")
-            print(f"{'='*60}")
+            log_event(
+                "negotiation",
+                "respond_start",
+                task_id=task.get("id"),
+                details={
+                    "turn": turn_count,
+                    "objective": task.get("objective", "N/A"),
+                    "utterance": user_utterance[:200],
+                    "system_prompt_chars": len(system_prompt),
+                    "conversation_messages": len(conversation),
+                },
+            )
 
             generated = []
             async for token in self._llm.stream_completion(messages, max_tokens=settings.LLM_MAX_TOKENS_VOICE):
@@ -141,8 +142,12 @@ class NegotiationEngine:
 
             response = "".join(generated).strip()
 
-            print(f"[NEGOTIATE] Agent response: {response}")
-            print(f"{'='*60}\n")
+            log_event(
+                "negotiation",
+                "respond_complete",
+                task_id=task.get("id"),
+                details={"response_chars": len(response)},
+            )
 
             return response, system_prompt
 
@@ -212,11 +217,14 @@ class NegotiationEngine:
             if style:
                 user_content += f"\nNEGOTIATION STYLE: {style}"
 
-        # === ANALYSIS DEBUG LOGGING ===
-        print(f"\n{'='*60}")
-        print(f"[ANALYSIS] Analyzing transcript ({len(transcript)} turns)")
-        print(f"[ANALYSIS] Transcript:\n{transcript_text[:800]}")
-        print(f"{'='*60}")
+        log_event(
+            "negotiation",
+            "llm_analysis_start",
+            details={
+                "transcript_turns": len(transcript),
+                "transcript_chars": len(transcript_text),
+            },
+        )
 
         messages = [
             {"role": "system", "content": ANALYSIS_SYSTEM_PROMPT},

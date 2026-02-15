@@ -128,7 +128,7 @@ class SupabaseStore:
             # Supabase doesn't support `in` filter directly with update,
             # so we do two queries.
             count = 0
-            for stale_status in ("active", "dialing"):
+            for stale_status in ("active", "dialing", "connected", "media_connected", "pending"):
                 result = (
                     self._client.table("calls")
                     .update({

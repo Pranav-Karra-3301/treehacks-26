@@ -353,11 +353,11 @@ def build_negotiation_prompt(
     ]
     if info_only_mode:
         guardrail_lines.append(
-            "15. INFO-ONLY MODE: once the question is answered clearly, do a short recap, say goodbye, and call end_call immediately."
+            "19. INFO-ONLY MODE: once the question is answered clearly, do a short recap, say goodbye, and call end_call immediately."
         )
     if walkaway and walkaway != "No hard walkaway configured":
         guardrail_lines.append(
-            f"16. HARD BUDGET LIMIT: {walkaway}. You MUST NOT exceed this under any circumstances."
+            f"20. HARD BUDGET LIMIT: {walkaway}. You MUST NOT exceed this under any circumstances."
         )
     parts.append("\n".join(guardrail_lines))
 
