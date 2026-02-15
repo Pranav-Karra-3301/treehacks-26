@@ -2783,7 +2783,7 @@ export default function ChatPage() {
 
       newState[result.phone] = {
         taskId: result.taskId,
-        sessionId: result.sessionId,
+        sessionId: result.sessionId || null,
         status: result.ok ? 'dialing' : 'failed',
         transcript: result.ok
           ? []
@@ -2881,15 +2881,13 @@ export default function ChatPage() {
           return;
         }
 
-        const { selectedPhones } = selection;
-
-        if (selectedPhones.length === 0) {
+        if (!selection.selectedPhones || selection.selectedPhones.length === 0) {
           addMessage({ role: 'ai', text: 'No businesses matched your selection criteria.' });
           return;
         }
 
         // Confirm with user
-        const businessNames = selectedPhones
+        const businessNames = selection.selectedPhones
           .map((phone) => {
             const business = followUpIntent.allBusinesses.find(
               (b) => normalizePhone(b.phone) === normalizePhone(phone)
@@ -2904,7 +2902,7 @@ export default function ChatPage() {
         });
 
         // Start concurrent calls with context
-        await startFollowUpCalls(selectedPhones, text, followUpIntent);
+        await startFollowUpCalls(selection.selectedPhones, text, followUpIntent);
         return; // Exit early - don't reset or continue to objective phase
       }
 
