@@ -2330,12 +2330,13 @@ export default function ChatPage() {
       setResearchContext(snippets);
     }
 
-    const normalizedPhones = phones
-      .map((p) => normalizePhone(p))
-      .filter((p): p is string => Boolean(p))
-      .slice(0, MAX_CONCURRENT_TEST_CALLS);
+    const normalizedPhones = Array.from(new Set(
+      phones
+        .map((p) => normalizePhone(p))
+        .filter((p): p is string => Boolean(p)),
+    )).slice(0, MAX_CONCURRENT_TEST_CALLS);
 
-    addMessage({ role: 'user', text: `Call all ${normalizedPhones.length} businesses` });
+    addMessage({ role: 'user', text: `Call all ${normalizedPhones.length} business${normalizedPhones.length === 1 ? '' : 'es'}` });
 
     const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     void startConcurrentTestCalls(normalizedPhones, objective, 'real', runId, targetDirectory);

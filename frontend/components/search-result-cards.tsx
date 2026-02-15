@@ -101,9 +101,17 @@ const ease = [0.16, 1, 0.3, 1] as const;
 
 export default function SearchResultCards({ results, onCall, onSkip, onCallAll, onSearchMore }: Props) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  
+
   const withPhone = results.filter((r) => r.phone_numbers.length > 0);
-  const display = (withPhone.length > 0 ? withPhone : results).slice(0, 4);
+  // Dedup by first phone number so the same business doesn't appear multiple times
+  const seenPhones = new Set<string>();
+  const dedupedWithPhone = withPhone.filter((r) => {
+    const phone = r.phone_numbers[0]?.replace(/\D/g, '');
+    if (!phone || seenPhones.has(phone)) return false;
+    seenPhones.add(phone);
+    return true;
+  });
+  const display = (dedupedWithPhone.length > 0 ? dedupedWithPhone : results.filter((r) => r.phone_numbers.length === 0)).slice(0, 4);
   const callableResults = display.filter((r) => r.phone_numbers.length > 0);
   
   const toggleSelect = (index: number) => {
