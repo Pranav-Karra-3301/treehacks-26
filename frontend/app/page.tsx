@@ -14,7 +14,6 @@ const StatsSection = dynamic(() => import('../components/landing/stats-section')
 const CategoryMarquee = dynamic(() => import('../components/landing/category-marquee'), { ssr: true });
 const FeaturesBento = dynamic(() => import('../components/landing/features-bento'), { ssr: true });
 const UseCases = dynamic(() => import('../components/landing/use-cases'), { ssr: true });
-const Testimonials = dynamic(() => import('../components/landing/testimonials'), { ssr: true });
 const CtaFooter = dynamic(() => import('../components/landing/cta-footer'), { ssr: true });
 
 // ── Hero orb (video, ping-pong: forward then backward) ─────────────────────────
@@ -199,7 +198,7 @@ export default function LandingPage() {
       {/* ── Chat mockup showcase ────────────── */}
       <section className="px-6 pb-20">
         <div className="mx-auto max-w-5xl flex justify-center">
-          <Reveal>
+          <Reveal className="w-full">
             <ChatMockup />
           </Reveal>
         </div>
@@ -210,9 +209,6 @@ export default function LandingPage() {
 
       {/* ── Use Cases ───────────────────────────── */}
       <UseCases />
-
-      {/* ── Testimonials ──────────────────────────── */}
-      <Testimonials />
 
       {/* ── Smooth transition + Bottom CTA + Footer ── */}
       <CtaFooter />

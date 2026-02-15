@@ -58,16 +58,16 @@ export default function CtaFooter() {
         <div className="relative z-10 pb-10">
           {/* Giant "kiru" with mix-blend-difference */}
           <div className="flex justify-center overflow-hidden pointer-events-none select-none mix-blend-difference">
-            <span className="font-serif italic text-white text-[clamp(12rem,42vw,36rem)] leading-[0.82] tracking-[-0.04em]">
+            <span className="font-serif italic text-white text-[clamp(8rem,36vw,28rem)] leading-[0.82] tracking-[-0.04em]">
               kiru
             </span>
           </div>
 
           {/* Team + meta row */}
-          <div className="mx-auto max-w-5xl mt-10 px-6">
-            <div className="flex flex-col items-center gap-6">
+          <div className="mx-auto max-w-5xl mt-8 px-6">
+            <div className="flex flex-col items-center gap-5">
               {/* Team */}
-              <div className="flex items-center gap-2 text-[13px] text-white/50">
+              <div className="flex items-center gap-2 text-[12px] text-white/50">
                 <span>Built by</span>
                 <a href="https://x.com/pranavkarra" target="_blank" rel="noopener noreferrer" className="text-white/80 font-medium hover:text-white transition">Pranav</a>
                 <span>&middot;</span>
@@ -77,8 +77,8 @@ export default function CtaFooter() {
               </div>
               {/* Links */}
               <div className="flex items-center gap-6">
-                <Link href="/chat" className="text-[13px] text-white/60 transition hover:text-white">Launch App</Link>
-                <span className="text-[12px] text-white/40">TreeHacks 2026</span>
+                <Link href="/chat" className="text-[12px] text-white/60 transition hover:text-white">Launch App</Link>
+                <span className="text-[11px] text-white/40">TreeHacks 2026</span>
               </div>
             </div>
           </div>
