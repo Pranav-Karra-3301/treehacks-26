@@ -116,13 +116,22 @@ export default function FeaturesBento() {
 
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Reveal delay={0.05} className="sm:col-span-2 lg:col-span-2">
-            <div className="group h-full rounded-2xl border border-gray-100 bg-gray-50/50 p-6 sm:p-8 transition-all duration-200 hover:border-gray-200 hover:shadow-card hover:bg-white">
+            <div className="group h-full rounded-2xl border border-gray-100 bg-gray-50/50 p-6 sm:p-8 transition-all duration-200 hover:border-gray-200 hover:shadow-card hover:bg-white relative overflow-hidden">
               <div className="flex items-center gap-2 mb-1"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" width={14} height={14} className="text-gray-400"><path d="M5.72284 3C4.24801 3 2.92738 4.20552 3.09672 5.79624C3.34796 8.15623 4.09035 10.4576 5.28656 12.5194C6.77526 15.0853 8.91559 17.2256 11.4815 18.7143C13.5573 19.9187 15.8298 20.627 18.1723 20.8864C19.7705 21.0633 21.0009 19.743 21.0009 18.25V16.4965C21.0009 15.2766 20.1972 14.2024 19.0269 13.8582L17.3448 13.3635C16.3805 13.0799 15.3386 13.3569 14.6425 14.082C14.2662 14.474 13.7294 14.5345 13.3582 14.2944C11.8978 13.35 10.6509 12.1031 9.70649 10.6427C9.46639 10.2715 9.52689 9.73471 9.91892 9.35836C10.644 8.66231 10.921 7.62038 10.6374 6.65615L10.1427 4.97404C9.79845 3.80369 8.72434 3 7.50442 3H5.72284Z" fill="currentColor"/></svg><span className="text-[12px] font-semibold text-gray-400 uppercase tracking-wider">Real Calls</span></div>
               <h3 className="text-[18px] font-semibold text-gray-950 mt-2">Not a chatbot. A real phone call.</h3>
               <p className="mt-2 text-[14px] leading-relaxed text-gray-500 max-w-md">
                 <Kiru className="text-gray-700" /> dials the number, navigates phone trees, sits on hold, and talks to a human — you just watch the live transcript.
               </p>
               <BentoCallVisual />
+              <video
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="absolute bottom-3 right-3 w-20 h-auto rounded-md opacity-90"
+              >
+                <source src="/2.mp4" type="video/mp4" />
+              </video>
             </div>
           </Reveal>
           <Reveal delay={0.1}>
@@ -134,11 +143,20 @@ export default function FeaturesBento() {
             </div>
           </Reveal>
           <Reveal delay={0.15}>
-            <div className="group h-full rounded-2xl border border-gray-100 bg-gray-50/50 p-6 sm:p-8 transition-all duration-200 hover:border-gray-200 hover:shadow-card hover:bg-white">
+            <div className="group h-full rounded-2xl border border-gray-100 bg-gray-50/50 p-6 sm:p-8 transition-all duration-200 hover:border-gray-200 hover:shadow-card hover:bg-white relative">
               <div className="flex items-center gap-2 mb-1"><BarChart3 size={14} className="text-gray-400" /><span className="text-[12px] font-semibold text-gray-400 uppercase tracking-wider">Analysis</span></div>
               <h3 className="text-[18px] font-semibold text-gray-950 mt-2">Post-call scorecard</h3>
               <p className="mt-2 text-[14px] leading-relaxed text-gray-500">After every call you get a performance score, tactic breakdown, and what you saved.</p>
               <BentoScoreVisual />
+              <video
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="mt-4 w-full max-w-[200px] h-auto rounded-md opacity-90"
+              >
+                <source src="/3.mp4" type="video/mp4" />
+              </video>
             </div>
           </Reveal>
           <Reveal delay={0.2}>
