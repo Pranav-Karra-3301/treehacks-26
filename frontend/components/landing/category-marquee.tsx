@@ -24,7 +24,7 @@ function CategoryMarqueeInner() {
 
 export default function CategoryMarquee() {
   return (
-    <Reveal className="py-10 border-t border-gray-100/60">
+    <Reveal className="py-10 border-t border-gray-100/60 overflow-hidden">
       <p className="text-center text-[12px] font-medium text-gray-400 tracking-wide uppercase mb-5">
         Works with any company
       </p>

@@ -55,9 +55,9 @@ export default function CtaFooter() {
         <div className="flex-1" aria-hidden="true" />
 
         {/* Footer (seamless, inside CTA section) */}
-        <div className="relative z-10 pb-10">
+        <div className="relative z-10 pb-10 overflow-hidden">
           {/* Giant "kiru" with mix-blend-difference */}
-          <div className="flex justify-center overflow-hidden pointer-events-none select-none mix-blend-difference">
+          <div className="flex justify-center overflow-hidden pointer-events-none select-none mix-blend-difference px-4">
             <span className="font-serif italic text-white text-[clamp(8rem,36vw,28rem)] leading-[0.82] tracking-[-0.04em]">
               kiru
             </span>

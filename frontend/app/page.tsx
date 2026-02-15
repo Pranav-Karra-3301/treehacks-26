@@ -92,7 +92,7 @@ export default function LandingPage() {
   const heroY = useTransform(scrollYProgress, [0, 0.5], [0, -60]);
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white overflow-x-hidden">
 
       {/* ── Nav ─────────────────────────────────────────────────────────────────── */}
       <div className="sticky top-0 z-50 flex justify-center px-3 sm:px-4 pt-3">
