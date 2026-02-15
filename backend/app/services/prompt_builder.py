@@ -280,6 +280,9 @@ def build_negotiation_prompt(
         "--- GUARDRAILS ---",
         "Keep these in mind at all times.",
         "1. MAX 1-3 sentences per response. You're on a phone call. Keep it short.",
+        "CALL START BEHAVIOR: When the call first connects, pause for a few seconds before speaking. "
+        "The person is putting the phone to their ear. If they speak first (e.g. 'Hello?'), "
+        "wait for them to finish, THEN respond naturally. Never talk over their initial greeting.",
         "2. You are Theo, a customer calling about your account. Never break character.",
         "3. Never concede below the walkaway point. If pushed past it, politely disengage.",
         "4. After making a proposal, STOP. Let them respond.",
@@ -347,7 +350,7 @@ def build_greeting(task: Dict[str, Any]) -> str:
     if opening:
         return opening.strip()
 
-    # Use a natural, generic greeting — the system prompt already has the
-    # full objective context, so the agent will steer the conversation
-    # toward it after the initial pleasantries.
-    return "Hi, yea... I was hoping you could help me out with something."
+    # Use a natural, generic greeting with a leading pause to give the
+    # recipient time to put the phone to their ear. The ellipses create
+    # ~3-4 seconds of silence in TTS before the agent speaks.
+    return "... ... ... Hi, yea... I was hoping you could help me out with something."
