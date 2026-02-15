@@ -1,10 +1,9 @@
 import { View, Text, Pressable } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 import Slider from '@react-native-community/slider';
 import { Play, Pause, Volume2 } from 'lucide-react-native';
 import { getAudioUrl } from '../../lib/api';
 import { useAudioPlayer } from '../../hooks/useAudioPlayer';
-import { colors, fonts, shadows } from '../../lib/theme';
+import { colors, fonts } from '../../lib/theme';
 import * as Haptics from 'expo-haptics';
 
 function formatTime(s: number): string {
@@ -19,7 +18,16 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
 
   if (error) {
     return (
-      <View className="rounded-xl bg-gray-50 border border-gray-100 px-4 py-2.5">
+      <View
+        style={{
+          borderRadius: 12,
+          backgroundColor: colors.gray50,
+          borderWidth: 0.5,
+          borderColor: 'rgba(0,0,0,0.06)',
+          paddingHorizontal: 16,
+          paddingVertical: 10,
+        }}
+      >
         <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.gray400 }}>
           Recording unavailable
         </Text>
@@ -28,26 +36,41 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
   }
 
   return (
-    <Animated.View
-      entering={FadeInDown.duration(300)}
-      className="rounded-xl bg-gray-50 border border-gray-100 px-3 py-2.5 flex-row items-center gap-3"
+    <View
+      style={{
+        borderRadius: 12,
+        backgroundColor: colors.gray50,
+        borderWidth: 0.5,
+        borderColor: 'rgba(0,0,0,0.06)',
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+      }}
     >
       <Pressable
         onPress={() => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           togglePlay();
         }}
-        className="h-8 w-8 rounded-full bg-gray-900 items-center justify-center"
-        style={shadows.soft}
+        style={{
+          height: 36,
+          width: 36,
+          borderRadius: 18,
+          backgroundColor: colors.gray900,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
       >
         {playing ? (
-          <Pause size={13} color="#fff" />
+          <Pause size={14} color="#fff" />
         ) : (
-          <Play size={13} color="#fff" style={{ marginLeft: 2 }} />
+          <Play size={14} color="#fff" style={{ marginLeft: 2 }} />
         )}
       </Pressable>
 
-      <View className="flex-1">
+      <View style={{ flex: 1 }}>
         <Slider
           value={position}
           minimumValue={0}
@@ -56,13 +79,13 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
           minimumTrackTintColor={colors.gray900}
           maximumTrackTintColor={colors.gray200}
           thumbTintColor={colors.gray900}
-          style={{ height: 20 }}
+          style={{ height: 24 }}
         />
-        <View className="flex-row items-center justify-between mt-0.5">
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
           <Text style={{ fontFamily: fonts.regular, fontSize: 10, color: colors.gray400, fontVariant: ['tabular-nums'] }}>
             {formatTime(position)}
           </Text>
-          <View className="flex-row items-center gap-1">
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Volume2 size={10} color={colors.gray400} />
             <Text style={{ fontFamily: fonts.medium, fontSize: 10, color: colors.gray400 }}>
               Call Recording
@@ -73,6 +96,6 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
           </Text>
         </View>
       </View>
-    </Animated.View>
+    </View>
   );
 }

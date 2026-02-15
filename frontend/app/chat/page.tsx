@@ -183,7 +183,7 @@ export default function ChatPage() {
         if (speaker === 'agent') {
           addMessage({ role: 'ai', text: content });
         } else {
-          addMessage({ role: 'status', text: `Rep: ${content}` });
+          addMessage({ role: 'status', text: `Receiver: ${content}` });
         }
         setTyping(false);
         break;
@@ -361,7 +361,7 @@ export default function ChatPage() {
           if (turn.speaker === 'agent') {
             newMessages.push({ id: msgId, role: 'ai', text: turn.content });
           } else {
-            newMessages.push({ id: msgId, role: 'status', text: `Rep: ${turn.content}` });
+            newMessages.push({ id: msgId, role: 'status', text: `Receiver: ${turn.content}` });
           }
         }
         newMessages.push({ id: `status-ended-${Date.now()}`, role: 'status', text: 'Call ended' });

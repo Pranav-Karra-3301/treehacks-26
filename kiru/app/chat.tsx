@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Animated, { FadeIn } from 'react-native-reanimated';
 import { Menu, SquarePen } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
@@ -60,7 +59,7 @@ export default function ChatScreen() {
   );
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top', 'bottom']}>
       {/* Header */}
       <View
         style={{
@@ -77,7 +76,8 @@ export default function ChatScreen() {
         {/* Left: sidebar toggle */}
         <Pressable
           onPress={openSidebar}
-          style={{ height: 32, width: 32, alignItems: 'center', justifyContent: 'center' }}
+          style={{ height: 44, width: 44, alignItems: 'center', justifyContent: 'center' }}
+          hitSlop={4}
         >
           <Menu size={20} color={colors.gray500} />
         </Pressable>
@@ -89,7 +89,7 @@ export default function ChatScreen() {
 
         {/* Right: context action */}
         {isOnCall ? (
-          <Animated.View entering={FadeIn.duration(200)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.emerald500 }} />
               <Text style={{ fontFamily: fonts.medium, fontSize: 11, color: colors.emerald600 }}>
@@ -105,21 +105,22 @@ export default function ChatScreen() {
                 borderRadius: 99,
                 backgroundColor: colors.red50,
                 paddingHorizontal: 12,
-                paddingVertical: 5,
+                paddingVertical: 6,
               }}
             >
               <Text style={{ fontFamily: fonts.medium, fontSize: 12, color: colors.red600 }}>
                 End call
               </Text>
             </Pressable>
-          </Animated.View>
+          </View>
         ) : (
           <Pressable
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               handleNewNegotiation();
             }}
-            style={{ height: 32, width: 32, alignItems: 'center', justifyContent: 'center' }}
+            style={{ height: 44, width: 44, alignItems: 'center', justifyContent: 'center' }}
+            hitSlop={4}
           >
             <SquarePen size={18} color={colors.gray400} />
           </Pressable>
@@ -167,7 +168,6 @@ export default function ChatScreen() {
         tasks={pastTasks}
         loading={pastTasksLoading}
         onSelectTask={handleLoadChatFromHistory}
-        onNewChat={handleNewNegotiation}
       />
     </SafeAreaView>
   );

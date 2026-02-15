@@ -3,18 +3,16 @@ import { View, Text, Pressable, FlatList, ActivityIndicator, Dimensions } from '
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withSpring,
+  withTiming,
   runOnJS,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { SquarePen, X } from 'lucide-react-native';
 import type { TaskSummary } from '../../lib/types';
 import { colors, fonts } from '../../lib/theme';
 import TaskRow from './TaskRow';
 
-const SIDEBAR_WIDTH = 300;
-const SPRING_CONFIG = { damping: 25, stiffness: 200 };
-const SCREEN_WIDTH = Dimensions.get('window').width;
+const SIDEBAR_WIDTH = 280;
+const ANIM_DURATION = 250;
 
 type Props = {
   open: boolean;
@@ -22,7 +20,6 @@ type Props = {
   tasks: TaskSummary[];
   loading: boolean;
   onSelectTask: (taskId: string) => void;
-  onNewChat: () => void;
 };
 
 function groupByDate(tasks: TaskSummary[]): { title: string; data: TaskSummary[] }[] {
@@ -49,17 +46,17 @@ function groupByDate(tasks: TaskSummary[]): { title: string; data: TaskSummary[]
   return groups;
 }
 
-export default function Sidebar({ open, onClose, tasks, loading, onSelectTask, onNewChat }: Props) {
+export default function Sidebar({ open, onClose, tasks, loading, onSelectTask }: Props) {
   const translateX = useSharedValue(-SIDEBAR_WIDTH);
   const backdropOpacity = useSharedValue(0);
 
   useEffect(() => {
     if (open) {
-      translateX.value = withSpring(0, SPRING_CONFIG);
-      backdropOpacity.value = withSpring(1, SPRING_CONFIG);
+      translateX.value = withTiming(0, { duration: ANIM_DURATION });
+      backdropOpacity.value = withTiming(1, { duration: ANIM_DURATION });
     } else {
-      translateX.value = withSpring(-SIDEBAR_WIDTH, SPRING_CONFIG);
-      backdropOpacity.value = withSpring(0, SPRING_CONFIG);
+      translateX.value = withTiming(-SIDEBAR_WIDTH, { duration: ANIM_DURATION });
+      backdropOpacity.value = withTiming(0, { duration: ANIM_DURATION });
     }
   }, [open, translateX, backdropOpacity]);
 
@@ -80,13 +77,13 @@ export default function Sidebar({ open, onClose, tasks, loading, onSelectTask, o
       backdropOpacity.value = 1 + next / SIDEBAR_WIDTH;
     })
     .onEnd((e) => {
-      if (e.translationX < -80 || e.velocityX < -500) {
-        translateX.value = withSpring(-SIDEBAR_WIDTH, SPRING_CONFIG);
-        backdropOpacity.value = withSpring(0, SPRING_CONFIG);
+      if (e.translationX < -60 || e.velocityX < -400) {
+        translateX.value = withTiming(-SIDEBAR_WIDTH, { duration: 200 });
+        backdropOpacity.value = withTiming(0, { duration: 200 });
         runOnJS(onClose)();
       } else {
-        translateX.value = withSpring(0, SPRING_CONFIG);
-        backdropOpacity.value = withSpring(1, SPRING_CONFIG);
+        translateX.value = withTiming(0, { duration: 200 });
+        backdropOpacity.value = withTiming(1, { duration: 200 });
       }
     });
 
@@ -103,26 +100,6 @@ export default function Sidebar({ open, onClose, tasks, loading, onSelectTask, o
       />
     ),
     [onSelectTask, onClose],
-  );
-
-  const renderSectionHeader = useCallback(
-    (title: string) => (
-      <Text
-        style={{
-          fontFamily: fonts.semibold,
-          fontSize: 11,
-          color: colors.gray400,
-          textTransform: 'uppercase',
-          letterSpacing: 0.8,
-          paddingHorizontal: 16,
-          paddingTop: 16,
-          paddingBottom: 6,
-        }}
-      >
-        {title}
-      </Text>
-    ),
-    [],
   );
 
   // Build flat data with section headers
@@ -143,7 +120,7 @@ export default function Sidebar({ open, onClose, tasks, loading, onSelectTask, o
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.3)',
+            backgroundColor: 'rgba(0,0,0,0.25)',
             zIndex: 50,
           },
           backdropStyle,
@@ -164,8 +141,6 @@ export default function Sidebar({ open, onClose, tasks, loading, onSelectTask, o
               width: SIDEBAR_WIDTH,
               backgroundColor: colors.sidebarBg,
               zIndex: 51,
-              borderTopRightRadius: 16,
-              borderBottomRightRadius: 16,
             },
             sidebarStyle,
           ]}
@@ -173,38 +148,16 @@ export default function Sidebar({ open, onClose, tasks, loading, onSelectTask, o
           {/* Sidebar Header */}
           <View
             style={{
-              paddingTop: 60,
-              paddingHorizontal: 16,
-              paddingBottom: 12,
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
+              paddingTop: 64,
+              paddingHorizontal: 20,
+              paddingBottom: 16,
               borderBottomWidth: 0.5,
               borderBottomColor: 'rgba(0,0,0,0.06)',
             }}
           >
-            <Text style={{ fontFamily: fonts.serifItalic, fontSize: 20, color: colors.gray950 }}>
+            <Text style={{ fontFamily: fonts.serifItalic, fontSize: 22, color: colors.gray950 }}>
               kiru
             </Text>
-            <Pressable
-              onPress={() => {
-                onNewChat();
-                onClose();
-              }}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 4,
-                paddingHorizontal: 10,
-                paddingVertical: 6,
-                borderRadius: 8,
-              }}
-            >
-              <SquarePen size={15} color={colors.gray500} />
-              <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.gray500 }}>
-                New chat
-              </Text>
-            </Pressable>
           </View>
 
           {/* Task List */}
@@ -217,7 +170,7 @@ export default function Sidebar({ open, onClose, tasks, loading, onSelectTask, o
                 fontSize: 13,
                 color: colors.gray400,
                 textAlign: 'center',
-                paddingTop: 32,
+                paddingTop: 40,
               }}
             >
               No past negotiations
@@ -228,7 +181,22 @@ export default function Sidebar({ open, onClose, tasks, loading, onSelectTask, o
               keyExtractor={(item, i) => ('_header' in item ? `h-${i}` : (item as TaskSummary).id)}
               renderItem={({ item }) => {
                 if ('_header' in item) {
-                  return renderSectionHeader((item as any)._header);
+                  return (
+                    <Text
+                      style={{
+                        fontFamily: fonts.semibold,
+                        fontSize: 11,
+                        color: colors.gray400,
+                        textTransform: 'uppercase',
+                        letterSpacing: 0.8,
+                        paddingHorizontal: 20,
+                        paddingTop: 20,
+                        paddingBottom: 6,
+                      }}
+                    >
+                      {(item as any)._header}
+                    </Text>
+                  );
                 }
                 return renderItem({ item: item as TaskSummary });
               }}

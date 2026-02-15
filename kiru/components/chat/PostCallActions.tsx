@@ -1,7 +1,6 @@
 import { View, Text, Pressable } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Phone, RotateCcw } from 'lucide-react-native';
-import { colors, fonts, shadows } from '../../lib/theme';
+import { colors, fonts } from '../../lib/theme';
 import * as Haptics from 'expo-haptics';
 
 type Props = {
@@ -12,9 +11,14 @@ type Props = {
 
 export default function PostCallActions({ canCallAgain, onCallAgain, onNewNegotiation }: Props) {
   return (
-    <Animated.View
-      entering={FadeInDown.delay(200).duration(400)}
-      className="flex-row justify-center gap-2.5 pt-3 pb-4"
+    <View
+      style={{
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: 10,
+        paddingTop: 12,
+        paddingBottom: 32,
+      }}
     >
       {canCallAgain && (
         <Pressable
@@ -32,11 +36,10 @@ export default function PostCallActions({ canCallAgain, onCallAgain, onNewNegoti
             backgroundColor: colors.white,
             paddingHorizontal: 20,
             paddingVertical: 10,
-            ...shadows.soft,
           }}
         >
           <Phone size={13} color={colors.gray700} />
-          <Text style={{ fontFamily: fonts.medium, fontSize: 12.5, color: colors.gray700 }}>
+          <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.gray700 }}>
             Call again
           </Text>
         </Pressable>
@@ -54,14 +57,13 @@ export default function PostCallActions({ canCallAgain, onCallAgain, onNewNegoti
           backgroundColor: colors.gray900,
           paddingHorizontal: 20,
           paddingVertical: 10,
-          ...shadows.soft,
         }}
       >
         <RotateCcw size={13} color="#fff" />
-        <Text style={{ fontFamily: fonts.medium, fontSize: 12.5, color: '#fff' }}>
+        <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: '#fff' }}>
           New negotiation
         </Text>
       </Pressable>
-    </Animated.View>
+    </View>
   );
 }

@@ -19,6 +19,14 @@ export function useAudioPlayer(uri: string) {
   });
 
   useEffect(() => {
+    // Configure audio mode for playback
+    Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: false,
+      shouldDuckAndroid: true,
+    }).catch(() => {});
+
     return () => {
       soundRef.current?.unloadAsync();
     };
@@ -28,10 +36,11 @@ export function useAudioPlayer(uri: string) {
     try {
       if (soundRef.current) {
         await soundRef.current.unloadAsync();
+        soundRef.current = null;
       }
       const { sound } = await Audio.Sound.createAsync(
         { uri },
-        { shouldPlay: false },
+        { shouldPlay: false, progressUpdateIntervalMillis: 250 },
         (status) => {
           if (!status.isLoaded) return;
           playingRef.current = status.isPlaying;
@@ -48,6 +57,7 @@ export function useAudioPlayer(uri: string) {
         },
       );
       soundRef.current = sound;
+      setState((prev) => ({ ...prev, error: false }));
     } catch {
       setState((prev) => ({ ...prev, error: true }));
     }
@@ -70,13 +80,23 @@ export function useAudioPlayer(uri: string) {
     if (!sound) return;
 
     try {
+      const status = await sound.getStatusAsync();
+      if (!status.isLoaded) {
+        await load();
+        sound = soundRef.current;
+        if (!sound) return;
+      }
+
       if (playingRef.current) {
         await sound.pauseAsync();
       } else {
+        // If at end, seek to start before playing
+        if (status.isLoaded && status.positionMillis === status.durationMillis) {
+          await sound.setPositionAsync(0);
+        }
         await sound.playAsync();
       }
     } catch {
-      // Sound may have been unloaded — try to reload
       try {
         await load();
       } catch {

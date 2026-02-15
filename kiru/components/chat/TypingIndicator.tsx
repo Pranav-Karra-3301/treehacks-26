@@ -6,31 +6,29 @@ import Animated, {
   withRepeat,
   withSequence,
   withTiming,
-  FadeIn,
-  FadeOut,
 } from 'react-native-reanimated';
 import { useEffect } from 'react';
-import { colors, shadows } from '../../lib/theme';
+import { colors } from '../../lib/theme';
 
 function BounceDot({ index }: { index: number }) {
-  const scale = useSharedValue(0.4);
+  const opacity = useSharedValue(0.3);
 
   useEffect(() => {
-    scale.value = withDelay(
-      index * 160,
+    opacity.value = withDelay(
+      index * 200,
       withRepeat(
         withSequence(
-          withTiming(1, { duration: 350 }),
-          withTiming(0.4, { duration: 350 }),
+          withTiming(1, { duration: 400 }),
+          withTiming(0.3, { duration: 400 }),
         ),
         -1,
         false,
       ),
     );
-  }, [index, scale]);
+  }, [index, opacity]);
 
   const animStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
+    opacity: opacity.value,
   }));
 
   return (
@@ -40,7 +38,7 @@ function BounceDot({ index }: { index: number }) {
           width: 6,
           height: 6,
           borderRadius: 3,
-          backgroundColor: colors.gray300,
+          backgroundColor: colors.gray400,
         },
         animStyle,
       ]}
@@ -50,22 +48,17 @@ function BounceDot({ index }: { index: number }) {
 
 export default function TypingIndicator() {
   return (
-    <Animated.View
-      entering={FadeIn.duration(200)}
-      exiting={FadeOut.duration(200)}
-      style={{ paddingRight: 48 }}
-    >
+    <View style={{ paddingRight: 56 }}>
       <View
         style={{
           backgroundColor: colors.white,
-          borderRadius: 20,
-          borderBottomLeftRadius: 6,
+          borderRadius: 18,
+          borderBottomLeftRadius: 4,
           borderWidth: 0.5,
-          borderColor: 'rgba(0,0,0,0.04)',
-          paddingHorizontal: 16,
-          paddingVertical: 14,
+          borderColor: 'rgba(0,0,0,0.06)',
+          paddingHorizontal: 14,
+          paddingVertical: 12,
           alignSelf: 'flex-start',
-          ...shadows.soft,
         }}
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -74,6 +67,6 @@ export default function TypingIndicator() {
           ))}
         </View>
       </View>
-    </Animated.View>
+    </View>
   );
 }

@@ -1,8 +1,7 @@
 import { View, Text, Pressable, Linking } from 'react-native';
-import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { Phone, ArrowRight, Globe } from 'lucide-react-native';
 import type { BusinessResult } from '../../lib/types';
-import { colors, fonts, shadows } from '../../lib/theme';
+import { colors, fonts } from '../../lib/theme';
 import BizIcon from './BizIcon';
 import * as Haptics from 'expo-haptics';
 
@@ -49,24 +48,33 @@ export default function SearchResultCards({ results, onCall, onSkip }: Props) {
   const display = (withPhone.length > 0 ? withPhone : results).slice(0, 4);
 
   return (
-    <View className="gap-2">
-      <View className="gap-1.5">
+    <View style={{ gap: 8 }}>
+      <View style={{ gap: 6 }}>
         {display.map((result, i) => {
           const phone = result.phone_numbers[0] ?? null;
           const snippet = result.snippet ? cleanSnippet(result.snippet) : '';
           const domain = result.url ? displayDomain(result.url) : '';
 
           return (
-            <Animated.View
+            <View
               key={result.url ?? `result-${i}`}
-              entering={FadeInDown.delay(i * 50).duration(250)}
-              className="flex-row items-center gap-2.5 rounded-[16px] bg-white border border-gray-100 pl-2.5 pr-2 py-2"
-              style={shadows.soft}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 10,
+                borderRadius: 12,
+                backgroundColor: colors.white,
+                borderWidth: 0.5,
+                borderColor: 'rgba(0,0,0,0.06)',
+                paddingLeft: 10,
+                paddingRight: 8,
+                paddingVertical: 8,
+              }}
             >
               <BizIcon url={result.url} title={result.title || 'Untitled'} />
 
-              <View className="flex-1 min-w-0">
-                <View className="flex-row items-center gap-1.5">
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <Text
                     numberOfLines={1}
                     style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.gray900, flex: 1 }}
@@ -76,29 +84,28 @@ export default function SearchResultCards({ results, onCall, onSkip }: Props) {
                   {domain ? (
                     <Pressable
                       onPress={() => result.url && Linking.openURL(result.url)}
-                      className="flex-row items-center gap-0.5"
+                      hitSlop={8}
                     >
-                      <Globe size={9} color={colors.gray300} />
+                      <Globe size={10} color={colors.gray300} />
                     </Pressable>
                   ) : null}
                 </View>
                 {snippet ? (
                   <Text
                     numberOfLines={1}
-                    className="mt-0.5"
-                    style={{ fontFamily: fonts.regular, fontSize: 11.5, color: colors.gray400, lineHeight: 16 }}
+                    style={{ fontFamily: fonts.regular, fontSize: 11.5, color: colors.gray400, lineHeight: 16, marginTop: 2 }}
                   >
                     {snippet}
                   </Text>
                 ) : null}
                 {phone ? (
                   <Text
-                    className="mt-0.5"
                     style={{
                       fontFamily: fonts.regular,
                       fontSize: 11,
                       color: colors.gray400,
                       fontVariant: ['tabular-nums'],
+                      marginTop: 2,
                     }}
                   >
                     {formatPhone(phone)}
@@ -112,7 +119,15 @@ export default function SearchResultCards({ results, onCall, onSkip }: Props) {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                     onCall(result, phone);
                   }}
-                  className="flex-row items-center gap-1 rounded-[10px] bg-gray-900 pl-2.5 pr-3 py-1.5"
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 4,
+                    borderRadius: 8,
+                    backgroundColor: colors.gray900,
+                    paddingHorizontal: 10,
+                    paddingVertical: 6,
+                  }}
                 >
                   <Phone size={10} strokeWidth={2.5} color="#fff" />
                   <Text style={{ fontFamily: fonts.medium, fontSize: 11.5, color: '#fff' }}>
@@ -120,22 +135,26 @@ export default function SearchResultCards({ results, onCall, onSkip }: Props) {
                   </Text>
                 </Pressable>
               )}
-            </Animated.View>
+            </View>
           );
         })}
       </View>
 
-      <Animated.View entering={FadeIn.delay(display.length * 50 + 80).duration(250)}>
-        <Pressable
-          onPress={onSkip}
-          className="flex-row items-center gap-1 self-center pt-0.5 pb-1"
-        >
-          <Text style={{ fontFamily: fonts.regular, fontSize: 11, color: colors.gray400 }}>
-            I have my own number
-          </Text>
-          <ArrowRight size={10} color={colors.gray400} />
-        </Pressable>
-      </Animated.View>
+      <Pressable
+        onPress={onSkip}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 4,
+          alignSelf: 'center',
+          paddingVertical: 4,
+        }}
+      >
+        <Text style={{ fontFamily: fonts.regular, fontSize: 11, color: colors.gray400 }}>
+          I have my own number
+        </Text>
+        <ArrowRight size={10} color={colors.gray400} />
+      </Pressable>
     </View>
   );
 }
