@@ -517,7 +517,7 @@ export default function ChatPage() {
   const [manualPhoneInput, setManualPhoneInput] = useState('');
   const [concurrentTestMode, setConcurrentTestMode] = useState(false);
   const [concurrentRunMode, setConcurrentRunMode] = useState<ConcurrentMode>('test');
-  const [concurrentTargetCount, setConcurrentTargetCount] = useState(3);
+  const [concurrentTargetCount, setConcurrentTargetCount] = useState(MAX_CONCURRENT_TEST_CALLS);
   const [autoSourceNumbers, setAutoSourceNumbers] = useState(true);
   const [multiCallTargets, setMultiCallTargets] = useState<Record<string, MultiCallTargetMeta>>({});
   const [multiCalls, setMultiCalls] = useState<Record<string, MultiCallState>>({});
@@ -646,7 +646,7 @@ export default function ChatPage() {
     setManualPhoneInput(snapshot.manualPhoneInput ?? '');
     setConcurrentTestMode(snapshot.concurrentTestMode ?? false);
     setConcurrentRunMode(snapshot.concurrentRunMode === 'real' ? 'real' : 'test');
-    setConcurrentTargetCount(clampConcurrentCount(snapshot.concurrentTargetCount ?? 3));
+    setConcurrentTargetCount(clampConcurrentCount(snapshot.concurrentTargetCount ?? MAX_CONCURRENT_TEST_CALLS));
     setAutoSourceNumbers(snapshot.autoSourceNumbers ?? true);
     setMultiCallTargets(snapshot.multiCallTargets ?? {});
     setMultiCalls(snapshot.multiCalls ?? {});
@@ -1081,7 +1081,9 @@ export default function ChatPage() {
       ]);
       setAnalysisLoaded(true);
     } catch {
+      // Allow retry on failure
       analysisLoadedRef.current = false;
+      setAnalysisLoaded(false);
     }
   }, []);
 
@@ -1184,13 +1186,6 @@ export default function ChatPage() {
         const response = await getMultiCallSummary(succeededTaskIds, objectiveText);
         setMultiSummary(response.summary);
         setMultiSummaryState('ready');
-        const failedNote = failedCount > 0
-          ? ` (${failedCount} call${failedCount === 1 ? '' : 's'} couldn't connect)`
-          : '';
-        addMessage({
-          role: 'ai',
-          text: `I compared every completed call and prepared one combined recommendation with all key pricing and terms.${failedNote}`,
-        });
         return; // Success — exit retry loop
       } catch (err) {
         if (attempt < maxAttempts) {
@@ -1202,9 +1197,10 @@ export default function ChatPage() {
         setMultiSummary(null);
         setMultiSummaryState('error');
         setMultiSummaryError(message);
+        activeSummaryRequestRef.current = null; // Allow retry after error
       }
     }
-  }, [addMessage, multiSummaryState, wait]);
+  }, [multiSummaryState, wait]);
 
   const hydrateMultiCallArtifacts = useCallback(async (phone: string, tid: string) => {
     if (!phone || !tid) return;
@@ -1252,8 +1248,7 @@ export default function ChatPage() {
       setMultiSummaryState('loading');
     }
     refreshPastTasks();
-    addMessage({ role: 'ai', text: 'All calls have ended. Building combined summary...' });
-  }, [addMessage, multiSummaryState, refreshPastTasks]);
+  }, [multiSummaryState, refreshPastTasks]);
 
   useEffect(() => {
     Object.entries(multiCalls).forEach(([phone, state]) => {
@@ -1279,12 +1274,17 @@ export default function ChatPage() {
     if (multiSummaryState === 'ready' && multiSummary) return;
     if (multiSummaryState === 'loading') return;
 
+    let cancelled = false;
     // Short delay — backend generates missing per-call analyses in parallel
     const timer = setTimeout(() => {
+      if (cancelled) return;
       void loadMultiSummary(taskIds, objective);
     }, 2000);
 
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [concurrentTestMode, loadMultiSummary, multiCalls, multiSummary, multiSummaryState, objective]);
 
   // Live-update fallback: poll task status in concurrent mode so ended calls
@@ -2239,7 +2239,7 @@ export default function ChatPage() {
     );
     setManualPhoneInput('');
     setConcurrentRunMode(history.mode === 'real' ? 'real' : 'test');
-    setConcurrentTargetCount(clampConcurrentCount(history.calls.length || 3));
+    setConcurrentTargetCount(clampConcurrentCount(history.calls.length || MAX_CONCURRENT_TEST_CALLS));
     setAutoSourceNumbers(true);
     setResearchContext('');
     setMultiSummary(null);
