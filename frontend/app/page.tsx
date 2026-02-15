@@ -589,7 +589,7 @@ export default function LandingPage() {
       <div
         className="h-48 sm:h-64 -mb-px"
         style={{
-          background: 'linear-gradient(180deg, #ffffff 0%, #f4f4f5 20%, #a1a1aa 45%, #3f3f46 65%, #18181b 82%, #09090b 100%)',
+          background: 'linear-gradient(180deg, #ffffff 0%, #fafafa 15%, #e4e4e7 30%, #71717a 50%, #27272a 70%, #09090b 90%, #09090b 100%)',
         }}
       />
 
@@ -629,23 +629,30 @@ export default function LandingPage() {
 
         {/* Spacer for gradient to breathe */}
         <div className="h-[280px] sm:h-[340px]" aria-hidden="true" />
-      </section>
 
-      {/* ── Footer ──────────────────────────────── */}
-      <footer className="relative bg-gray-950 px-6 py-8 border-t border-white/5">
-        <div className="mx-auto max-w-6xl">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-6">
-              <span className="text-[15px] text-gray-500"><Kiru /></span>
-              <span className="text-[12px] text-gray-600">AI-powered phone negotiation</span>
-            </div>
-            <div className="flex items-center gap-6">
-              <Link href="/chat" className="text-[13px] text-gray-500 transition hover:text-gray-300">Launch App</Link>
-              <span className="text-[12px] text-gray-600">Built at TreeHacks 2026</span>
+        {/* ── Footer (seamless, inside CTA section) ─── */}
+        <div className="relative z-10 pb-8">
+          {/* Giant "kiru" with mix-blend-difference */}
+          <div className="flex justify-center overflow-hidden pointer-events-none select-none mix-blend-difference">
+            <span className="font-serif italic text-white text-[clamp(8rem,28vw,22rem)] leading-[0.85] tracking-[-0.04em]">
+              kiru
+            </span>
+          </div>
+
+          {/* Footer meta row */}
+          <div className="mx-auto max-w-6xl mt-8 px-6">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-6">
+                <span className="text-[13px] text-gray-500">AI-powered phone negotiation</span>
+              </div>
+              <div className="flex items-center gap-6">
+                <Link href="/chat" className="text-[13px] text-gray-500 transition hover:text-gray-300">Launch App</Link>
+                <span className="text-[12px] text-gray-600">Built at TreeHacks 2026</span>
+              </div>
             </div>
           </div>
         </div>
-      </footer>
+      </section>
     </div>
   );
 }
