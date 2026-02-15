@@ -1618,7 +1618,7 @@ export default function ChatPage() {
       try {
         if (i > 0) await new Promise((r) => setTimeout(r, 500));
         const callResult = await startCall(taskResult.taskId);
-        results.push({ ok: true, phone: taskResult.phone, taskId: taskResult.taskId, sessionId: callResult.session_id, callResult });
+        results.push({ ok: true, phone: taskResult.phone, taskId: taskResult.taskId, sessionId: callResult.session_id ?? '', callResult });
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Unknown error';
         results.push({ ok: false, phone: taskResult.phone, errorMsg });
