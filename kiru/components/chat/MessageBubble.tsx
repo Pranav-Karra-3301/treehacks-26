@@ -6,6 +6,7 @@ import { colors, fonts } from '../../lib/theme';
 import AnalysisCard from '../analysis/AnalysisCard';
 import AudioPlayer from '../audio/AudioPlayer';
 import SearchResultCards from '../search/SearchResultCards';
+import TypewriterText from './TypewriterText';
 
 type Props = {
   message: Message;
@@ -92,16 +93,16 @@ export default memo(function MessageBubble({ message, onCall, onSkip }: Props) {
           paddingVertical: 10,
         }}
       >
-        <Text
+        <TypewriterText
+          text={message.text}
+          animate={message.animate !== false}
           style={{
             fontFamily: fonts.regular,
             fontSize: 15,
             lineHeight: 21,
             color: colors.gray900,
           }}
-        >
-          {message.text}
-        </Text>
+        />
       </View>
     </View>
   );

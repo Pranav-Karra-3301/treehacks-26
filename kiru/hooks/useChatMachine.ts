@@ -22,6 +22,7 @@ export type Message = {
   id: string;
   role: 'user' | 'ai' | 'status' | 'analysis' | 'audio' | 'search-results';
   text: string;
+  animate?: boolean;
   analysisData?: AnalysisPayload;
   audioTaskId?: string;
   searchResults?: BusinessResult[];
@@ -296,7 +297,7 @@ export function useChatMachine() {
         setDiscoveryResults([]);
         thinkingBufferRef.current = '';
 
-        newMessages.push({ id: 'welcome', role: 'ai', text: 'What would you like me to negotiate?' });
+        newMessages.push({ id: 'welcome', role: 'ai', text: 'What would you like me to negotiate?', animate: false });
         if (task.objective) {
           newMessages.push({ id: `obj-${Date.now()}`, role: 'user', text: task.objective });
         }
@@ -305,6 +306,7 @@ export function useChatMachine() {
             id: `ai-phone-${Date.now()}`,
             role: 'ai',
             text: "Got it. What's the phone number I should call?",
+            animate: false,
           });
           newMessages.push({ id: `phone-${Date.now()}`, role: 'user', text: task.target_phone });
         }
@@ -314,7 +316,7 @@ export function useChatMachine() {
           for (const turn of transcriptRes.turns) {
             const msgId = `t-${Date.now()}-${Math.random()}`;
             if (turn.speaker === 'agent') {
-              newMessages.push({ id: msgId, role: 'ai', text: turn.content });
+              newMessages.push({ id: msgId, role: 'ai', text: turn.content, animate: false });
             } else {
               newMessages.push({ id: msgId, role: 'status', text: `Receiver: ${turn.content}` });
             }
@@ -351,9 +353,9 @@ export function useChatMachine() {
   const handleCallAgain = useCallback(() => {
     disconnectWs();
     setMessages([
-      { id: 'welcome', role: 'ai', text: 'What would you like me to negotiate?' },
+      { id: 'welcome', role: 'ai', text: 'What would you like me to negotiate?', animate: false },
       { id: `obj-${Date.now()}`, role: 'user', text: objective },
-      { id: `ai-phone-${Date.now()}`, role: 'ai', text: "Got it. What's the phone number I should call?" },
+      { id: `ai-phone-${Date.now()}`, role: 'ai', text: "Got it. What's the phone number I should call?", animate: false },
       { id: `phone-${Date.now()}`, role: 'user', text: phoneNumber },
     ]);
     setInput('');
