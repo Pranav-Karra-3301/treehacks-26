@@ -18,6 +18,7 @@ const config: Config = {
         'serif-italic': ['InstrumentSerif_400Regular_Italic'],
       },
       colors: {
+        sidebar: '#f2f2f7',
         gray: {
           50: '#fafafa',
           100: '#f4f4f5',

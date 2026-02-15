@@ -1,21 +1,19 @@
-import { useRef, useCallback } from 'react';
-import { View, Text, Pressable, Platform } from 'react-native';
+import { useState, useCallback } from 'react';
+import { View, Text, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import { BottomSheetModal } from '@gorhom/bottom-sheet';
-import { Clock, Plus } from 'lucide-react-native';
-import { BlurView } from 'expo-blur';
+import { Menu, SquarePen } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
 import { useChatMachine } from '../hooks/useChatMachine';
 import { useVoiceReadiness } from '../hooks/useVoiceReadiness';
-import { colors, fonts, shadows } from '../lib/theme';
+import { colors, fonts } from '../lib/theme';
 
 import MessageList from '../components/chat/MessageList';
 import ChatInput from '../components/chat/ChatInput';
 import PostCallActions from '../components/chat/PostCallActions';
 import ReadinessBanner from '../components/chat/ReadinessBanner';
-import HistoryBottomSheet from '../components/history/HistoryBottomSheet';
+import Sidebar from '../components/history/Sidebar';
 
 export default function ChatScreen() {
   const {
@@ -29,6 +27,9 @@ export default function ChatScreen() {
     canCallAgain,
     inputDisabled,
     placeholderText,
+    pastTasks,
+    pastTasksLoading,
+    refreshPastTasks,
     handleSend,
     handleEndCall,
     handleNewNegotiation,
@@ -39,11 +40,16 @@ export default function ChatScreen() {
   } = useChatMachine();
 
   const readinessWarning = useVoiceReadiness();
-  const bottomSheetRef = useRef<BottomSheetModal>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const openHistory = useCallback(() => {
+  const openSidebar = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    bottomSheetRef.current?.present();
+    refreshPastTasks();
+    setSidebarOpen(true);
+  }, [refreshPastTasks]);
+
+  const closeSidebar = useCallback(() => {
+    setSidebarOpen(false);
   }, []);
 
   const handleLoadChatFromHistory = useCallback(
@@ -56,64 +62,75 @@ export default function ChatScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       {/* Header */}
-      <BlurView
-        intensity={80}
-        tint="light"
-        className="flex-row items-center justify-between border-b border-gray-200/60 px-5 py-3"
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingHorizontal: 16,
+          paddingVertical: 10,
+          backgroundColor: colors.bg,
+          borderBottomWidth: 0.5,
+          borderBottomColor: 'rgba(0,0,0,0.06)',
+        }}
       >
-        <View className="flex-row items-center gap-3">
-          <Text style={{ fontFamily: fonts.serifItalic, fontSize: 17, color: colors.gray950, letterSpacing: -0.5 }}>
-            kiru
-          </Text>
-        </View>
-        <View className="flex-row items-center gap-2">
-          {isOnCall && (
-            <Animated.View entering={FadeIn.duration(200)} className="flex-row items-center gap-2">
-              <View className="relative">
-                <View className="h-2 w-2 rounded-full bg-emerald-500" />
-              </View>
-              <Text style={{ fontFamily: fonts.medium, fontSize: 12, color: colors.emerald600 }}>
-                On call
+        {/* Left: sidebar toggle */}
+        <Pressable
+          onPress={openSidebar}
+          style={{ height: 32, width: 32, alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Menu size={20} color={colors.gray500} />
+        </Pressable>
+
+        {/* Center: branding */}
+        <Text style={{ fontFamily: fonts.serifItalic, fontSize: 20, color: colors.gray950, letterSpacing: -0.5 }}>
+          kiru
+        </Text>
+
+        {/* Right: context action */}
+        {isOnCall ? (
+          <Animated.View entering={FadeIn.duration(200)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.emerald500 }} />
+              <Text style={{ fontFamily: fonts.medium, fontSize: 11, color: colors.emerald600 }}>
+                Live
               </Text>
-            </Animated.View>
-          )}
-          {isOnCall && (
+            </View>
             <Pressable
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 handleEndCall();
               }}
-              className="rounded-full bg-red-50 px-3.5 py-1.5"
+              style={{
+                borderRadius: 99,
+                backgroundColor: colors.red50,
+                paddingHorizontal: 12,
+                paddingVertical: 5,
+              }}
             >
               <Text style={{ fontFamily: fonts.medium, fontSize: 12, color: colors.red600 }}>
                 End call
               </Text>
             </Pressable>
-          )}
-          {!isOnCall && (
-            <>
-              <Pressable
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  handleNewNegotiation();
-                }}
-                className="h-8 w-8 items-center justify-center rounded-lg"
-              >
-                <Plus size={18} color={colors.gray400} />
-              </Pressable>
-              <Pressable onPress={openHistory} className="h-8 w-8 items-center justify-center rounded-lg">
-                <Clock size={18} color={colors.gray400} />
-              </Pressable>
-            </>
-          )}
-        </View>
-      </BlurView>
+          </Animated.View>
+        ) : (
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              handleNewNegotiation();
+            }}
+            style={{ height: 32, width: 32, alignItems: 'center', justifyContent: 'center' }}
+          >
+            <SquarePen size={18} color={colors.gray400} />
+          </Pressable>
+        )}
+      </View>
 
       {/* Readiness banner */}
       {readinessWarning && <ReadinessBanner warning={readinessWarning} />}
 
       {/* Messages */}
-      <View className="flex-1">
+      <View style={{ flex: 1 }}>
         <MessageList
           messages={messages}
           typing={typing}
@@ -143,8 +160,15 @@ export default function ChatScreen() {
         />
       )}
 
-      {/* History Bottom Sheet */}
-      <HistoryBottomSheet ref={bottomSheetRef} onLoadChat={handleLoadChatFromHistory} />
+      {/* Sidebar */}
+      <Sidebar
+        open={sidebarOpen}
+        onClose={closeSidebar}
+        tasks={pastTasks}
+        loading={pastTasksLoading}
+        onSelectTask={handleLoadChatFromHistory}
+        onNewChat={handleNewNegotiation}
+      />
     </SafeAreaView>
   );
 }

@@ -1,6 +1,5 @@
 import { View, Text } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { Phone } from 'lucide-react-native';
 import type { Message } from '../../hooks/useChatMachine';
 import type { BusinessResult } from '../../lib/types';
 import { colors, fonts, shadows } from '../../lib/theme';
@@ -47,33 +46,41 @@ export default function MessageBubble({ message, onCall, onSkip }: Props) {
 
   if (message.role === 'status') {
     return (
-      <Animated.View entering={entering} className="flex-row justify-center py-1.5">
-        <View
-          className="flex-row items-center gap-1.5 rounded-full bg-white/80 border border-gray-200/50 px-3 py-1"
-          style={shadows.soft}
+      <Animated.View entering={entering} style={{ alignItems: 'center', paddingVertical: 4 }}>
+        <Text
+          style={{
+            fontFamily: fonts.regular,
+            fontSize: 12,
+            color: colors.gray400,
+            textAlign: 'center',
+          }}
         >
-          <Phone size={9} color={colors.gray400} />
-          <Text
-            className="text-gray-500"
-            style={{ fontFamily: fonts.medium, fontSize: 11 }}
-          >
-            {message.text}
-          </Text>
-        </View>
+          {message.text}
+        </Text>
       </Animated.View>
     );
   }
 
   if (message.role === 'user') {
     return (
-      <Animated.View entering={entering} className="flex-row justify-end">
+      <Animated.View entering={entering} style={{ paddingLeft: 48, alignItems: 'flex-end' }}>
         <View
-          className="max-w-[75%] rounded-2xl rounded-tr-md bg-gray-900 px-4 py-2.5"
-          style={shadows.card}
+          style={{
+            backgroundColor: colors.gray900,
+            borderRadius: 20,
+            borderBottomRightRadius: 6,
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+            ...shadows.soft,
+          }}
         >
           <Text
-            className="text-white leading-relaxed"
-            style={{ fontFamily: fonts.regular, fontSize: 14 }}
+            style={{
+              fontFamily: fonts.regular,
+              fontSize: 15,
+              lineHeight: 21,
+              color: '#fff',
+            }}
           >
             {message.text}
           </Text>
@@ -84,25 +91,26 @@ export default function MessageBubble({ message, onCall, onSkip }: Props) {
 
   // AI message
   return (
-    <Animated.View entering={entering} className="flex-row justify-start items-start gap-2.5">
+    <Animated.View entering={entering} style={{ paddingRight: 48 }}>
       <View
-        className="h-7 w-7 rounded-full bg-gray-900 items-center justify-center mt-0.5"
-        style={shadows.soft}
+        style={{
+          backgroundColor: colors.white,
+          borderRadius: 20,
+          borderBottomLeftRadius: 6,
+          borderWidth: 0.5,
+          borderColor: 'rgba(0,0,0,0.04)',
+          paddingHorizontal: 16,
+          paddingVertical: 12,
+          ...shadows.soft,
+        }}
       >
         <Text
-          className="text-gray-300"
-          style={{ fontFamily: fonts.serifItalic, fontSize: 10 }}
-        >
-          k
-        </Text>
-      </View>
-      <View
-        className="max-w-[75%] rounded-2xl rounded-tl-md bg-white border border-gray-100 px-4 py-2.5"
-        style={shadows.soft}
-      >
-        <Text
-          className="text-gray-900 leading-relaxed"
-          style={{ fontFamily: fonts.regular, fontSize: 14 }}
+          style={{
+            fontFamily: fonts.regular,
+            fontSize: 15,
+            lineHeight: 21,
+            color: colors.gray900,
+          }}
         >
           {message.text}
         </Text>

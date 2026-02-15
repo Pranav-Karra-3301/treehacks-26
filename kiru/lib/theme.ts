@@ -1,6 +1,7 @@
 /** Color tokens for inline styles (SVG, reanimated, etc.) */
 export const colors = {
-  bg: '#fafaf9',
+  bg: '#f8f8f8',
+  sidebarBg: '#f2f2f7',
   white: '#ffffff',
   black: '#000000',
 
@@ -40,8 +41,8 @@ export const shadows = {
   soft: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
     elevation: 2,
   },
   card: {

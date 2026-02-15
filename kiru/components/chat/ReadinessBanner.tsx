@@ -11,10 +11,20 @@ export default function ReadinessBanner({ warning }: Props) {
   return (
     <Animated.View
       entering={FadeIn.duration(300)}
-      className="flex-row items-center justify-center gap-2 bg-amber-50 border-b border-amber-100 px-4 py-2"
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        backgroundColor: colors.amber50,
+        borderBottomWidth: 0.5,
+        borderBottomColor: colors.amber100,
+        paddingHorizontal: 16,
+        paddingVertical: 6,
+      }}
     >
-      <AlertTriangle size={13} color={colors.amber500} />
-      <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.amber700 }}>
+      <AlertTriangle size={12} color={colors.amber500} />
+      <Text style={{ fontFamily: fonts.regular, fontSize: 11, color: colors.amber700 }}>
         {warning} — calls may run in dry-run mode
       </Text>
     </Animated.View>

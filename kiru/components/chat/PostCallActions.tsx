@@ -22,8 +22,18 @@ export default function PostCallActions({ canCallAgain, onCallAgain, onNewNegoti
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             onCallAgain();
           }}
-          className="flex-row items-center gap-1.5 rounded-full border border-gray-200 bg-white px-4 py-2"
-          style={shadows.soft}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            borderRadius: 99,
+            borderWidth: 1,
+            borderColor: colors.gray200,
+            backgroundColor: colors.white,
+            paddingHorizontal: 20,
+            paddingVertical: 10,
+            ...shadows.soft,
+          }}
         >
           <Phone size={13} color={colors.gray700} />
           <Text style={{ fontFamily: fonts.medium, fontSize: 12.5, color: colors.gray700 }}>
@@ -36,11 +46,19 @@ export default function PostCallActions({ canCallAgain, onCallAgain, onNewNegoti
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           onNewNegotiation();
         }}
-        className="flex-row items-center gap-1.5 rounded-full border border-gray-200 bg-white px-4 py-2"
-        style={shadows.soft}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 6,
+          borderRadius: 99,
+          backgroundColor: colors.gray900,
+          paddingHorizontal: 20,
+          paddingVertical: 10,
+          ...shadows.soft,
+        }}
       >
-        <RotateCcw size={13} color={colors.gray700} />
-        <Text style={{ fontFamily: fonts.medium, fontSize: 12.5, color: colors.gray700 }}>
+        <RotateCcw size={13} color="#fff" />
+        <Text style={{ fontFamily: fonts.medium, fontSize: 12.5, color: '#fff' }}>
           New negotiation
         </Text>
       </Pressable>

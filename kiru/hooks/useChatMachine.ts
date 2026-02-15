@@ -57,9 +57,10 @@ export function useChatMachine() {
 
   const analysisLoadedRef = useRef(false);
   const thinkingBufferRef = useRef('');
+  const endedProcessedRef = useRef(false);
 
   const userLocation = useLocation();
-  const { tasks: pastTasks, refresh: refreshPastTasks } = usePastTasks();
+  const { tasks: pastTasks, loading: pastTasksLoading, refresh: refreshPastTasks } = usePastTasks();
 
   // ── Helpers ─────────────────────────────────────────────────
   const addMessage = useCallback((msg: Omit<Message, 'id'>) => {
@@ -110,6 +111,8 @@ export function useChatMachine() {
             addMessage({ role: 'status', text: 'Connected' });
             setPhase('active');
           } else if (status === 'ended') {
+            if (endedProcessedRef.current) break; // skip duplicate
+            endedProcessedRef.current = true;
             addMessage({ role: 'status', text: 'Call ended' });
             addMessage({ role: 'ai', text: 'The call has ended. Preparing your analysis...' });
             setPhase('ended');
@@ -247,6 +250,7 @@ export function useChatMachine() {
     setDiscoveryResults([]);
     analysisLoadedRef.current = false;
     thinkingBufferRef.current = '';
+    endedProcessedRef.current = false;
     refreshPastTasks();
   }, [disconnectWs, refreshPastTasks]);
 
@@ -362,6 +366,7 @@ export function useChatMachine() {
     setDiscoveryResults([]);
     analysisLoadedRef.current = false;
     thinkingBufferRef.current = '';
+    endedProcessedRef.current = false;
     startNegotiation(phoneNumber);
   }, [disconnectWs, objective, phoneNumber, startNegotiation]);
 
@@ -499,6 +504,8 @@ export function useChatMachine() {
     inputDisabled,
     placeholderText,
     pastTasks,
+    pastTasksLoading,
+    refreshPastTasks,
     handleSend,
     handleEndCall,
     handleNewNegotiation,

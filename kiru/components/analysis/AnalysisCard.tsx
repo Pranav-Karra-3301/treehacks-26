@@ -27,15 +27,15 @@ function Section({
 }) {
   return (
     <Animated.View entering={FadeInDown.delay(delay).duration(300)}>
-      <View className="flex-row items-center gap-1.5 mb-2">
+      <View className="flex-row items-center gap-1.5 mb-2.5">
         <Icon size={12} color={colors.gray400} />
         <Text
           style={{
             fontFamily: fonts.semibold,
-            fontSize: 11,
+            fontSize: 12,
             color: colors.gray400,
             textTransform: 'uppercase',
-            letterSpacing: 1,
+            letterSpacing: 0.8,
           }}
         >
           {title}
@@ -56,11 +56,13 @@ export default function AnalysisCard({ analysis }: { analysis: AnalysisPayload }
       style={shadows.soft}
     >
       {/* Hero section */}
-      <View className="px-5 pt-5 pb-4">
-        <View className="flex-row items-start gap-4">
-          <ScoreRing score={analysis.score} />
-          <View className="flex-1 pt-1">
-            <View className="flex-row items-center gap-2 mb-1.5">
+      <View style={{ paddingHorizontal: 24, paddingTop: 24, paddingBottom: 20 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 20 }}>
+          <View style={{ borderRadius: 16, backgroundColor: colors.gray50, padding: 10 }}>
+            <ScoreRing score={analysis.score} />
+          </View>
+          <View style={{ flex: 1, paddingTop: 4 }}>
+            <View className="flex-row items-center gap-2 mb-2">
               <View
                 className="rounded-full px-2.5 py-0.5"
                 style={{ backgroundColor: outcome.colors[0] }}
@@ -87,7 +89,7 @@ export default function AnalysisCard({ analysis }: { analysis: AnalysisPayload }
             )}
             {analysis.score_reasoning ? (
               <Text
-                className="text-gray-400 mt-1.5 leading-relaxed"
+                className="text-gray-400 mt-2 leading-relaxed"
                 style={{ fontFamily: fonts.regular, fontSize: 11.5 }}
               >
                 {analysis.score_reasoning}
@@ -98,14 +100,14 @@ export default function AnalysisCard({ analysis }: { analysis: AnalysisPayload }
       </View>
 
       {/* Divider */}
-      <View className="mx-5 h-px bg-gray-200/60" />
+      <View style={{ marginHorizontal: 24, height: 0.5, backgroundColor: 'rgba(0,0,0,0.06)' }} />
 
       {/* Details */}
-      <View className="px-5 py-4 gap-4">
+      <View style={{ paddingHorizontal: 24, paddingVertical: 20, gap: 20 }}>
         {/* Tactics */}
         {analysis.tactics_used?.length > 0 && (
           <Section icon={Zap} title="Tactics" delay={100}>
-            <View className="flex-row flex-wrap gap-1.5">
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
               {analysis.tactics_used.map((t, i) => {
                 const eff = t.effectiveness?.toLowerCase();
                 const bg =
@@ -115,10 +117,10 @@ export default function AnalysisCard({ analysis }: { analysis: AnalysisPayload }
                 return (
                   <View
                     key={i}
-                    className="rounded-lg border border-gray-100 px-2 py-1"
+                    className="rounded-lg border border-gray-100 px-2.5 py-1"
                     style={{ backgroundColor: bg }}
                   >
-                    <Text style={{ fontFamily: fonts.medium, fontSize: 11, color: fg }}>
+                    <Text style={{ fontFamily: fonts.medium, fontSize: 11.5, color: fg }}>
                       {t.name}
                     </Text>
                   </View>
@@ -131,7 +133,7 @@ export default function AnalysisCard({ analysis }: { analysis: AnalysisPayload }
         {/* Key Moments */}
         {analysis.key_moments?.length > 0 && (
           <Section icon={Target} title="Key Moments" delay={150}>
-            <View className="gap-1.5">
+            <View className="gap-2">
               {analysis.key_moments.map((m, i) => (
                 <View key={i} className="flex-row items-start gap-2">
                   <View className="mt-1.5 h-1 w-1 rounded-full bg-gray-300" />
@@ -186,7 +188,7 @@ export default function AnalysisCard({ analysis }: { analysis: AnalysisPayload }
         {/* Suggestions */}
         {analysis.improvement_suggestions?.length > 0 && (
           <ExpandableSection icon={Lightbulb} title="Next Time" delay={250}>
-            <View className="gap-1.5">
+            <View className="gap-2">
               {analysis.improvement_suggestions.map((s, i) => (
                 <View key={i} className="flex-row items-start gap-2">
                   <View className="mt-1.5 h-1 w-1 rounded-full bg-gray-300" />

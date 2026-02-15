@@ -4,14 +4,19 @@ import type { TaskSummary } from '../lib/types';
 
 export function usePastTasks() {
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
+  const [loading, setLoading] = useState(false);
 
   const refresh = useCallback(() => {
-    listTasks().then(setTasks).catch(() => {});
+    setLoading(true);
+    listTasks()
+      .then(setTasks)
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
-  return { tasks, refresh };
+  return { tasks, loading, refresh };
 }

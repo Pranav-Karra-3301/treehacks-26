@@ -35,7 +35,8 @@ export default function ExpandableSection({
 
   const contentStyle = useAnimatedStyle(() => ({
     opacity: height.value,
-    maxHeight: height.value * 500,
+    maxHeight: height.value * 600,
+    marginTop: height.value * 8,
     overflow: 'hidden' as const,
   }));
 
@@ -53,10 +54,10 @@ export default function ExpandableSection({
         <Text
           style={{
             fontFamily: fonts.semibold,
-            fontSize: 11,
+            fontSize: 12,
             color: colors.gray400,
             textTransform: 'uppercase',
-            letterSpacing: 1,
+            letterSpacing: 0.8,
           }}
         >
           {title}

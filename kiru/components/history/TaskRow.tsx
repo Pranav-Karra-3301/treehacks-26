@@ -1,7 +1,6 @@
 import { View, Text, Pressable } from 'react-native';
-import { ChevronRight } from 'lucide-react-native';
 import type { TaskSummary, CallOutcome } from '../../lib/types';
-import { colors, fonts, shadows } from '../../lib/theme';
+import { colors, fonts } from '../../lib/theme';
 
 const outcomeBadge: Record<CallOutcome, { bg: string; fg: string }> = {
   success: { bg: colors.emerald50, fg: colors.emerald600 },
@@ -15,16 +14,7 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
   });
-}
-
-function formatDuration(seconds: number) {
-  if (seconds < 60) return `${seconds}s`;
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}m ${s}s`;
 }
 
 type Props = {
@@ -38,34 +28,35 @@ export default function TaskRow({ task, onPress }: Props) {
   return (
     <Pressable
       onPress={onPress}
-      className="rounded-xl border border-gray-100 bg-white px-4 py-3"
-      style={shadows.soft}
+      style={{
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderBottomWidth: 0.5,
+        borderBottomColor: 'rgba(0,0,0,0.06)',
+      }}
     >
-      <View className="flex-row items-start justify-between gap-3">
-        <View className="flex-1 min-w-0">
-          <Text
-            numberOfLines={1}
-            style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.gray900 }}
-          >
-            {task.objective || 'Untitled'}
+      <Text
+        numberOfLines={1}
+        style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.gray900 }}
+      >
+        {task.objective || 'Untitled'}
+      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
+        <View
+          style={{
+            borderRadius: 99,
+            paddingHorizontal: 6,
+            paddingVertical: 1,
+            backgroundColor: badge.bg,
+          }}
+        >
+          <Text style={{ fontFamily: fonts.medium, fontSize: 10, color: badge.fg }}>
+            {task.outcome}
           </Text>
-          <View className="flex-row items-center gap-2 mt-1">
-            <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: badge.bg }}>
-              <Text style={{ fontFamily: fonts.medium, fontSize: 10, color: badge.fg }}>
-                {task.outcome}
-              </Text>
-            </View>
-            {task.duration_seconds > 0 && (
-              <Text style={{ fontFamily: fonts.regular, fontSize: 11, color: colors.gray400 }}>
-                {formatDuration(task.duration_seconds)}
-              </Text>
-            )}
-            <Text style={{ fontFamily: fonts.regular, fontSize: 11, color: colors.gray400 }}>
-              {formatDate(task.created_at)}
-            </Text>
-          </View>
         </View>
-        <ChevronRight size={14} color={colors.gray300} style={{ marginTop: 4 }} />
+        <Text style={{ fontFamily: fonts.regular, fontSize: 11, color: colors.gray400 }}>
+          {formatDate(task.created_at)}
+        </Text>
       </View>
     </Pressable>
   );

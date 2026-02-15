@@ -1,4 +1,4 @@
-import { View, Text } from 'react-native';
+import { View } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -10,7 +10,7 @@ import Animated, {
   FadeOut,
 } from 'react-native-reanimated';
 import { useEffect } from 'react';
-import { colors, fonts, shadows } from '../../lib/theme';
+import { colors, shadows } from '../../lib/theme';
 
 function BounceDot({ index }: { index: number }) {
   const scale = useSharedValue(0.4);
@@ -53,21 +53,22 @@ export default function TypingIndicator() {
     <Animated.View
       entering={FadeIn.duration(200)}
       exiting={FadeOut.duration(200)}
-      className="flex-row justify-start items-start gap-2.5"
+      style={{ paddingRight: 48 }}
     >
       <View
-        className="h-7 w-7 rounded-full bg-gray-900 items-center justify-center mt-0.5"
-        style={shadows.soft}
+        style={{
+          backgroundColor: colors.white,
+          borderRadius: 20,
+          borderBottomLeftRadius: 6,
+          borderWidth: 0.5,
+          borderColor: 'rgba(0,0,0,0.04)',
+          paddingHorizontal: 16,
+          paddingVertical: 14,
+          alignSelf: 'flex-start',
+          ...shadows.soft,
+        }}
       >
-        <Text style={{ fontFamily: fonts.serifItalic, fontSize: 10, color: colors.gray300 }}>
-          k
-        </Text>
-      </View>
-      <View
-        className="rounded-2xl rounded-tl-md bg-white border border-gray-100 px-4 py-3"
-        style={shadows.soft}
-      >
-        <View className="flex-row items-center gap-1">
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
           {[0, 1, 2].map((i) => (
             <BounceDot key={i} index={i} />
           ))}

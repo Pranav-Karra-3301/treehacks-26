@@ -1,5 +1,4 @@
 import { View, TextInput, Pressable, Platform, KeyboardAvoidingView } from 'react-native';
-import { BlurView } from 'expo-blur';
 import { ArrowUp } from 'lucide-react-native';
 import { colors, fonts, shadows } from '../../lib/theme';
 import * as Haptics from 'expo-haptics';
@@ -32,10 +31,28 @@ export default function ChatInput({
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={0}
     >
-      <BlurView intensity={80} tint="light" className="border-t border-gray-200/60 px-5 py-3.5">
+      <View
+        style={{
+          backgroundColor: colors.bg,
+          borderTopWidth: 0.5,
+          borderTopColor: 'rgba(0,0,0,0.06)',
+          paddingHorizontal: 16,
+          paddingVertical: 12,
+        }}
+      >
         <View
-          className="flex-row items-end gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-2.5"
-          style={shadows.soft}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'flex-end',
+            gap: 10,
+            borderRadius: 22,
+            borderWidth: 1,
+            borderColor: colors.gray200,
+            backgroundColor: colors.white,
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+            ...shadows.soft,
+          }}
         >
           <TextInput
             value={value}
@@ -51,7 +68,7 @@ export default function ChatInput({
             style={{
               flex: 1,
               fontFamily: fonts.regular,
-              fontSize: 14,
+              fontSize: 15,
               color: disabled ? colors.gray400 : colors.gray900,
               maxHeight: 120,
               paddingTop: Platform.OS === 'ios' ? 2 : 0,
@@ -61,18 +78,19 @@ export default function ChatInput({
           <Pressable
             onPress={handleSend}
             disabled={sendDisabled}
-            className="h-8 w-8 rounded-full items-center justify-center"
-            style={[
-              shadows.soft,
-              {
-                backgroundColor: sendDisabled ? colors.gray200 : colors.gray900,
-              },
-            ]}
+            style={{
+              height: 28,
+              width: 28,
+              borderRadius: 14,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: sendDisabled ? colors.gray200 : colors.gray900,
+            }}
           >
-            <ArrowUp size={15} strokeWidth={2.5} color={sendDisabled ? colors.gray400 : '#fff'} />
+            <ArrowUp size={14} strokeWidth={2.5} color={sendDisabled ? colors.gray400 : '#fff'} />
           </Pressable>
         </View>
-      </BlurView>
+      </View>
     </KeyboardAvoidingView>
   );
 }

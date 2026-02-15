@@ -64,7 +64,7 @@ export default function ScoreRing({ score }: { score: number }) {
         <Text
           style={{
             fontFamily: fonts.medium,
-            fontSize: 9,
+            fontSize: 10,
             color: colors.gray400,
             textTransform: 'uppercase',
             letterSpacing: 1,

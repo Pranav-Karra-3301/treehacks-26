@@ -10,6 +10,7 @@ type AudioState = {
 
 export function useAudioPlayer(uri: string) {
   const soundRef = useRef<Audio.Sound | null>(null);
+  const playingRef = useRef(false);
   const [state, setState] = useState<AudioState>({
     playing: false,
     duration: 0,
@@ -33,6 +34,7 @@ export function useAudioPlayer(uri: string) {
         { shouldPlay: false },
         (status) => {
           if (!status.isLoaded) return;
+          playingRef.current = status.isPlaying;
           setState((prev) => ({
             ...prev,
             playing: status.isPlaying,
@@ -40,6 +42,7 @@ export function useAudioPlayer(uri: string) {
             position: (status.positionMillis ?? 0) / 1000,
           }));
           if (status.didJustFinish) {
+            playingRef.current = false;
             setState((prev) => ({ ...prev, playing: false, position: 0 }));
           }
         },
@@ -55,20 +58,42 @@ export function useAudioPlayer(uri: string) {
   }, [load]);
 
   const togglePlay = useCallback(async () => {
-    const sound = soundRef.current;
-    if (!sound) return;
-    if (state.playing) {
-      await sound.pauseAsync();
-    } else {
-      await sound.playAsync();
+    let sound = soundRef.current;
+    if (!sound) {
+      try {
+        await load();
+        sound = soundRef.current;
+      } catch {
+        return;
+      }
     }
-  }, [state.playing]);
+    if (!sound) return;
+
+    try {
+      if (playingRef.current) {
+        await sound.pauseAsync();
+      } else {
+        await sound.playAsync();
+      }
+    } catch {
+      // Sound may have been unloaded — try to reload
+      try {
+        await load();
+      } catch {
+        // give up
+      }
+    }
+  }, [load]);
 
   const seek = useCallback(
     async (seconds: number) => {
       const sound = soundRef.current;
       if (!sound) return;
-      await sound.setPositionAsync(seconds * 1000);
+      try {
+        await sound.setPositionAsync(seconds * 1000);
+      } catch {
+        // ignore seek errors
+      }
     },
     [],
   );

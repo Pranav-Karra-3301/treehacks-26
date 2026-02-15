@@ -60,7 +60,7 @@ export default function SearchResultCards({ results, onCall, onSkip }: Props) {
             <Animated.View
               key={result.url ?? `result-${i}`}
               entering={FadeInDown.delay(i * 50).duration(250)}
-              className="flex-row items-center gap-2.5 rounded-xl bg-white border border-gray-100 pl-2.5 pr-2 py-2"
+              className="flex-row items-center gap-2.5 rounded-[16px] bg-white border border-gray-100 pl-2.5 pr-2 py-2"
               style={shadows.soft}
             >
               <BizIcon url={result.url} title={result.title || 'Untitled'} />
@@ -112,7 +112,7 @@ export default function SearchResultCards({ results, onCall, onSkip }: Props) {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                     onCall(result, phone);
                   }}
-                  className="flex-row items-center gap-1 rounded-lg bg-gray-900 pl-2.5 pr-3 py-1.5"
+                  className="flex-row items-center gap-1 rounded-[10px] bg-gray-900 pl-2.5 pr-3 py-1.5"
                 >
                   <Phone size={10} strokeWidth={2.5} color="#fff" />
                   <Text style={{ fontFamily: fonts.medium, fontSize: 11.5, color: '#fff' }}>

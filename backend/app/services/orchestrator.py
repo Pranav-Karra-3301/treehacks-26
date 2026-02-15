@@ -723,8 +723,8 @@ class CallOrchestrator:
 
     async def stop_session(self, session_id: str, *, stop_reason: str = "unknown") -> None:
         session = await self._sessions.get(session_id)
-        if not session:
-            return
+        if not session or session.status == "ended":
+            return  # Already ended — skip duplicate
 
         task_id = session.task_id
         with timed_step("orchestrator", "stop_session", session_id=session_id, task_id=task_id):
