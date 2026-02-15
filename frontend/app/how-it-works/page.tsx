@@ -192,16 +192,16 @@ export default function HowItWorksPage() {
 
       {/* ── Nav ─────────────────────────────────── */}
       <div className="sticky top-0 z-50 flex justify-center px-4 pt-3 mix-blend-difference">
-        <nav className="w-full max-w-5xl rounded-2xl backdrop-blur-xl border border-white/10 shadow-elevated">
+        <nav className="w-full max-w-5xl rounded-2xl bg-white">
           <div className="flex items-center justify-between px-6 h-14">
-            <Link href="/" className="tracking-tight text-white">
+            <Link href="/" className="tracking-tight text-gray-950">
               <span className="font-serif italic text-[28px]">kiru</span>
             </Link>
             <div className="flex items-center gap-6">
-              <Link href="/how-it-works" className="hidden sm:block text-[13px] text-white font-medium transition">How it works</Link>
-              <Link href="/#features" className="hidden sm:block text-[13px] text-white/60 transition hover:text-white">Features</Link>
-              <Link href="/dashboard" className="hidden sm:block text-[13px] text-white/60 transition hover:text-white">Dashboard</Link>
-              <Link href="/chat" className="group inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-1.5 text-[13px] font-medium text-gray-950 transition hover:bg-gray-200">
+              <Link href="/how-it-works" className="hidden sm:block text-[13px] text-gray-900 font-medium transition">How it works</Link>
+              <Link href="/#features" className="hidden sm:block text-[13px] text-gray-500 transition hover:text-gray-900">Features</Link>
+              <Link href="/dashboard" className="hidden sm:block text-[13px] text-gray-500 transition hover:text-gray-900">Dashboard</Link>
+              <Link href="/chat" className="group inline-flex items-center gap-1.5 rounded-full bg-gray-950 px-4 py-1.5 text-[13px] font-medium text-white transition hover:bg-gray-800">
                 Launch App <ArrowUpRight size={12} strokeWidth={2.5} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
               </Link>
             </div>
