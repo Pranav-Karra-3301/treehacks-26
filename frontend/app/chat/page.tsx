@@ -2071,7 +2071,8 @@ export default function ChatPage() {
     message: string,
     multiHistoryList: MultiCallHistoryEntry[],
     currentMultiSummary: MultiCallSummaryPayload | null,
-    currentMultiCalls: Record<string, MultiCallState>
+    currentMultiCalls: Record<string, MultiCallState>,
+    activeHistoryId: string | null
   ): FollowUpIntent | null {
     const lowerMsg = message.toLowerCase();
 
@@ -2098,8 +2099,13 @@ export default function ChatPage() {
       return null; // Not a follow-up intent
     }
 
+    const hasCurrentCalls = Object.keys(currentMultiCalls).length > 0;
+    if (!hasCurrentCalls && !activeHistoryId) {
+      return null;
+    }
+
     // Priority 1: Use current in-memory multi-call session if available
-    if (currentMultiSummary && Object.keys(currentMultiCalls).length > 0) {
+    if (currentMultiSummary && hasCurrentCalls) {
       const businesses = Object.entries(currentMultiCalls).map(([phone, state]) => ({
         phone,
         taskId: state.taskId,
@@ -2116,8 +2122,10 @@ export default function ChatPage() {
       };
     }
 
-    // Priority 2: Use most recent multi-call from history
-    const latestSession = multiHistoryList[0]; // Already sorted by createdAt DESC
+    // Priority 2: Use active run from history (or most recent if active history unavailable)
+    const latestSession = activeHistoryId
+      ? (multiHistoryList.find((entry) => entry.id === activeHistoryId) ?? (hasCurrentCalls ? multiHistoryList[0] : null))
+      : null;
 
     if (!latestSession || latestSession.calls.length === 0) {
       return null;
@@ -2867,7 +2875,13 @@ export default function ChatPage() {
 
     // If ended phase, check if this is a follow-up before resetting
     if (currentPhase === 'ended') {
-      const followUpIntent = detectFollowUpIntent(text, multiHistory, multiSummary, multiCallsRef.current);
+      const followUpIntent = detectFollowUpIntent(
+        text,
+        multiHistory,
+        multiSummary,
+        multiCallsRef.current,
+        activeMultiHistoryId,
+      );
 
       if (followUpIntent) {
         // This is a follow-up - DON'T reset state, preserve context
