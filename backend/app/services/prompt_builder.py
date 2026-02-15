@@ -339,18 +339,46 @@ def build_negotiation_prompt(
 # ---------------------------------------------------------------------------
 
 
-def build_greeting(task: Dict[str, Any]) -> str:
-    """Build a short, natural opening line for the voice agent greeting.
+_GREETING_PAUSE = "... ... ... "
 
-    This should be a single natural sentence -- NOT the full system prompt.
-    The agent should NOT parrot the user's raw objective text. The objective
-    is already in the system prompt and will guide the conversation naturally.
+_GREETING_PATTERNS: list[tuple[tuple[str, ...], str]] = [
+    # Food / ordering
+    (("order", "food", "pizza", "delivery", "pickup", "takeout", "take out",
+      "burger", "sushi", "chinese", "thai", "mexican", "wings"),
+     "Hey, I'd like to place an order."),
+    # Reservation / booking
+    (("reserv", "book", "table for", "appointment", "schedule"),
+     "Hi, I'd like to make a reservation."),
+    # Pricing / quotes / availability
+    (("price", "pricing", "quote", "how much", "cost", "rate", "availab",
+      "hours", "open", "do you have"),
+     "Hi, I had a quick question."),
+    # Cancel / change
+    (("cancel", "refund", "return", "exchange"),
+     "Hi, I need some help with my account."),
+    # Bill / negotiate / lower / discount
+    (("bill", "negotiat", "lower", "discount", "rate", "plan", "subscript",
+      "loyalty", "retention", "overpay", "overcharg"),
+     "Hi yea... I was hoping you could help me out with my account."),
+]
+
+_DEFAULT_GREETING = "Hi, how's it going? I was hoping you could help me out."
+
+
+def build_greeting(task: Dict[str, Any]) -> str:
+    """Build a short, context-aware opening line for the voice agent.
+
+    Picks a natural greeting based on the task objective. Always prefixed
+    with a TTS pause so the recipient has time to put the phone to their ear.
     """
     opening = task.get("opening_line")
     if opening:
-        return opening.strip()
+        return _GREETING_PAUSE + opening.strip()
 
-    # Use a natural, generic greeting with a leading pause to give the
-    # recipient time to put the phone to their ear. The ellipses create
-    # ~3-4 seconds of silence in TTS before the agent speaks.
-    return "... ... ... Hi, yea... I was hoping you could help me out with something."
+    objective = (task.get("objective") or "").lower()
+
+    for keywords, greeting in _GREETING_PATTERNS:
+        if any(kw in objective for kw in keywords):
+            return _GREETING_PAUSE + greeting
+
+    return _GREETING_PAUSE + _DEFAULT_GREETING
