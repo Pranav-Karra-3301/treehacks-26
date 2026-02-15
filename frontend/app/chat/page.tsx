@@ -2884,10 +2884,10 @@ export default function ChatPage() {
                 transition={{ duration: 0.2, ease }}
                 className="flex justify-start items-start gap-2.5"
               >
-                <div className="h-7 w-7 shrink-0 rounded-full bg-gradient-to-br from-gray-800 to-gray-950 flex items-center justify-center mt-0.5 shadow-soft">
-                  <span className="text-[10px] font-serif italic text-gray-300">k</span>
+                <div className="h-7 w-7 shrink-0 rounded-[10px] overflow-hidden flex items-center justify-center shadow-soft bg-gray-100 mt-1">
+                  <img src="/favicon.png" alt="Agent" className="h-full w-full object-cover" />
                 </div>
-                <div className="rounded-2xl rounded-tl-md bg-white border border-gray-100 px-4 py-3 shadow-soft">
+                <div className="rounded-[10px] rounded-tl-[6px] bg-white border border-gray-100 px-4 py-3 shadow-soft">
                   <div className="flex items-center gap-1">
                     {[0, 1, 2].map((i) => (
                       <span

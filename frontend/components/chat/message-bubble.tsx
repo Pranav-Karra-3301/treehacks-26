@@ -90,10 +90,10 @@ const MessageBubble = React.memo(function MessageBubble({
   // Default: 'ai' role
   return (
     <div className="flex justify-start items-start gap-2.5">
-      <div className="h-7 w-7 shrink-0 rounded-full bg-gradient-to-br from-gray-800 to-gray-950 flex items-center justify-center mt-0.5 shadow-soft">
-        <span className="text-[10px] font-serif italic text-gray-300">k</span>
+      <div className="h-7 w-7 shrink-0 rounded-[10px] overflow-hidden flex items-center justify-center shadow-soft bg-gray-100 mt-1">
+        <img src="/favicon.png" alt="Agent" className="h-full w-full object-cover" />
       </div>
-      <div className="max-w-[75%] rounded-2xl rounded-tl-md bg-white border border-gray-100 px-4 py-2.5 text-[14px] leading-relaxed text-gray-900 shadow-soft">
+      <div className="max-w-[75%] rounded-[10px] rounded-tl-[6px] bg-white border border-gray-100 px-4 py-2.5 text-[14px] leading-relaxed text-gray-900 shadow-soft">
         {message.text}
       </div>
     </div>
