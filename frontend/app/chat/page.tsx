@@ -654,8 +654,7 @@ export default function ChatPage() {
     setUserLocation(snapshot.userLocation ?? null);
     setMultiSummary(snapshot.multiSummary ?? null);
     const restoredSummaryState: MultiSummaryState =
-      snapshot.multiSummaryState === 'loading'
-      || snapshot.multiSummaryState === 'ready'
+      snapshot.multiSummaryState === 'ready'
       || snapshot.multiSummaryState === 'error'
       || snapshot.multiSummaryState === 'idle'
         ? snapshot.multiSummaryState

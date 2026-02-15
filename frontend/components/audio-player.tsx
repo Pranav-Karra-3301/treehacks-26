@@ -52,14 +52,17 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
         setSideIndex((prev) => Math.min(prev + 1, AUDIO_SIDES.length - 1));
         return;
       }
-      setError('Recording is still processing.');
       setRetryCount((prev) => {
-        if (prev >= 20) return prev;
+        if (prev >= 8) {
+          setError('Recording unavailable.');
+          return prev;
+        }
+        setError('Recording is still processing.');
         retryTimerRef.current = setTimeout(() => {
           setSideIndex(0);
           setReloadTick((t) => t + 1);
           setError(null);
-        }, 2500);
+        }, 3000);
         return prev + 1;
       });
     };
@@ -76,6 +79,7 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
       audio.removeEventListener('loadeddata', onLoadedData);
       audio.removeEventListener('ended', onEnded);
       audio.removeEventListener('error', onError);
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     };
   }, [sideIndex]);
 
@@ -102,11 +106,12 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   if (error) {
+    const gavUp = retryCount >= 8;
     return (
       <div className="rounded-xl bg-gray-50 border border-gray-100 px-4 py-2.5">
         <div className="flex items-center justify-between gap-3">
           <p className="text-[12px] text-gray-500">
-            {error} Retrying automatically...
+            {error}{gavUp ? '' : ' Retrying automatically...'}
           </p>
           <button
             type="button"
