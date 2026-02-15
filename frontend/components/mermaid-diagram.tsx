@@ -1,17 +1,47 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { renderMermaid, THEMES } from 'beautiful-mermaid';
+import { renderMermaid } from 'beautiful-mermaid';
 
-type ThemeName = keyof typeof THEMES;
+// High-contrast theme on white
+const diagramTheme = {
+  bg: '#FFFFFF',
+  fg: '#18181B',
+  line: '#71717a',
+  accent: '#27272a',
+  muted: '#52525b',
+  surface: '#f4f4f5',
+  border: '#a1a1aa',
+};
 
 interface MermaidDiagramProps {
   chart: string;
-  theme?: ThemeName;
   className?: string;
 }
 
-export default function MermaidDiagram({ chart, theme = 'zinc-light', className = '' }: MermaidDiagramProps) {
+function makeResponsive(svgString: string): string {
+  // Pad the viewBox so nothing gets clipped at edges
+  const vbMatch = svgString.match(/viewBox="([^"]*)"/);
+  let processed = svgString;
+
+  if (vbMatch) {
+    const parts = vbMatch[1].split(/\s+/).map(Number);
+    if (parts.length === 4) {
+      const pad = 20;
+      const newVb = `${parts[0] - pad} ${parts[1] - pad} ${parts[2] + pad * 2} ${parts[3] + pad * 2}`;
+      processed = processed.replace(/viewBox="[^"]*"/, `viewBox="${newVb}"`);
+    }
+  }
+
+  // Make SVG responsive: width 100%, height auto (preserves aspect ratio via viewBox)
+  processed = processed
+    .replace(/<svg([^>]*)width="[^"]*"/, '<svg$1width="100%"')
+    .replace(/<svg([^>]*)height="[^"]*"/, '<svg$1height="auto"');
+
+  return processed;
+}
+
+export default function MermaidDiagram({ chart, className = '' }: MermaidDiagramProps) {
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -22,11 +52,11 @@ export default function MermaidDiagram({ chart, theme = 'zinc-light', className 
     async function render() {
       try {
         const result = await renderMermaid(chart.trim(), {
-          ...THEMES[theme],
+          ...diagramTheme,
           font: 'Inter',
         });
         if (!cancelled) {
-          setSvg(result);
+          setSvg(makeResponsive(result));
           setError(null);
         }
       } catch (err) {
@@ -39,7 +69,7 @@ export default function MermaidDiagram({ chart, theme = 'zinc-light', className 
 
     render();
     return () => { cancelled = true; };
-  }, [chart, theme]);
+  }, [chart]);
 
   if (error) {
     return (
@@ -51,10 +81,10 @@ export default function MermaidDiagram({ chart, theme = 'zinc-light', className 
 
   if (!svg) {
     return (
-      <div className={`rounded-2xl border border-gray-100 bg-gray-50/30 p-8 ${className}`}>
+      <div className={`rounded-2xl border border-gray-200 bg-gray-50/50 p-8 ${className}`}>
         <div className="animate-pulse space-y-3">
           <div className="h-4 w-1/3 rounded bg-gray-200/60" />
-          <div className="h-32 w-full rounded-lg bg-gray-100/80" />
+          <div className="h-48 w-full rounded-lg bg-gray-100/80" />
         </div>
       </div>
     );
@@ -63,7 +93,7 @@ export default function MermaidDiagram({ chart, theme = 'zinc-light', className 
   return (
     <div
       ref={containerRef}
-      className={`rounded-2xl border border-gray-100 shadow-soft overflow-x-auto bg-white p-4 sm:p-6 ${className}`}
+      className={`rounded-2xl border border-gray-200 shadow-soft overflow-x-auto bg-white p-6 sm:p-8 flex items-center justify-center ${className}`}
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );

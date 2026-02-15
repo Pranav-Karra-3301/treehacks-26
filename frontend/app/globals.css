@@ -1,4 +1,82 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@font-face {
+  font-family: 'Soehne';
+  src: url('/fonts/k-sohne-leicht-300.ttf') format('truetype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Soehne';
+  src: url('/fonts/k-sohne-leicht-kursiv-300.ttf') format('truetype');
+  font-weight: 300;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Soehne';
+  src: url('/fonts/k-sohne-buch.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Soehne';
+  src: url('/fonts/k-sohne-buch-kursiv.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Soehne';
+  src: url('/fonts/k-sohne-kraftig-500.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Soehne';
+  src: url('/fonts/k-sohne-kraftig-kursiv-500.ttf') format('truetype');
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Soehne';
+  src: url('/fonts/k-sohne-dreiviertelfett-700.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Soehne';
+  src: url('/fonts/k-sohne-dreiviertelfett-kursiv-700.ttf') format('truetype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Soehne';
+  src: url('/fonts/k-sohne-extrafett-900.ttf') format('truetype');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Soehne';
+  src: url('/fonts/k-sohne-extrafett-kursiv-900.ttf') format('truetype');
+  font-weight: 900;
+  font-style: italic;
+  font-display: swap;
+}
 
 @font-face {
   font-family: 'Martina Plantijn';
@@ -98,7 +176,16 @@ body {
   padding: 0;
   background: #ffffff;
   color: #09090b;
-  font-family: Inter, system-ui, -apple-system, sans-serif;
+  font-family: 'Soehne', system-ui, -apple-system, sans-serif;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: 'Martina Plantijn', Georgia, serif !important;
 }
 
 ::selection {

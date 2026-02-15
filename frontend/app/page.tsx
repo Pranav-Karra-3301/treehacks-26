@@ -8,7 +8,14 @@ import { ArrowRight, ArrowUpRight, Phone, Mic, BarChart3, Shield, Sparkles, Tren
 // ─── Branded wordmark ──────────────────────────────────────────────────────────
 
 function Kiru({ className = '' }: { className?: string }) {
-  return <span className={`font-serif italic ${className}`}>kiru</span>;
+  return (
+    <span
+      className={`italic ${className}`}
+      style={{ fontFamily: '"Martina Plantijn", Georgia, serif' }}
+    >
+      kiru
+    </span>
+  );
 }
 
 // ─── Animated counter ───────────────────────────────────────────────────────────

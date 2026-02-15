@@ -201,7 +201,12 @@ export default function DashboardPage() {
               <ArrowLeft size={16} />
             </Link>
             <div className="h-4 w-px bg-gray-200" />
-            <span className="text-[28px] tracking-tight text-gray-950 font-serif italic">kiru</span>
+            <span
+              className="text-[28px] tracking-tight text-gray-950 italic"
+              style={{ fontFamily: '"Martina Plantijn", Georgia, serif' }}
+            >
+              kiru
+            </span>
             <span className="text-[12px] text-gray-400 font-medium ml-0.5 mt-px">Dashboard</span>
           </div>
           <Link href="/chat" className="group inline-flex items-center gap-1.5 rounded-full bg-gray-950 px-4 py-1.5 text-[13px] font-medium text-white hover:bg-gray-800 transition">

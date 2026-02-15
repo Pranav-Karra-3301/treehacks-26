@@ -624,7 +624,12 @@ export default function ChatPage() {
               <ArrowLeft size={16} />
             </Link>
             <div className="h-4 w-px bg-gray-200" />
-            <span className="text-[28px] tracking-tight text-gray-950 font-serif italic">kiru</span>
+            <span
+              className="text-[28px] tracking-tight text-gray-950 italic"
+              style={{ fontFamily: '"Martina Plantijn", Georgia, serif' }}
+            >
+              kiru
+            </span>
           </div>
           <div className="flex items-center gap-3">
             {isOnCall && (

@@ -5,7 +5,7 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['"Soehne"', 'system-ui', '-apple-system', 'sans-serif'],
         serif: ['"Martina Plantijn"', 'Georgia', 'serif'],
       },
       fontSize: {
