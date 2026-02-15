@@ -54,7 +54,13 @@ type MultiCallHistoryEntry = {
   objective: string;
   createdAt: string;
   mode?: ConcurrentMode;
-  calls: Array<{ phone: string; taskId: string }>;
+  calls: Array<{ 
+    phone: string; 
+    taskId: string;
+    vendor?: string | null;
+    summary?: string | null;
+  }>;
+  multiSummary?: MultiCallSummaryPayload | null;
 };
 type MultiSummaryState = 'idle' | 'loading' | 'ready' | 'error';
 type ChatSnapshot = {
@@ -1203,6 +1209,32 @@ export default function ChatPage() {
         const response = await getMultiCallSummary(succeededTaskIds, objectiveText);
         setMultiSummary(response.summary);
         setMultiSummaryState('ready');
+        
+        // Update multiHistory with the summary and call details
+        setMultiHistory((prev) => {
+          if (prev.length === 0) return prev;
+          const updated = [...prev];
+          const entry = updated[0]; // Most recent entry
+          if (entry && !entry.multiSummary) {
+            // Update with summary and enhance call data with analysis
+            const enhancedCalls = entry.calls.map((call) => {
+              const state = multiCallsRef.current[call.phone];
+              return {
+                ...call,
+                vendor: state?.analysis?.vendor || call.vendor,
+                summary: state?.analysis?.summary || call.summary,
+              };
+            });
+            updated[0] = {
+              ...entry,
+              calls: enhancedCalls,
+              multiSummary: response.summary,
+            };
+            persistMultiHistory(updated);
+          }
+          return updated;
+        });
+        
         return; // Success — exit retry loop
       } catch (err) {
         if (attempt < maxAttempts) {
@@ -1769,7 +1801,12 @@ export default function ChatPage() {
 
     const historyCalls = Object.entries(newState)
       .filter(([, state]) => Boolean(state.taskId))
-      .map(([phone, state]) => ({ phone, taskId: state.taskId }));
+      .map(([phone, state]) => ({ 
+        phone, 
+        taskId: state.taskId,
+        vendor: targetDirectory[phone]?.title || null,
+        summary: null, // Will be populated after analysis
+      }));
     if (historyCalls.length > 0) {
       const historyEntry: MultiCallHistoryEntry = {
         id: runId,
@@ -1777,6 +1814,7 @@ export default function ChatPage() {
         createdAt: new Date().toISOString(),
         mode,
         calls: historyCalls,
+        multiSummary: null, // Will be populated when summary is generated
       };
       setMultiHistory((prev) => {
         const withoutDup = prev.filter((entry) => entry.id !== historyEntry.id);
@@ -2014,6 +2052,225 @@ export default function ChatPage() {
       recommendation,
       'Use these competitor quotes as leverage to negotiate a better price.',
     ].filter(Boolean).join('\n');
+  }
+
+  type FollowUpIntent = {
+    sessionId: string;
+    objective: string;
+    allBusinesses: Array<{
+      phone: string;
+      taskId: string;
+      vendor?: string | null;
+      summary?: string | null;
+    }>;
+    multiSummary?: MultiCallSummaryPayload | null;
+    originalObjective?: string;
+  };
+
+  function detectFollowUpIntent(
+    message: string,
+    multiHistoryList: MultiCallHistoryEntry[],
+    currentMultiSummary: MultiCallSummaryPayload | null,
+    currentMultiCalls: Record<string, MultiCallState>
+  ): FollowUpIntent | null {
+    const lowerMsg = message.toLowerCase();
+
+    // Intent signals: references to previous calls
+    const intentSignals = [
+      'these gyms',
+      'those gyms',
+      'these businesses',
+      'those businesses',
+      'the gyms',
+      'the businesses',
+      'call them back',
+      'call back',
+      'follow up with them',
+      'call the same',
+      'same places',
+      'same numbers',
+      'those places',
+      'those numbers',
+      'them again',
+    ];
+
+    if (!intentSignals.some((signal) => lowerMsg.includes(signal))) {
+      return null; // Not a follow-up intent
+    }
+
+    // Priority 1: Use current in-memory multi-call session if available
+    if (currentMultiSummary && Object.keys(currentMultiCalls).length > 0) {
+      const businesses = Object.entries(currentMultiCalls).map(([phone, state]) => ({
+        phone,
+        taskId: state.taskId,
+        vendor: state.analysis?.vendor || multiCallTargets[phone]?.title || null,
+        summary: state.analysis?.summary || null,
+      }));
+
+      return {
+        sessionId: currentMultiSummary.generated_at || Date.now().toString(),
+        objective: message,
+        allBusinesses: businesses,
+        multiSummary: currentMultiSummary,
+        originalObjective: objective || undefined,
+      };
+    }
+
+    // Priority 2: Use most recent multi-call from history
+    const latestSession = multiHistoryList[0]; // Already sorted by createdAt DESC
+
+    if (!latestSession || latestSession.calls.length === 0) {
+      return null;
+    }
+
+    return {
+      sessionId: latestSession.id,
+      objective: message,
+      allBusinesses: latestSession.calls,
+      multiSummary: latestSession.multiSummary,
+      originalObjective: latestSession.objective,
+    };
+  }
+
+  function wordToNumber(word: string): number | null {
+    const map: Record<string, number> = {
+      one: 1,
+      two: 2,
+      three: 3,
+      four: 4,
+      five: 5,
+      six: 6,
+      seven: 7,
+      eight: 8,
+      nine: 9,
+      ten: 10,
+    };
+    return map[word.toLowerCase()] ?? null;
+  }
+
+  function parseBusinessSelection(
+    message: string,
+    followUpContext: FollowUpIntent
+  ): { selectedPhones: string[]; error?: undefined } | { error: string; selectedPhones?: undefined } {
+    const lowerMsg = message.toLowerCase();
+    const allBusinesses = followUpContext.allBusinesses;
+    const summary = followUpContext.multiSummary;
+
+    // Default: call all businesses
+    let selectedPhones = allBusinesses.map((b) => b.phone);
+
+    // Parse exclusions: "don't call the gym that offered X"
+    if (lowerMsg.includes("don't call") || lowerMsg.includes("not the")) {
+      // Extract price/offer mentions
+      const priceMatch = message.match(/\$(\d+)/);
+      if (priceMatch && summary?.price_comparison) {
+        const excludePrice = priceMatch[1];
+
+        // Find businesses that quoted this price
+        const excludeBusinesses = summary.price_comparison.filter((item) =>
+          item.quoted_prices?.some((p) => p.includes(excludePrice))
+        );
+
+        const excludePhones = new Set(
+          excludeBusinesses.map((b) => normalizePhone(b.phone)).filter((p): p is string => Boolean(p))
+        );
+
+        selectedPhones = selectedPhones.filter((phone) => !excludePhones.has(normalizePhone(phone) || ''));
+      }
+    }
+
+    // Parse "call the other two" → if 3 total and 1 excluded, call 2
+    const callTheOtherMatch = lowerMsg.match(/call (?:the )?other (\w+)/);
+    if (callTheOtherMatch) {
+      const countWord = callTheOtherMatch[1]; // "two", "one"
+      const expectedCount = wordToNumber(countWord);
+
+      if (expectedCount !== null && selectedPhones.length !== expectedCount) {
+        // Mismatch - ask for clarification
+        return {
+          error: `You mentioned calling ${countWord}, but I found ${selectedPhones.length} business${selectedPhones.length === 1 ? '' : 'es'}. Please clarify which ones to call.`,
+        };
+      }
+    }
+
+    return { selectedPhones };
+  }
+
+  async function buildFollowUpContext(
+    targetPhone: string,
+    followUpContext: FollowUpIntent
+  ): Promise<string> {
+    const normalized = normalizePhone(targetPhone);
+    const targetBusiness = followUpContext.allBusinesses.find(
+      (b) => normalizePhone(b.phone) === normalized
+    );
+
+    const contextParts: string[] = [];
+
+    // 1. Previous objective context
+    contextParts.push('PREVIOUS INTERACTION CONTEXT:');
+    const prevObjective = followUpContext.originalObjective || followUpContext.multiSummary?.overall_summary || 'pricing inquiry';
+    contextParts.push(`You previously called this business with objective: "${prevObjective}"`);
+
+    // 2. FULL transcript for the business being called
+    if (targetBusiness?.taskId) {
+      try {
+        const transcript = await getTaskTranscript(targetBusiness.taskId);
+        const vendorName = targetBusiness.vendor || formatPhone(targetPhone);
+        contextParts.push(`\nPREVIOUS CONVERSATION WITH THIS BUSINESS (${vendorName}):`);
+
+        // Format transcript as dialogue
+        if (transcript.turns && transcript.turns.length > 0) {
+          const dialogueLines = transcript.turns.map((turn) =>
+            `${turn.role === 'agent' ? 'You' : 'Them'}: ${turn.content}`
+          );
+          contextParts.push(dialogueLines.join('\n'));
+        }
+
+        // Add analysis summary
+        try {
+          const analysis = await getTaskAnalysis(targetBusiness.taskId);
+          if (analysis?.summary) {
+            contextParts.push(`\nKEY TAKEAWAYS FROM PREVIOUS CALL: ${analysis.summary}`);
+          }
+        } catch (analysisErr) {
+          // Analysis might not be available, that's ok
+          console.warn('Could not load analysis for', targetPhone, analysisErr);
+        }
+      } catch (err) {
+        console.warn('Could not load transcript for', targetPhone, err);
+        // Gracefully degrade - use summary from state if available
+        if (targetBusiness.summary) {
+          contextParts.push(`\nPREVIOUS CALL SUMMARY: ${targetBusiness.summary}`);
+        }
+      }
+    }
+
+    // 3. SUMMARY context from OTHER businesses for leverage
+    const otherBusinesses = followUpContext.allBusinesses.filter(
+      (b) => normalizePhone(b.phone) !== normalized
+    );
+
+    if (otherBusinesses.length > 0 && followUpContext.multiSummary?.price_comparison) {
+      contextParts.push('\nCOMPETITOR OFFERS (for leverage):');
+
+      for (const other of otherBusinesses) {
+        const otherNormalized = normalizePhone(other.phone);
+        const priceData = followUpContext.multiSummary.price_comparison.find(
+          (pc) => normalizePhone(pc.phone) === otherNormalized
+        );
+
+        if (priceData) {
+          const vendor = priceData.vendor || formatPhone(other.phone);
+          const prices = priceData.quoted_prices?.join(', ') || 'not captured';
+          const takeaways = priceData.key_takeaways?.slice(0, 2).join('; ') || '';
+
+          contextParts.push(`- ${vendor}: quoted ${prices}${takeaways ? `. ${takeaways}` : ''}`);
+        }
+      }
+    }
+
+    return contextParts.join('\n');
   }
 
   function handleCallFromSearch(result: BusinessResult, phone: string) {
@@ -2433,13 +2690,220 @@ export default function ChatPage() {
     addMessage({ role: 'ai', text: 'Please enter a valid US phone number, like (650) 555-1212.' });
   }
 
+  async function startFollowUpCalls(
+    selectedPhones: string[],
+    newObjective: string,
+    followUpContext: FollowUpIntent
+  ) {
+    // Generate new run ID for this follow-up session
+    const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    // Enter concurrent mode
+    setConcurrentTestMode(true);
+    setPhase('connecting');
+    setObjective(newObjective);
+
+    // Build target directory for the selected phones
+    const targetDirectory: Record<string, MultiCallTargetMeta> = {};
+    selectedPhones.forEach((phone) => {
+      const normalized = normalizePhone(phone);
+      if (!normalized) return;
+      const business = followUpContext.allBusinesses.find(
+        (b) => normalizePhone(b.phone) === normalized
+      );
+      targetDirectory[normalized] = {
+        phone: normalized,
+        source: 'manual',
+        title: business?.vendor || null,
+        url: null,
+        snippet: null,
+      };
+    });
+    setMultiCallTargets(targetDirectory);
+
+    // Build context for each phone concurrently
+    const callPromises = selectedPhones.map(async (phone) => {
+      const normalized = normalizePhone(phone);
+      if (!normalized) return { phone, taskId: '', ok: false };
+
+      const business = followUpContext.allBusinesses.find(
+        (b) => normalizePhone(b.phone) === normalized
+      );
+
+      try {
+        // Build smart hybrid context
+        const context = await buildFollowUpContext(phone, followUpContext);
+
+        // Create task with context
+        const task = await createTask({
+          target_phone: normalized,
+          objective: newObjective,
+          context, // Rich context injected here
+          task_type: 'custom',
+          style: 'collaborative',
+          run_id: runId,
+          run_mode: 'real',
+          ...(business?.vendor && { target_name: business.vendor }),
+          ...(userLocation && { location: userLocation }),
+        });
+
+        if (!task?.id) {
+          throw new Error('Task creation failed');
+        }
+
+        // Start the call
+        const callResult = await startCall(task.id);
+
+        return {
+          phone: normalized,
+          taskId: task.id,
+          ok: callResult.ok,
+          sessionId: callResult.session_id || null,
+        };
+      } catch (err) {
+        console.error('Failed to start follow-up call for', phone, err);
+        return { phone: normalized, taskId: '', ok: false, sessionId: null };
+      }
+    });
+
+    // Start all calls in parallel
+    const results = await Promise.all(callPromises);
+
+    // Initialize multi-call state for all results
+    const newState: Record<string, MultiCallState> = {};
+    const socketsToConnect: Array<{ phone: string; taskId: string }> = [];
+    let startedCount = 0;
+
+    for (const result of results) {
+      if (!result.phone) continue;
+
+      newState[result.phone] = {
+        taskId: result.taskId,
+        sessionId: result.sessionId,
+        status: result.ok ? 'pending' : 'failed',
+        transcript: result.ok
+          ? []
+          : [
+              {
+                id: `${Date.now()}-${Math.random()}`,
+                role: 'status',
+                text: 'Failed to start call',
+              },
+            ],
+        thinking: false,
+        analysis: null,
+        analysisState: 'idle',
+        analysisError: null,
+      };
+
+      if (result.ok) {
+        startedCount += 1;
+        if (result.sessionId) {
+          socketsToConnect.push({ phone: result.phone, taskId: result.taskId });
+        }
+      }
+    }
+
+    multiCallsRef.current = { ...multiCallsRef.current, ...newState };
+    setMultiCalls(multiCallsRef.current);
+    socketsToConnect.forEach(({ phone, taskId }) => connectMultiWebSocket(phone, taskId));
+    refreshPastTasks();
+
+    // Create history entry for this follow-up session
+    const historyCalls = Object.entries(newState)
+      .filter(([, state]) => Boolean(state.taskId))
+      .map(([phone, state]) => ({
+        phone,
+        taskId: state.taskId,
+        vendor: targetDirectory[phone]?.title || null,
+        summary: null, // Will be populated after analysis
+      }));
+
+    if (historyCalls.length > 0) {
+      const historyEntry: MultiCallHistoryEntry = {
+        id: runId,
+        objective: newObjective,
+        createdAt: new Date().toISOString(),
+        mode: 'real',
+        calls: historyCalls,
+        multiSummary: null, // Will be populated when summary is generated
+      };
+      setMultiHistory((prev) => {
+        const withoutDup = prev.filter((entry) => entry.id !== historyEntry.id);
+        const next = [historyEntry, ...withoutDup].slice(0, 30);
+        persistMultiHistory(next);
+        return next;
+      });
+      setActiveMultiHistoryId(historyEntry.id);
+    }
+
+    // Report results
+    const failed = results.filter((r) => !r.ok);
+    if (startedCount > 0) {
+      setPhase('active');
+      if (failed.length > 0) {
+        addMessage({
+          role: 'ai',
+          text: `Started ${startedCount} of ${results.length} calls. ${failed.length} failed to connect.`,
+        });
+      }
+    } else {
+      setPhase('phone');
+      addMessage({ role: 'ai', text: 'Could not start any calls. Check numbers and try again.' });
+    }
+  }
+
   async function handleSend() {
     const text = input.trim();
     if (!text || typing) return;
 
-    // If negotiation ended, start a fresh one with this message as the new objective
+    // CRITICAL: Check for follow-up intent BEFORE resetting state
     let currentPhase = phase;
+
+    // If ended phase, check if this is a follow-up before resetting
     if (currentPhase === 'ended') {
+      const followUpIntent = detectFollowUpIntent(text, multiHistory, multiSummary, multiCallsRef.current);
+
+      if (followUpIntent) {
+        // This is a follow-up - DON'T reset state, preserve context
+        addMessage({ role: 'user', text });
+        setInput('');
+
+        const selection = parseBusinessSelection(text, followUpIntent);
+
+        if (selection.error) {
+          addMessage({ role: 'ai', text: selection.error });
+          return;
+        }
+
+        const { selectedPhones } = selection;
+
+        if (selectedPhones.length === 0) {
+          addMessage({ role: 'ai', text: 'No businesses matched your selection criteria.' });
+          return;
+        }
+
+        // Confirm with user
+        const businessNames = selectedPhones
+          .map((phone) => {
+            const business = followUpIntent.allBusinesses.find(
+              (b) => normalizePhone(b.phone) === normalizePhone(phone)
+            );
+            return business?.vendor || formatPhone(phone);
+          })
+          .join(', ');
+
+        addMessage({
+          role: 'ai',
+          text: `Got it - calling ${businessNames} with your new objective. Building context from previous calls...`,
+        });
+
+        // Start concurrent calls with context
+        await startFollowUpCalls(selectedPhones, text, followUpIntent);
+        return; // Exit early - don't reset or continue to objective phase
+      }
+
+      // Not a follow-up - proceed with normal reset
       resetNegotiationState();
       currentPhase = 'objective';
     }
