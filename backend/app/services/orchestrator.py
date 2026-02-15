@@ -5,10 +5,10 @@ import base64
 import json
 from datetime import datetime
 import time
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 from app.core.config import settings
+from app.services.call_control_policy import CallControlPolicy
 from app.services.deepgram_voice_agent import DeepgramVoiceAgentSession
 from app.services.llm_client import LLMClient
 from app.services.negotiation_engine import NegotiationEngine
@@ -41,6 +41,7 @@ class CallOrchestrator:
         self._llm = llm_client or LLMClient()
         self._engine = NegotiationEngine(self._llm)
         self._twilio = twilio_client or TwilioClient()
+        self._call_control = CallControlPolicy()
 
         self._task_to_session: dict[str, str] = {}
         self._task_to_media_ws: dict[str, Any] = {}
@@ -53,14 +54,208 @@ class CallOrchestrator:
         self._max_pending_audio_chunks = 100
         self._max_pending_audio_bytes = 960 * 100  # ~12 seconds at mulaw 8kHz
 
+        self._audio_buffers: dict[str, dict[str, bytearray]] = {}
+        self._call_control_snapshots: dict[str, dict] = {}
+
         self._audio_stats: Dict[str, Dict[str, Any]] = {}
         self._voice_session_lock = asyncio.Lock()
         # Suppress per-chunk warning spam when Twilio keeps sending media after session teardown.
         self._media_no_session_log_at: dict[str, float] = {}
         self._media_after_end_log_at: dict[str, float] = {}
 
-    def _session_recording_path(self, task_id: str) -> Path:
-        return self._store.get_task_dir(task_id) / "recording_stats.json"
+    def _get_task_status(self, task_id: str) -> str:
+        row = self._store.get_task(task_id) or {}
+        return str(row.get("status") or "")
+
+    async def _sync_call_control_state(
+        self,
+        task_id: str,
+        *,
+        action: str = "",
+        decision: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        snapshot = self._call_control.export_state(
+            task_id,
+            task_status=self._get_task_status(task_id),
+            call_sid=self._task_to_call_sid.get(task_id, ""),
+            stream_sid=self._task_to_stream_sid.get(task_id, ""),
+            create_if_missing=False,
+        )
+        if snapshot is None:
+            return None
+        if action:
+            snapshot["action"] = action
+        if decision is not None:
+            snapshot["last_decision"] = decision
+        self._call_control_snapshots[task_id] = snapshot
+        await self._ws.broadcast(task_id, {"type": "call_control_state", "data": snapshot})
+        return snapshot
+
+    def get_task_call_control_state(self, task_id: str) -> Dict[str, Any]:
+        snapshot = self._call_control.export_state(
+            task_id,
+            task_status=self._get_task_status(task_id),
+            call_sid=self._task_to_call_sid.get(task_id, ""),
+            stream_sid=self._task_to_stream_sid.get(task_id, ""),
+            create_if_missing=False,
+        )
+        if snapshot is not None:
+            return snapshot
+        # Check in-memory snapshot
+        cached = self._call_control_snapshots.get(task_id)
+        if cached is not None:
+            cached["task_status"] = self._get_task_status(task_id)
+            if not cached.get("call_sid"):
+                cached["call_sid"] = self._task_to_call_sid.get(task_id, "")
+            if not cached.get("stream_sid"):
+                cached["stream_sid"] = self._task_to_stream_sid.get(task_id, "")
+            return cached
+        # Check Supabase artifact
+        artifact = self._store.get_call_artifact(task_id)
+        if isinstance(artifact, dict):
+            recording = artifact.get("recording")
+            if isinstance(recording, dict):
+                cc = recording.get("call_control")
+                if isinstance(cc, dict):
+                    cc["task_status"] = self._get_task_status(task_id)
+                    if not cc.get("call_sid"):
+                        cc["call_sid"] = self._task_to_call_sid.get(task_id, "")
+                    if not cc.get("stream_sid"):
+                        cc["stream_sid"] = self._task_to_stream_sid.get(task_id, "")
+                    return cc
+        return {
+            "task_id": task_id,
+            "task_status": self._get_task_status(task_id),
+            "call_sid": self._task_to_call_sid.get(task_id, ""),
+            "stream_sid": self._task_to_stream_sid.get(task_id, ""),
+            "ended": False,
+            "message": "call control state unavailable for this task",
+        }
+
+    async def request_task_dtmf(
+        self,
+        task_id: str,
+        digits: str,
+        *,
+        source: str = "api",
+        reason: str = "",
+    ) -> Dict[str, Any]:
+        with timed_step(
+            "orchestrator",
+            "request_task_dtmf",
+            task_id=task_id,
+            details={"digits": digits, "source": source},
+        ):
+            call_sid = self._task_to_call_sid.get(task_id)
+            if not call_sid:
+                raise LookupError("No active call is available for keypad input on this task.")
+
+            status = self._get_task_status(task_id)
+            decision = self._call_control.authorize_dtmf(
+                task_id,
+                digits,
+                task_status=status,
+                source=source,
+                reason=reason,
+            )
+            await self._sync_call_control_state(task_id, action="dtmf_decision", decision=decision)
+            if not decision.get("ok"):
+                raise PermissionError(str(decision.get("message") or "DTMF request was blocked by policy."))
+
+            normalized = str(decision.get("digits") or digits)
+            try:
+                payload = await self.send_task_dtmf(task_id, normalized)
+            except Exception as exc:
+                state = self._call_control.record_action_failure(
+                    task_id,
+                    action="dtmf",
+                    error=f"{type(exc).__name__}: {exc}",
+                )
+                await self._sync_call_control_state(
+                    task_id,
+                    action="dtmf_failed",
+                    decision=state.get("last_decision"),
+                )
+                raise
+
+            state = self._call_control.record_action_success(
+                task_id,
+                action="dtmf",
+                digits=normalized,
+                details={"source": source, "reason": reason},
+            )
+            await self._sync_call_control_state(
+                task_id,
+                action="dtmf_sent",
+                decision=state.get("last_decision"),
+            )
+            return payload
+
+    async def request_task_hangup(
+        self,
+        task_id: str,
+        *,
+        source: str = "api",
+        reason: str = "",
+    ) -> Dict[str, Any]:
+        with timed_step(
+            "orchestrator",
+            "request_task_hangup",
+            task_id=task_id,
+            details={"source": source, "reason": reason[:120]},
+        ):
+            call_sid = self._task_to_call_sid.get(task_id)
+            if not call_sid:
+                status = self._get_task_status(task_id)
+                if status in {"ended", "failed"}:
+                    raise LookupError(f"Task call is already {status}.")
+                raise LookupError("No active call is available to hang up for this task.")
+
+            status = self._get_task_status(task_id)
+            decision = self._call_control.authorize_hangup(
+                task_id,
+                task_status=status,
+                source=source,
+                reason=reason,
+            )
+            await self._sync_call_control_state(task_id, action="hangup_decision", decision=decision)
+            if not decision.get("ok"):
+                raise PermissionError(str(decision.get("message") or "Hangup request was blocked by policy."))
+
+            await self._ws.broadcast(
+                task_id,
+                {
+                    "type": "call_status",
+                    "data": {"status": "active", "action": "hangup_requested", "source": source},
+                },
+            )
+
+            try:
+                await self.stop_task_call(task_id, stop_reason=f"policy_hangup:{source}")
+            except Exception as exc:
+                state = self._call_control.record_action_failure(
+                    task_id,
+                    action="hangup",
+                    error=f"{type(exc).__name__}: {exc}",
+                )
+                await self._sync_call_control_state(
+                    task_id,
+                    action="hangup_failed",
+                    decision=state.get("last_decision"),
+                )
+                raise
+
+            state = self._call_control.record_action_success(
+                task_id,
+                action="hangup",
+                details={"source": source, "reason": reason},
+            )
+            await self._sync_call_control_state(
+                task_id,
+                action="hangup_executed",
+                decision=state.get("last_decision"),
+            )
+            return {"status": "ended", "source": source, "reason": reason}
 
     def _voice_mode_enabled(self) -> bool:
         return settings.DEEPGRAM_VOICE_AGENT_ENABLED and bool(settings.DEEPGRAM_API_KEY)
@@ -148,6 +343,8 @@ class CallOrchestrator:
                 "chunks_by_side": {"caller": 0, "agent": 0},
                 "last_chunk_at": None,
             }
+            self._call_control.start_session(task_id)
+            await self._sync_call_control_state(task_id, action="call_started")
 
             with timed_step("session", "set_status_dialing", session_id=session.session_id, task_id=task_id):
                 await self._sessions.set_status(session.session_id, "dialing")
@@ -183,6 +380,8 @@ class CallOrchestrator:
                             },
                         },
                     )
+                self._call_control.mark_task_ended(task_id, reason=f"start_call_failed:{failure_reason}")
+                await self._sync_call_control_state(task_id, action="call_failed")
                 return {"session_id": session.session_id, "task_id": task_id, "twilio": call}
 
             await self._ws.broadcast(
@@ -203,6 +402,7 @@ class CallOrchestrator:
                 task_id,
                 {"type": "call_status", "data": {"status": "active", "session_id": session.session_id}},
             )
+            await self._sync_call_control_state(task_id, action="call_active")
 
             log_event(
                 "orchestrator",
@@ -241,6 +441,8 @@ class CallOrchestrator:
             self._pending_agent_audio.pop(task_id, None)
             if not from_status_callback:
                 self._clear_task_call_sid(task_id)
+            self._call_control.mark_task_ended(task_id, reason=stop_reason)
+            await self._sync_call_control_state(task_id, action="call_stopped")
 
     async def transfer_task_call(self, task_id: str, to_phone: str) -> Dict[str, Any]:
         with timed_step("orchestrator", "transfer_task_call", task_id=task_id, details={"to_phone": to_phone}):
@@ -406,6 +608,7 @@ class CallOrchestrator:
 
     async def set_media_call_sid(self, task_id: str, call_sid: str) -> None:
         self._link_call_sid(task_id, call_sid)
+        await self._sync_call_control_state(task_id, action="call_sid_linked")
 
     async def on_media_chunk(self, task_id: str, chunk: bytes) -> None:
         if task_id == "unknown":
@@ -623,8 +826,20 @@ class CallOrchestrator:
                 exa = ExaSearchService()
                 return await exa.search(query, limit=3)
 
-            async def on_send_dtmf(digits: str) -> Dict[str, Any]:
-                return await self.send_task_dtmf(task_id, digits)
+            async def on_send_dtmf(digits: str, reason: str = "") -> Dict[str, Any]:
+                return await self.request_task_dtmf(
+                    task_id,
+                    digits,
+                    source="agent_tool",
+                    reason=reason or "voice_agent_request",
+                )
+
+            async def on_end_call(reason: str = "") -> Dict[str, Any]:
+                return await self.request_task_hangup(
+                    task_id,
+                    source="agent_tool",
+                    reason=reason or "voice_agent_end_call",
+                )
 
             session = DeepgramVoiceAgentSession(
                 task_id=task_id,
@@ -635,6 +850,8 @@ class CallOrchestrator:
                 on_event=on_event,
                 on_research=on_research,
                 on_send_dtmf=on_send_dtmf,
+                on_end_call=on_end_call,
+                llm_client=self._llm,
             )
             self._deepgram_sessions[session_id] = session
 
@@ -647,16 +864,9 @@ class CallOrchestrator:
             await dg_session.stop()
 
     async def _persist_messages(self, session_id: str) -> None:
-        session = await self._sessions.get(session_id)
-        if not session:
-            return
-
-        call_dir = self._store.get_task_dir(session.task_id)
-        with timed_step("storage", "persist_messages", session_id=session_id, task_id=session.task_id):
-            with open(call_dir / "conversation.json", "w", encoding="utf-8") as f:
-                json.dump(session.conversation, f, indent=2)
-            with open(call_dir / "transcript.json", "w", encoding="utf-8") as f:
-                json.dump(session.transcript, f, indent=2)
+        # Transcript/conversation are held in session memory and
+        # synced to Supabase at call end. No disk writes needed.
+        pass
 
     async def save_audio_chunk(self, session_id: str, side: str, chunk: bytes) -> None:
         if not chunk:
@@ -666,15 +876,13 @@ class CallOrchestrator:
             return
 
         side_key = "agent" if side in {"agent", "outbound"} else side
-        filename = "inbound.wav" if side_key == "caller" else "outbound.wav"
-        call_dir = self._store.get_task_dir(session.task_id)
-        call_dir.mkdir(parents=True, exist_ok=True)
         if side_key not in {"caller", "agent"}:
             side_key = "agent"
 
-        # Write to individual track file only (mixed is created at call end)
-        with open(call_dir / filename, "ab") as f:
-            f.write(chunk)
+        # Buffer key: caller → inbound, agent → outbound
+        buf_key = "inbound" if side_key == "caller" else "outbound"
+        task_buffers = self._audio_buffers.setdefault(session.task_id, {"inbound": bytearray(), "outbound": bytearray()})
+        task_buffers[buf_key].extend(chunk)
 
         stats = self._audio_stats.setdefault(
             session_id,
@@ -692,20 +900,16 @@ class CallOrchestrator:
             stats["bytes_by_side"][side_key] = stats["bytes_by_side"].get(side_key, 0) + len(chunk)
         stats["last_chunk_at"] = datetime.utcnow().isoformat()
 
-    def _create_mixed_audio(self, task_id: str) -> None:
-        """Mix inbound and outbound mulaw streams into a single mixed.wav file.
+    def _create_mixed_audio(self, task_id: str) -> bytes:
+        """Mix inbound and outbound mulaw streams into a single mixed buffer.
 
         Decodes both streams from mulaw to 16-bit linear PCM, sums them
         sample-by-sample (with clipping), then re-encodes to mulaw.
-        This produces a proper two-party mix instead of concatenating chunks.
+        Returns the mixed audio bytes (empty bytes if no audio).
         """
-        call_dir = self._store.get_task_dir(task_id)
-        inbound_path = call_dir / "inbound.wav"
-        outbound_path = call_dir / "outbound.wav"
-        mixed_path = call_dir / "mixed.wav"
-
-        inbound_raw = inbound_path.read_bytes() if inbound_path.exists() else b""
-        outbound_raw = outbound_path.read_bytes() if outbound_path.exists() else b""
+        buffers = self._audio_buffers.get(task_id, {})
+        inbound_raw = bytes(buffers.get("inbound", bytearray()))
+        outbound_raw = bytes(buffers.get("outbound", bytearray()))
 
         log_event(
             "orchestrator",
@@ -714,19 +918,17 @@ class CallOrchestrator:
             details={
                 "inbound_bytes": len(inbound_raw),
                 "outbound_bytes": len(outbound_raw),
-                "inbound_exists": inbound_path.exists(),
-                "outbound_exists": outbound_path.exists(),
             },
         )
 
         # Strip any existing RIFF header (shouldn't be there, but be safe)
         if inbound_raw[:4] == b"RIFF":
-            inbound_raw = inbound_raw[44:]  # skip standard WAV header
+            inbound_raw = inbound_raw[44:]
         if outbound_raw[:4] == b"RIFF":
             outbound_raw = outbound_raw[44:]
 
         if not inbound_raw and not outbound_raw:
-            return
+            return b""
 
         # Mulaw decode table (ITU G.711)
         def _build_mulaw_decode_table():
@@ -744,7 +946,6 @@ class CallOrchestrator:
 
         decode_table = _build_mulaw_decode_table()
 
-        # Mulaw encode: linear 16-bit → mulaw byte
         _MULAW_BIAS = 132
         _MULAW_CLIP = 32635
 
@@ -763,14 +964,12 @@ class CallOrchestrator:
             mantissa = (sample >> (exponent + 3)) & 0x0F
             return ~(sign | (exponent << 4) | mantissa) & 0xFF
 
-        # Pad shorter stream with mulaw silence (0xFF)
         max_len = max(len(inbound_raw), len(outbound_raw))
         if len(inbound_raw) < max_len:
             inbound_raw += b"\xff" * (max_len - len(inbound_raw))
         if len(outbound_raw) < max_len:
             outbound_raw += b"\xff" * (max_len - len(outbound_raw))
 
-        # Mix: decode → sum → clip → encode
         mixed = bytearray(max_len)
         for i in range(max_len):
             pcm_in = decode_table[inbound_raw[i]]
@@ -778,13 +977,13 @@ class CallOrchestrator:
             combined = max(-32768, min(32767, pcm_in + pcm_out))
             mixed[i] = _encode_mulaw_sample(combined)
 
-        mixed_path.write_bytes(bytes(mixed))
-
         # Update mixed byte count in stats
         for sid, stats in self._audio_stats.items():
             if stats.get("task_id") == task_id:
                 stats["bytes_by_side"]["mixed"] = max_len
                 break
+
+        return bytes(mixed)
 
     async def stop_session(self, session_id: str, *, stop_reason: str = "unknown") -> None:
         session = await self._sessions.get(session_id)
@@ -804,18 +1003,42 @@ class CallOrchestrator:
             stats = self._audio_stats.get(session_id)
             if stats is not None:
                 stats["stop_reason"] = stop_reason
-            await self._persist_recording_stats(session_id)
-            self._create_mixed_audio(task_id)
+            recording_stats = self._build_recording_stats(session_id, session)
+            mixed_audio = self._create_mixed_audio(task_id)
+            call_control_snapshot = self._call_control_snapshots.get(task_id)
+
+            # Write everything directly to Supabase
+            await asyncio.to_thread(
+                self._store.upsert_call_artifacts_direct,
+                task_id,
+                transcript=list(session.transcript),
+                recording=recording_stats,
+                audio_buffers=self._audio_buffers.get(task_id),
+                mixed_audio=mixed_audio if mixed_audio else None,
+                call_control=call_control_snapshot,
+                reason=f"stop_session:{stop_reason}",
+            )
             await self._ws.broadcast(
                 task_id,
                 {"type": "call_status", "data": {"status": "ended", "session_id": session_id}},
             )
 
+        # Clean up in-memory state
+        self._audio_buffers.pop(task_id, None)
+        self._call_control_snapshots.pop(task_id, None)
         self._clear_media_context(task_id)
         self._task_to_media_ws.pop(task_id, None)
         self._task_to_session.pop(task_id, None)
         self._clear_task_call_sid(task_id)
         self._audio_stats.pop(session_id, None)
+
+        # Free in-memory session data (conversation, transcript)
+        await self._sessions.delete_session(session_id)
+        # Free call-control policy state
+        self._call_control.cleanup_task(task_id)
+        # Clear log-throttle entries
+        self._media_no_session_log_at.pop(task_id, None)
+        self._media_after_end_log_at.pop(task_id, None)
 
         # Auto-generate analysis in background so outcome is always set
         asyncio.create_task(self._auto_analyze(task_id))
@@ -824,37 +1047,37 @@ class CallOrchestrator:
         """Generate analysis and persist outcome immediately after call ends."""
         try:
             with timed_step("orchestrator", "auto_analyze", task_id=task_id):
-                call_dir = self._store.get_task_dir(task_id)
-                transcript_file = call_dir / "transcript.json"
+                # Read transcript from Supabase artifact
+                artifact = self._store.get_call_artifact(task_id)
                 transcript = []
-                if transcript_file.exists():
-                    with open(transcript_file, "r", encoding="utf-8") as f:
-                        transcript = [TranscriptTurn(**entry) for entry in json.load(f)]
+                if isinstance(artifact, dict):
+                    raw_turns = artifact.get("transcript", [])
+                    if isinstance(raw_turns, list):
+                        transcript = [TranscriptTurn(**entry) for entry in raw_turns if isinstance(entry, dict)]
 
                 task = self._store.get_task(task_id)
                 analysis = await self._engine.summarize_turn(transcript, task)
-
-                analysis_path = call_dir / "analysis.json"
-                with open(analysis_path, "w", encoding="utf-8") as f:
-                    json.dump(analysis, f, indent=2)
 
                 outcome = analysis.get("outcome", "unknown")
                 valid = {"unknown", "success", "partial", "failed", "walkaway"}
                 outcome = outcome if outcome in valid else "unknown"
                 self._store.update_status(task_id, "ended", outcome=outcome)
+                # Write analysis directly to Supabase
+                await asyncio.to_thread(
+                    self._store.upsert_call_artifact_partial,
+                    task_id,
+                    analysis=analysis,
+                    reason="auto_analyze",
+                )
                 log_event("orchestrator", "auto_analyze_done", task_id=task_id, details={"outcome": outcome})
         except Exception as exc:
             log_event("orchestrator", "auto_analyze_error", task_id=task_id, details={"error": str(exc)})
 
-    async def _persist_recording_stats(self, session_id: str) -> None:
-        session = await self._sessions.get(session_id)
-        if not session:
-            return
-        call_dir = self._store.get_task_dir(session.task_id)
-        call_dir.mkdir(parents=True, exist_ok=True)
+    def _build_recording_stats(self, session_id: str, session: Any) -> Dict[str, Any]:
+        """Build recording stats dict from in-memory state. Returns empty dict if no stats."""
         stats = self._audio_stats.get(session_id)
         if not stats:
-            return
+            return {}
 
         stats["task_id"] = session.task_id
         if session.started_at:
@@ -864,7 +1087,6 @@ class CallOrchestrator:
             ((session.ended_at or datetime.utcnow()) - (session.started_at or datetime.utcnow())).total_seconds()
         )
 
-        # Transcript completeness
         stats["transcript_turns"] = len(session.transcript)
         if session.transcript:
             last_at = session.transcript[-1].get("created_at")
@@ -875,13 +1097,11 @@ class CallOrchestrator:
         else:
             stats["last_turn_at"] = None
 
-        # Twilio correlation IDs (persist runs BEFORE _clear_*)
         task_id = session.task_id
         stats["call_sid"] = self._task_to_call_sid.get(task_id)
         stats["stream_sid"] = self._task_to_stream_sid.get(task_id)
         stats["stop_reason"] = stats.get("stop_reason", "unknown")
 
-        # Deepgram session counters
         dg = self._deepgram_sessions.get(session_id)
         if dg is not None:
             stats["deepgram"] = {
@@ -892,5 +1112,4 @@ class CallOrchestrator:
                 "messages_received": getattr(dg, "_messages_received", 0),
             }
 
-        with open(self._session_recording_path(session.task_id), "w", encoding="utf-8") as f:
-            json.dump(stats, f, indent=2)
+        return dict(stats)

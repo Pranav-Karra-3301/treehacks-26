@@ -3,10 +3,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Play, Pause, Volume2 } from 'lucide-react';
-import { getAudioUrl } from '../lib/api';
+import { getAudioUrl, getTaskRecordingFiles } from '../lib/api';
 
 const ease = [0.16, 1, 0.3, 1] as const;
-const AUDIO_SIDES: Array<'mixed' | 'outbound' | 'inbound'> = ['mixed', 'outbound', 'inbound'];
+const AUDIO_SIDES = ['mixed', 'outbound', 'inbound'] as const;
+type AudioSide = typeof AUDIO_SIDES[number];
+const MAX_RECORDING_POLL_RETRIES = 20;
 
 function formatTime(s: number): string {
   const m = Math.floor(s / 60);
@@ -19,26 +21,72 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
   const [playing, setPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
+  const [audioReady, setAudioReady] = useState(false);
+  const [availableSides, setAvailableSides] = useState<AudioSide[]>([...AUDIO_SIDES]);
   const [sideIndex, setSideIndex] = useState(0);
-  const [reloadTick, setReloadTick] = useState(0);
+  const [probeTick, setProbeTick] = useState(0);
   const [retryCount, setRetryCount] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
-  const side = AUDIO_SIDES[sideIndex] ?? 'mixed';
+  const side = availableSides[sideIndex] ?? 'mixed';
   const src = getAudioUrl(taskId, side);
+
+  function deriveAvailableSides(
+    files: Record<string, { exists: boolean; size_bytes: number }>,
+  ): AudioSide[] {
+    const found = new Set<AudioSide>();
+    Object.entries(files).forEach(([fileName, stat]) => {
+      if (!stat?.exists || (stat.size_bytes ?? 0) <= 0) return;
+      const lower = fileName.toLowerCase();
+      if (lower.includes('mixed')) found.add('mixed');
+      if (lower.includes('outbound')) found.add('outbound');
+      if (lower.includes('inbound')) found.add('inbound');
+    });
+    return AUDIO_SIDES.filter((candidate) => found.has(candidate));
+  }
 
   useEffect(() => {
     setError(null);
+    setAudioReady(false);
     setPlaying(false);
     setCurrentTime(0);
     setDuration(0);
     setRetryCount(0);
+    setAvailableSides([...AUDIO_SIDES]);
     setSideIndex(0);
-    setReloadTick(0);
+    setProbeTick(0);
   }, [taskId]);
 
   useEffect(() => {
+    let cancelled = false;
+    const probe = async () => {
+      try {
+        const files = await getTaskRecordingFiles(taskId);
+        if (cancelled) return;
+        const resolvedSides = deriveAvailableSides(files.files ?? {});
+        if (resolvedSides.length > 0) {
+          setAvailableSides(resolvedSides);
+          setSideIndex(0);
+          setAudioReady(true);
+          setError(null);
+          return;
+        }
+      } catch {
+        // keep waiting
+      }
+      if (!cancelled) {
+        setAudioReady(false);
+        setError('Recording is still processing.');
+      }
+    };
+    void probe();
+    return () => {
+      cancelled = true;
+    };
+  }, [probeTick, taskId]);
+
+  useEffect(() => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || !audioReady) return;
 
     const onTime = () => setCurrentTime(audio.currentTime);
     const onDuration = () => setDuration(audio.duration || 0);
@@ -46,11 +94,12 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
     const onLoadedData = () => setError(null);
     const onError = () => {
       setPlaying(false);
-      if (sideIndex < AUDIO_SIDES.length - 1) {
-        setSideIndex((prev) => Math.min(prev + 1, AUDIO_SIDES.length - 1));
+      if (sideIndex < availableSides.length - 1) {
+        setSideIndex((prev) => Math.min(prev + 1, availableSides.length - 1));
         return;
       }
       setError('Recording is still processing.');
+      setAudioReady(false);
     };
 
     audio.addEventListener('timeupdate', onTime);
@@ -66,23 +115,24 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
       audio.removeEventListener('ended', onEnded);
       audio.removeEventListener('error', onError);
     };
-  }, [sideIndex]);
+  }, [audioReady, availableSides.length, sideIndex]);
 
   useEffect(() => {
-    if (!error) return;
-    if (retryCount >= 20) return;
+    if (audioReady) return;
+    if (retryCount >= MAX_RECORDING_POLL_RETRIES) {
+      setError('Recording unavailable for this call.');
+      return;
+    }
     const timer = window.setTimeout(() => {
       setRetryCount((prev) => prev + 1);
-      setSideIndex(0);
-      setReloadTick((prev) => prev + 1);
-      setError(null);
+      setProbeTick((prev) => prev + 1);
     }, 2500);
     return () => window.clearTimeout(timer);
-  }, [error, retryCount]);
+  }, [audioReady, retryCount]);
 
   function togglePlay() {
     const audio = audioRef.current;
-    if (!audio || error) return;
+    if (!audio || error || !audioReady) return;
     if (playing) {
       audio.pause();
     } else {
@@ -107,14 +157,15 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
       <div className="rounded-xl bg-gray-50 border border-gray-100 px-4 py-2.5">
         <div className="flex items-center justify-between gap-3">
           <p className="text-[12px] text-gray-500">
-            {error} Retrying automatically...
+            {error}
+            {retryCount < MAX_RECORDING_POLL_RETRIES ? ' Retrying automatically...' : ''}
           </p>
           <button
             type="button"
             onClick={() => {
               setRetryCount(0);
               setSideIndex(0);
-              setReloadTick((prev) => prev + 1);
+              setProbeTick((prev) => prev + 1);
               setError(null);
             }}
             className="rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-600 hover:text-gray-800"
@@ -133,7 +184,7 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
       transition={{ duration: 0.3, ease }}
       className="rounded-xl bg-gray-50 border border-gray-100 px-3 py-2.5 flex items-center gap-3"
     >
-      <audio key={`${taskId}-${side}-${reloadTick}`} ref={audioRef} preload="metadata" src={src} />
+      <audio key={`${taskId}-${side}-${probeTick}`} ref={audioRef} preload="metadata" src={audioReady ? src : undefined} />
 
       <button
         onClick={togglePlay}

@@ -36,7 +36,6 @@ def create_app(
     orchestrator: Optional[CallOrchestrator] = None,
     cache: Optional[CacheService] = None,
     data_root: str | Path | None = None,
-    sqlite_path: str | Path | None = None,
     allowed_origins: Optional[ALLOWED_ORIGINS_TYPE] = None,
     llm_overrides: Optional[dict[str, Any]] = None,
 ) -> FastAPI:
@@ -48,12 +47,10 @@ def create_app(
 
     if data_root is not None:
         settings.DATA_ROOT = Path(data_root)
-    if sqlite_path is not None:
-        settings.SQLITE_PATH = Path(sqlite_path)
 
     configure_logging()
 
-    local_store = store or DataStore(data_root=data_root, sqlite_path=sqlite_path)
+    local_store = store or DataStore()
     local_session_manager = session_manager or SessionManager()
     local_ws_manager = ws_manager or ConnectionManager()
     local_cache = cache or CacheService(
@@ -213,6 +210,15 @@ def create_app(
                 "twilio_webhook_host": settings.TWILIO_WEBHOOK_HOST or "(not set)",
                 "cache_enabled": settings.CACHE_ENABLED,
                 "exa_search_enabled": settings.EXA_SEARCH_ENABLED,
+                "supabase_chat_sessions_enabled": settings.SUPABASE_CHAT_SESSIONS_ENABLED,
+                "supabase_chat_sessions_table": settings.SUPABASE_CHAT_SESSIONS_TABLE,
+                "supabase_calls_enabled": settings.SUPABASE_CALLS_ENABLED,
+                "supabase_calls_table": settings.SUPABASE_CALLS_TABLE,
+                "supabase_call_artifacts_enabled": settings.SUPABASE_CALL_ARTIFACTS_ENABLED,
+                "supabase_call_artifacts_table": settings.SUPABASE_CALL_ARTIFACTS_TABLE,
+                "supabase_call_artifact_max_audio_bytes": settings.SUPABASE_CALL_ARTIFACT_MAX_AUDIO_BYTES,
+                "supabase_verbose_sync_logging": settings.SUPABASE_VERBOSE_SYNC_LOGGING,
+                "auto_ivr_navigation_enabled": settings.AUTO_IVR_NAVIGATION_ENABLED,
                 "log_level": settings.LOG_LEVEL,
             },
         )

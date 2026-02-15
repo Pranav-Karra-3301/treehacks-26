@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
-from typing import Any, Awaitable, Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Optional
 
 import websockets
+
+if TYPE_CHECKING:
+    from app.services.llm_client import LLMClient
 
 from app.core.config import settings
 from app.core.telemetry import log_event, timed_step
@@ -87,6 +91,7 @@ def _build_function_definitions(
     *,
     research_enabled: bool,
     dtmf_enabled: bool,
+    hangup_enabled: bool,
 ) -> list[Dict[str, Any]]:
     """Build function definitions for Deepgram voice agent tool use."""
     functions: list[Dict[str, Any]] = []
@@ -137,7 +142,165 @@ def _build_function_definitions(
                 },
             }
         )
+    if hangup_enabled:
+        functions.append(
+            {
+                "name": "end_call",
+                "description": (
+                    "Hang up the phone call. You MUST call this to end the call — it will stay "
+                    "connected forever otherwise. Call this after: objective is complete and you said "
+                    "goodbye, voicemail is reached, the other party hung up or said goodbye, "
+                    "you hit a dead end, or the call cannot progress. Always say goodbye FIRST, "
+                    "then immediately call this function."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "reason": {
+                            "type": "string",
+                            "description": "Short reason for ending the call.",
+                        }
+                    },
+                },
+            }
+        )
     return functions
+
+
+_IVR_OPTION_PATTERNS = (
+    # "press X for Y" / "press X to Y"
+    re.compile(r"\bpress\s+([0-9A-D#*])\s+(?:for|to)\s+([^.;,\n]+)", re.IGNORECASE),
+    # "for Y, press X"
+    re.compile(r"\bfor\s+([^.;,\n]+?)\s*,?\s*press\s+([0-9A-D#*])", re.IGNORECASE),
+    # "to reach Y, press X" / "to Y, press X"
+    re.compile(r"\bto\s+(?:reach\s+)?([^.;,\n]+?)\s*,?\s*press\s+([0-9A-D#*])", re.IGNORECASE),
+    # "say Y or press X"
+    re.compile(r"\bsay\s+([^.;,\n]+?)\s+or\s+press\s+([0-9A-D#*])", re.IGNORECASE),
+    # "option X for Y" / "option X, Y"
+    re.compile(r"\boption\s+([0-9A-D#*])\s+(?:for|,)\s*([^.;,\n]+)", re.IGNORECASE),
+    # "dial X for Y"
+    re.compile(r"\bdial\s+([0-9A-D#*])\s+(?:for|to)\s+([^.;,\n]+)", re.IGNORECASE),
+)
+
+_IVR_TRIGGER_KEYWORDS = ("press", "say", "option", "dial", "select")
+
+
+# Patterns where group1=digit, group2=label (digit-first patterns)
+_DIGIT_FIRST_PREFIXES = ("\\bpress", "\\boption", "\\bdial")
+
+
+def _extract_ivr_options(text: str) -> list[tuple[str, str]]:
+    options: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for pattern in _IVR_OPTION_PATTERNS:
+        for match in pattern.finditer(text):
+            groups = match.groups()
+            if len(groups) != 2:
+                continue
+            # Determine group ordering based on pattern prefix
+            if any(pattern.pattern.startswith(prefix) for prefix in _DIGIT_FIRST_PREFIXES):
+                digit, label = groups[0], groups[1]
+            else:
+                label, digit = groups[0], groups[1]
+            normalized_digit = str(digit).strip().upper()
+            normalized_label = re.sub(r"\s+", " ", str(label).strip().lower())
+            if not normalized_digit or not normalized_label:
+                continue
+            dedupe_key = f"{normalized_digit}:{normalized_label}"
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            options.append((normalized_digit, normalized_label))
+    return options
+
+
+async def _llm_pick_ivr_option(
+    options: list[tuple[str, str]],
+    *,
+    objective: str,
+    context: str,
+    llm_client: "Optional[LLMClient]",
+    task_id: str = "",
+) -> tuple[str, str] | None:
+    """Use the LLM to pick the best IVR menu option based on the task objective."""
+    if not options:
+        return None
+    if llm_client is None:
+        return None
+
+    menu_lines = "\n".join(f"{digit} - {label}" for digit, label in options)
+    prompt = (
+        "You are navigating a phone menu. Pick the best option to reach your goal.\n\n"
+        f"Goal: {objective}\n"
+        f"Context: {context}\n\n"
+        f"Menu options:\n{menu_lines}\n\n"
+        'Reply with ONLY JSON: {"digit": "X", "reason": "brief reason"}\n'
+        "Always prefer options that connect to a live person if your goal requires speaking with someone."
+    )
+    messages = [{"role": "user", "content": prompt}]
+    try:
+        raw = await asyncio.wait_for(llm_client.complete(messages, max_tokens=100), timeout=5.0)
+        # Extract JSON from response (handle markdown code fences)
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+            cleaned = re.sub(r"\s*```$", "", cleaned)
+        data = json.loads(cleaned, strict=False)
+        digit = str(data.get("digit", "")).strip()
+        reason = str(data.get("reason", "llm_pick"))
+        if digit and digit.upper() != "NONE":
+            return digit.upper(), f"llm:{reason}"
+    except Exception as exc:
+        log_event(
+            "deepgram",
+            "llm_pick_ivr_error",
+            task_id=task_id,
+            status="warning",
+            details={"error": f"{type(exc).__name__}: {exc}", "options_count": len(options)},
+        )
+    # Fallback: press 0 (universal operator)
+    return "0", "llm_fallback:operator"
+
+
+async def _llm_pick_ivr_from_raw_text(
+    text: str,
+    *,
+    objective: str,
+    llm_client: "Optional[LLMClient]",
+    task_id: str = "",
+) -> tuple[str, str] | None:
+    """When regex finds no options but IVR keywords are present, ask the LLM directly."""
+    if llm_client is None:
+        return None
+
+    prompt = (
+        f"The phone system said: '{text}'. "
+        f"Your goal is: {objective}. "
+        "What digit should you press? "
+        'Reply ONLY JSON: {"digit": "X", "reason": "..."} '
+        'or {"digit": "none", "reason": "not an IVR menu"}'
+    )
+    messages = [{"role": "user", "content": prompt}]
+    try:
+        raw = await asyncio.wait_for(llm_client.complete(messages, max_tokens=100), timeout=5.0)
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+            cleaned = re.sub(r"\s*```$", "", cleaned)
+        data = json.loads(cleaned, strict=False)
+        digit = str(data.get("digit", "")).strip()
+        reason = str(data.get("reason", "llm_raw"))
+        if digit and digit.lower() != "none":
+            return digit.upper(), f"llm_raw:{reason}"
+    except Exception as exc:
+        log_event(
+            "deepgram",
+            "llm_pick_ivr_raw_error",
+            task_id=task_id,
+            status="warning",
+            details={"error": f"{type(exc).__name__}: {exc}"},
+        )
+    return None
 
 
 class DeepgramVoiceAgentSession:
@@ -152,7 +315,9 @@ class DeepgramVoiceAgentSession:
         on_thinking: Callable[[str], Awaitable[None]],
         on_event: Callable[[Dict[str, Any]], Awaitable[None]],
         on_research: Optional[Callable[[str], Awaitable[Dict[str, Any]]]] = None,
-        on_send_dtmf: Optional[Callable[[str], Awaitable[Dict[str, Any]]]] = None,
+        on_send_dtmf: Optional[Callable[[str, str], Awaitable[Dict[str, Any]]]] = None,
+        on_end_call: Optional[Callable[[str], Awaitable[Dict[str, Any]]]] = None,
+        llm_client: "Optional[LLMClient]" = None,
     ) -> None:
         self._task_id = task_id
         self._task = task
@@ -162,6 +327,8 @@ class DeepgramVoiceAgentSession:
         self._on_event = on_event
         self._on_research = on_research
         self._on_send_dtmf = on_send_dtmf
+        self._on_end_call = on_end_call
+        self._llm_client = llm_client
 
         self._ws: Optional[websockets.WebSocketClientProtocol] = None
         self._receive_task: Optional[asyncio.Task[None]] = None
@@ -179,6 +346,10 @@ class DeepgramVoiceAgentSession:
         self._session_start_time: Optional[float] = None
         self._last_dtmf_digits = ""
         self._last_dtmf_at = 0.0
+        self._last_auto_ivr_signature = ""
+        self._last_auto_ivr_at = 0.0
+        self._last_auto_ivr_text = ""
+        self._last_hangup_at = 0.0
 
     async def start(self) -> None:
         if self._closed:
@@ -282,6 +453,7 @@ class DeepgramVoiceAgentSession:
         function_definitions = _build_function_definitions(
             research_enabled=self._on_research is not None,
             dtmf_enabled=self._on_send_dtmf is not None,
+            hangup_enabled=self._on_end_call is not None,
         )
         if function_definitions:
             think["functions"] = function_definitions
@@ -382,6 +554,7 @@ class DeepgramVoiceAgentSession:
                 details={"role": role, "content_chars": len(content)},
             )
             if role == "user":
+                await self._maybe_auto_navigate_ivr(content)
                 await self._on_conversation("caller", content)
             elif role == "assistant":
                 await self._on_conversation("agent", content)
@@ -510,7 +683,7 @@ class DeepgramVoiceAgentSession:
                     task_id=self._task_id,
                     details={"digits": digits, "reason": reason[:120]},
                 ):
-                    send_result = await self._on_send_dtmf(digits)
+                    send_result = await self._on_send_dtmf(digits, reason or "ivr_keypad_request")
                     self._last_dtmf_digits = digits
                     self._last_dtmf_at = now
                     result = {
@@ -532,6 +705,42 @@ class DeepgramVoiceAgentSession:
                     "digits": digits,
                     "error": f"{type(exc).__name__}: {exc}",
                 }
+        elif function_name == "end_call" and self._on_end_call is not None:
+            reason = str(parameters.get("reason", "") or "")
+            now = time.monotonic()
+            if (now - self._last_hangup_at) < 2.0:
+                result = {
+                    "ok": False,
+                    "error": "duplicate end_call request blocked (too soon)",
+                    "reason": reason,
+                }
+            else:
+                try:
+                    with timed_step(
+                        "deepgram",
+                        "function_end_call",
+                        task_id=self._task_id,
+                        details={"reason": reason[:120]},
+                    ):
+                        end_result = await self._on_end_call(reason or "agent_requested_end_call")
+                        self._last_hangup_at = now
+                        result = {
+                            "ok": True,
+                            "reason": reason,
+                            "status": end_result.get("status", "ended"),
+                        }
+                except Exception as exc:
+                    log_event(
+                        "deepgram",
+                        "function_call_error",
+                        task_id=self._task_id,
+                        status="error",
+                        details={"error": f"{type(exc).__name__}: {exc}", "function": function_name},
+                    )
+                    result = {
+                        "ok": False,
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
         else:
             result = {"error": f"Unknown function: {function_name}"}
 
@@ -549,3 +758,104 @@ class DeepgramVoiceAgentSession:
             except Exception as exc:
                 log_event("deepgram", "function_call_response_error", task_id=self._task_id,
                           status="error", details={"error": f"{type(exc).__name__}: {exc}"})
+
+    async def _maybe_auto_navigate_ivr(self, content: str) -> None:
+        if not settings.AUTO_IVR_NAVIGATION_ENABLED:
+            return
+        if self._on_send_dtmf is None:
+            return
+
+        text = (content or "").strip()
+        if not text:
+            return
+        lower = text.lower()
+
+        # Broadened trigger: check for any IVR-like keyword
+        if not any(kw in lower for kw in _IVR_TRIGGER_KEYWORDS):
+            return
+
+        # Re-prompt handling: if same menu text seen twice, press 0 as escape
+        text_signature = lower[:80]
+        now = time.monotonic()
+        if text_signature == self._last_auto_ivr_text and self._last_auto_ivr_text:
+            log_event(
+                "deepgram",
+                "auto_ivr_reprompt_detected",
+                task_id=self._task_id,
+                details={"text_prefix": text_signature[:40]},
+            )
+            digits, reason = "0", "reprompt_escape:operator"
+            if digits == self._last_dtmf_digits and (now - self._last_dtmf_at) < 2.0:
+                return
+            try:
+                send_result = await self._on_send_dtmf(digits, f"auto_ivr:{reason}")
+                self._last_dtmf_digits = digits
+                self._last_dtmf_at = now
+                self._last_auto_ivr_signature = f"{digits}:{reason}"
+                self._last_auto_ivr_at = now
+                self._last_auto_ivr_text = text_signature
+            except Exception as exc:
+                log_event("deepgram", "auto_ivr_dtmf_error", task_id=self._task_id,
+                          status="warning", details={"digits": digits, "error": f"{type(exc).__name__}: {exc}"})
+            return
+        self._last_auto_ivr_text = text_signature
+
+        objective = str(self._task.get("objective") or "")
+        context = str(self._task.get("context") or "")
+
+        options = _extract_ivr_options(text)
+
+        decision: tuple[str, str] | None = None
+        if options:
+            # Use LLM to pick from extracted options
+            decision = await _llm_pick_ivr_option(
+                options,
+                objective=objective,
+                context=context,
+                llm_client=self._llm_client,
+                task_id=self._task_id,
+            )
+        else:
+            # Regex found no options but IVR keywords present — ask LLM to interpret raw text
+            decision = await _llm_pick_ivr_from_raw_text(
+                text,
+                objective=objective,
+                llm_client=self._llm_client,
+                task_id=self._task_id,
+            )
+
+        if decision is None:
+            return
+
+        digits, reason = decision
+        signature = f"{digits}:{reason}"
+        if signature == self._last_auto_ivr_signature and (now - self._last_auto_ivr_at) < 8.0:
+            return
+        if digits == self._last_dtmf_digits and (now - self._last_dtmf_at) < 2.0:
+            return
+
+        try:
+            send_result = await self._on_send_dtmf(digits, f"auto_ivr:{reason}")
+            self._last_dtmf_digits = digits
+            self._last_dtmf_at = now
+            self._last_auto_ivr_signature = signature
+            self._last_auto_ivr_at = now
+            log_event(
+                "deepgram",
+                "auto_ivr_dtmf_sent",
+                task_id=self._task_id,
+                details={
+                    "digits": digits,
+                    "reason": reason,
+                    "options": [{"digit": d, "label": label} for d, label in options[:8]],
+                    "status": send_result.get("status", "sent"),
+                },
+            )
+        except Exception as exc:
+            log_event(
+                "deepgram",
+                "auto_ivr_dtmf_error",
+                task_id=self._task_id,
+                status="warning",
+                details={"digits": digits, "reason": reason, "error": f"{type(exc).__name__}: {exc}"},
+            )

@@ -3,9 +3,9 @@
 import { useState, useRef, useEffect, useCallback, type FormEvent, type KeyboardEvent } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowUp, ArrowLeft, Phone, RotateCcw, AlertTriangle, Plus, PanelLeftClose, PanelLeft, BarChart3, X } from 'lucide-react';
-import { createTask, startCall, stopCall, transferCall, sendCallDtmf, createCallSocket, checkVoiceReadiness, searchResearch, getTaskAnalysis, getTaskTranscript, getTask, listTasks, getMultiCallSummary, getChatSessionById, getChatSessionLatest, upsertChatSession } from '../../lib/api';
-import { readActiveLocalSession, writeLocalSessionWithAttempts, type PersistedChatSessionEnvelope } from '../../lib/chat-session-store';
+import { ArrowUp, ArrowLeft, Phone, RotateCcw, AlertTriangle, Plus, PanelLeftClose, PanelLeft, BarChart3, X, Trash2 } from 'lucide-react';
+import { createTask, startCall, stopCall, transferCall, sendCallDtmf, createCallSocket, checkVoiceReadiness, searchResearch, getTaskAnalysis, getTaskTranscript, getTask, listTasks, getMultiCallSummary, getChatSessionById, getChatSessionLatest, upsertChatSession, deleteChatSession, deleteTask } from '../../lib/api';
+import { type PersistedChatSessionEnvelope } from '../../lib/chat-session-store';
 import type { CallEvent, CallStatus, AnalysisPayload, TaskSummary, CallOutcome, BusinessResult, VoiceReadiness, MultiCallSummaryPayload, ChatSessionMode, ChatSessionRecord } from '../../lib/types';
 import AnalysisCard from '../../components/analysis-card';
 import AudioPlayer from '../../components/audio-player';
@@ -94,9 +94,7 @@ const MAX_CONCURRENT_TEST_CALLS = 5;
 const PHONE_CANDIDATE_RE = /(?:\+?1[\s().-]*)?(?:\(\s*[2-9]\d{2}\s*\)|[2-9]\d{2})[\s().-]*[2-9]\d{2}[\s.-]*\d{4}(?:\s*(?:#|x|ext\.?|extension)\s*\d{1,6})?/gi;
 const UNICODE_DASH_RE = /[‐‑‒–—―]/g;
 const PHONE_EXTENSION_RE = /(?:#|x|ext\.?|extension)\s*\d{1,6}$/i;
-const MULTI_HISTORY_STORAGE_KEY = 'kiru_multi_call_history_v1';
-const CHAT_SNAPSHOT_STORAGE_KEY = 'kiru_chat_snapshot_v1';
-const CHAT_SNAPSHOT_FALLBACK_STORAGE_KEY = 'kiru_chat_snapshot_v1_backup';
+// localStorage keys removed — backend is sole source of truth.
 const SNAPSHOT_MAX_MESSAGES = 120;
 const SNAPSHOT_MAX_TEXT = 1800;
 const SNAPSHOT_MAX_MULTI_TRANSCRIPT = 120;
@@ -459,21 +457,8 @@ function persistSnapshotToLocalStorage(
   sessionId: string,
   revision: number,
 ): PersistedChatSessionEnvelope<PersistedSessionData> | null {
-  const attempts: Array<PersistedChatSessionEnvelope<PersistedSessionData>> = [
-    buildSessionEnvelope(snapshot, sessionId, revision),
-    buildSessionEnvelope(downgradeSnapshot(snapshot, 1), sessionId, revision),
-    buildSessionEnvelope(downgradeSnapshot(snapshot, 2), sessionId, revision),
-    buildSessionEnvelope(downgradeSnapshot(snapshot, 3), sessionId, revision),
-    buildSessionEnvelope(createEmergencyPersistenceSnapshot(snapshot), sessionId, revision),
-  ];
-  const writeResult = writeLocalSessionWithAttempts(attempts);
-  if (!writeResult.ok || !writeResult.saved) return null;
-  try {
-    window.localStorage.setItem(MULTI_HISTORY_STORAGE_KEY, JSON.stringify(writeResult.saved.data.snapshot.multiHistory ?? []));
-  } catch {
-    // ignore auxiliary history persistence errors
-  }
-  return writeResult.saved;
+  // No localStorage — just return the envelope for server sync.
+  return buildSessionEnvelope(snapshot, sessionId, revision);
 }
 
 function toServerSyncEnvelope(
@@ -713,79 +698,17 @@ export default function ChatPage() {
     };
 
     const restore = async () => {
-      let restoredFromLocal = false;
-      let localEnvelope: PersistedChatSessionEnvelope<PersistedSessionData> | null = null;
-      try {
-        localEnvelope = readActiveLocalSession<PersistedSessionData>();
-        if (applyEnvelope(localEnvelope)) {
-          restoredFromLocal = true;
-        }
-
-        // Legacy fallback for existing v1 keys while users transition.
-        if (!restoredFromLocal) {
-          const snapshotKeys = [CHAT_SNAPSHOT_STORAGE_KEY, CHAT_SNAPSHOT_FALLBACK_STORAGE_KEY];
-          for (const key of snapshotKeys) {
-            const snapshotRaw = window.localStorage.getItem(key);
-            if (!snapshotRaw) continue;
-            try {
-              const snapshot = JSON.parse(snapshotRaw) as ChatSnapshot;
-              if (snapshot && Array.isArray(snapshot.messages)) {
-                applySnapshotState(snapshot);
-                snapshotRef.current = snapshot;
-                chatSessionIdRef.current = makeChatSessionId('legacy');
-                chatSessionRevisionRef.current = 0;
-                restoredFromLocal = true;
-                break;
-              }
-            } catch {
-              // try next
-            }
-          }
-        }
-
-        if (!restoredFromLocal) {
-          const historyRaw = window.localStorage.getItem(MULTI_HISTORY_STORAGE_KEY);
-          if (historyRaw) {
-            const parsed = JSON.parse(historyRaw) as MultiCallHistoryEntry[];
-            if (Array.isArray(parsed)) {
-              setMultiHistory(parsed);
-            }
-          }
-        }
-      } catch {
-        // ignore local restore errors and try server
-      } finally {
-        if (!cancelled) {
-          hasLoadedSnapshotRef.current = true;
-        }
-      }
+      hasLoadedSnapshotRef.current = true;
 
       // Rehydrate from backend source-of-truth.
       try {
-        const serverRecord = localEnvelope?.session_id
-          ? await getChatSessionById(localEnvelope.session_id)
-          : await getChatSessionLatest();
+        const serverRecord: ChatSessionRecord | null = await getChatSessionLatest().catch(() => null);
+        if (!serverRecord) return;
         if (cancelled) return;
         const serverEnvelope = toEnvelope(serverRecord);
         if (!serverEnvelope) return;
         if (serverEnvelope.revision >= chatSessionRevisionRef.current) {
           applyEnvelope(serverEnvelope);
-          const persisted = persistSnapshotToLocalStorage(
-            serverEnvelope.data.snapshot,
-            serverEnvelope.session_id,
-            serverEnvelope.revision,
-          );
-          if (persisted) {
-            queueChatSessionSync(persisted);
-          } else {
-            queueChatSessionSync(
-              buildServerSyncEnvelope(
-                serverEnvelope.data.snapshot,
-                serverEnvelope.session_id,
-                serverEnvelope.revision,
-              ),
-            );
-          }
         }
       } catch {
         // backend rehydrate is best-effort
@@ -1093,12 +1016,8 @@ export default function ChatPage() {
     updateMultiCall(phone, { thinking });
   }, [updateMultiCall]);
 
-  const persistMultiHistory = useCallback((entries: MultiCallHistoryEntry[]) => {
-    try {
-      window.localStorage.setItem(MULTI_HISTORY_STORAGE_KEY, JSON.stringify(entries));
-    } catch {
-      // Ignore persistence errors
-    }
+  const persistMultiHistory = useCallback((_entries: MultiCallHistoryEntry[]) => {
+    // No-op: backend is sole source of truth.
   }, []);
 
   const wait = useCallback((ms: number) => new Promise<void>((resolve) => {
@@ -1122,6 +1041,20 @@ export default function ChatPage() {
   const loadMultiSummary = useCallback(async (taskIds: string[], objectiveText: string, force = false) => {
     const deduped = Array.from(new Set(taskIds.filter(Boolean)));
     if (deduped.length === 0) return;
+
+    const pending = deduped
+      .map((taskId) => Object.entries(multiCallsRef.current).find(([, state]) => state.taskId === taskId))
+      .filter((entry): entry is [string, MultiCallState] => Boolean(entry))
+      .filter(([, state]) => state.status !== 'ended' && state.status !== 'failed')
+      .map(([phone, state]) => `${formatPhone(phone)} (${state.status})`);
+    if (pending.length > 0) {
+      const message = `Combined summary is waiting because some calls are still active: ${pending.slice(0, 4).join(', ')}`;
+      setMultiSummary(null);
+      setMultiSummaryState('error');
+      setMultiSummaryError(message);
+      return;
+    }
+
     const requestKey = `${objectiveText}::${deduped.slice().sort().join(',')}`;
     if (
       !force
@@ -1142,11 +1075,22 @@ export default function ChatPage() {
         role: 'ai',
         text: 'I compared every completed call and prepared one combined recommendation with all key pricing and terms.',
       });
+      const earlyEndedCount = response.checks?.early_ended_calls?.length ?? 0;
+      if (earlyEndedCount > 0) {
+        addMessage({
+          role: 'status',
+          text: `${earlyEndedCount} call(s) ended before the big summarization step; those calls were flagged as limited-data in the final summary.`,
+        });
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       setMultiSummary(null);
       setMultiSummaryState('error');
-      setMultiSummaryError(message);
+      if (message.includes('409')) {
+        setMultiSummaryError('Combined summary is blocked until all calls end.');
+      } else {
+        setMultiSummaryError(message);
+      }
     }
   }, [addMessage, multiSummaryState]);
 
@@ -1784,12 +1728,6 @@ export default function ChatPage() {
   function handleNewNegotiation() {
     closeAllSockets();
     resetChatSessionIdentity('chat');
-    try {
-      window.localStorage.removeItem(CHAT_SNAPSHOT_STORAGE_KEY);
-      window.localStorage.removeItem(CHAT_SNAPSHOT_FALLBACK_STORAGE_KEY);
-    } catch {
-      // Ignore storage errors
-    }
     setMessages([{ id: 'welcome', role: 'ai', text: 'What would you like me to negotiate?' }]);
     setInput('');
     setPhase('objective');
@@ -1822,6 +1760,85 @@ export default function ChatPage() {
     setActiveMultiHistoryId(null);
     analysisLoadedRef.current = false;
     refreshPastTasks();
+  }
+
+  async function handleDeleteCurrentSession() {
+    const currentSessionId = chatSessionIdRef.current;
+    if (!currentSessionId) {
+      addMessage({ role: 'ai', text: 'No chat session is currently selected.' });
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete chat session ${currentSessionId.slice(0, 18)}? This removes its saved chat snapshot.`,
+    );
+    if (!confirmed) return;
+
+    closeAllSockets();
+    let remoteDeleteWarning: string | null = null;
+
+    try {
+      await deleteChatSession(currentSessionId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete chat session.';
+      remoteDeleteWarning = message;
+    }
+
+    if (currentSessionId.startsWith('run-')) {
+      const runId = currentSessionId.slice(4);
+      setMultiHistory((prev) => prev.filter((entry) => entry.id !== runId));
+      if (activeMultiHistoryId === runId) {
+        setActiveMultiHistoryId(null);
+      }
+    }
+
+    handleNewNegotiation();
+    if (remoteDeleteWarning) {
+      addMessage({
+        role: 'status',
+        text: `Deleted local chat session ${currentSessionId.slice(0, 12)}. Remote delete warning: ${remoteDeleteWarning}`,
+      });
+      return;
+    }
+    addMessage({ role: 'status', text: `Deleted chat session ${currentSessionId.slice(0, 12)}.` });
+  }
+
+  async function handleDeleteSidebarTask(targetId: string, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const confirmed = window.confirm('Delete this task and all its data? This cannot be undone.');
+    if (!confirmed) return;
+    try {
+      await deleteTask(targetId);
+      setPastTasks((prev) => prev.filter((t) => t.id !== targetId));
+      if (taskId === targetId) {
+        handleNewNegotiation();
+      }
+    } catch {
+      // silent
+    }
+  }
+
+  async function handleDeleteMultiRun(runId: string, calls: { taskId: string }[], e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const confirmed = window.confirm('Delete this multi-run and all its call data? This cannot be undone.');
+    if (!confirmed) return;
+    try {
+      await Promise.all(calls.map((c) => deleteTask(c.taskId).catch(() => {})));
+      const sessionId = `run-${runId}`;
+      await deleteChatSession(sessionId).catch(() => {});
+      setMultiHistory((prev) => prev.filter((entry) => entry.id !== runId));
+      setPastTasks((prev) => {
+        const deletedIds = new Set(calls.map((c) => c.taskId));
+        return prev.filter((t) => !deletedIds.has(t.id));
+      });
+      if (activeMultiHistoryId === runId) {
+        handleNewNegotiation();
+      }
+    } catch {
+      // silent
+    }
   }
 
   function handleCallFromSearch(result: BusinessResult, phone: string) {
@@ -2467,17 +2484,16 @@ export default function ChatPage() {
                     const isActive = t.id === taskId;
                     const dot = outcomeDot[t.outcome] ?? 'bg-gray-300';
                     return (
-                      <button
+                      <div
                         key={t.id}
-                        onClick={() => loadPastChat(t.id)}
-                        className={`w-full text-left rounded-lg px-3 py-2 text-[13px] transition-all duration-150 group ${
+                        className={`relative group w-full text-left rounded-lg px-3 py-2 text-[13px] transition-all duration-150 cursor-pointer ${
                           isActive
                             ? 'bg-gray-100 text-gray-900 shadow-soft'
                             : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
                         }`}
-                        title={t.objective}
+                        onClick={() => loadPastChat(t.id)}
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 pr-6">
                           <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${dot} transition-colors`} />
                           <span className="truncate flex-1 font-medium">{t.objective || 'Untitled'}</span>
                         </div>
@@ -2487,7 +2503,17 @@ export default function ChatPage() {
                             <span className="text-[10px] text-gray-300">{t.duration_seconds < 60 ? `${t.duration_seconds}s` : `${Math.floor(t.duration_seconds / 60)}m`}</span>
                           )}
                         </div>
-                      </button>
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            void handleDeleteSidebarTask(t.id, e);
+                          }}
+                          className="absolute right-1.5 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-gray-300 hover:bg-red-50 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -2502,17 +2528,16 @@ export default function ChatPage() {
                     {multiRunEntries.map((entry) => {
                       const isActive = activeMultiHistoryId === entry.id;
                       return (
-                        <button
+                        <div
                           key={entry.id}
-                          onClick={() => loadMultiHistoryChat(entry.id)}
-                          className={`w-full text-left rounded-lg px-3 py-2 text-[13px] transition-all duration-150 ${
+                          className={`relative group w-full text-left rounded-lg px-3 py-2 text-[13px] transition-all duration-150 cursor-pointer ${
                             isActive
                               ? 'bg-gray-100 text-gray-900 shadow-soft'
                               : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
                           }`}
-                          title={entry.objective}
+                          onClick={() => loadMultiHistoryChat(entry.id)}
                         >
-                          <div className="truncate font-medium">{entry.objective || 'Concurrent run'}</div>
+                          <div className="truncate font-medium pr-6">{entry.objective || 'Concurrent run'}</div>
                           <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-gray-400">
                             <span>{entry.calls.length} call{entry.calls.length === 1 ? '' : 's'}</span>
                             <span>•</span>
@@ -2520,7 +2545,17 @@ export default function ChatPage() {
                             <span>•</span>
                             <span>chat {entry.id.slice(0, 8)}</span>
                           </div>
-                        </button>
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              void handleDeleteMultiRun(entry.id, entry.calls, e);
+                            }}
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-gray-300 hover:bg-red-50 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -2534,6 +2569,13 @@ export default function ChatPage() {
                 <BarChart3 size={13} />
                 Dashboard
               </Link>
+              <button
+                onClick={() => { void handleDeleteCurrentSession(); }}
+                className="rounded-lg border border-red-100 bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-600 transition-colors duration-150 hover:bg-red-100"
+                title="Delete current chat session"
+              >
+                Delete session
+              </button>
               <button
                 onClick={() => setSidebarOpen(false)}
                 className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-all duration-150"

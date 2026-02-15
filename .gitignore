@@ -18,6 +18,10 @@ node_modules/
 # Data artifacts
 backend/data/
 backend/*.db
+data/*.db
+data/*.log
+data/*.jsonl
+frontend/tsconfig.tsbuildinfo
 
 # OS
 .DS_Store

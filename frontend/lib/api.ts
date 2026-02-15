@@ -1,4 +1,17 @@
 import { BACKEND_API_URL, BACKEND_WS_URL } from './config';
+
+/** Safely extract an error message from a FastAPI error body.
+ *  `detail` may be a string (HTTPException) or an array of objects (validation error). */
+function extractDetail(body: Record<string, unknown>, fallback: string): string {
+  const d = body.detail;
+  if (typeof d === 'string') return d;
+  if (Array.isArray(d)) {
+    const msgs = d.map((e) => (typeof e === 'object' && e !== null && 'msg' in e ? (e as { msg: string }).msg : JSON.stringify(e)));
+    return msgs.join('; ');
+  }
+  return fallback;
+}
+
 import type {
   TaskDetail,
   TaskSummary,
@@ -60,6 +73,27 @@ export async function getChatSessionById(sessionId: string): Promise<ChatSession
   return res.json();
 }
 
+export async function deleteChatSession(sessionId: string): Promise<void> {
+  const res = await fetch(`${BACKEND_API_URL}/api/chat-sessions/${sessionId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(extractDetail(body, `Failed to delete chat session: ${res.status}`));
+  }
+}
+
+export async function deleteTask(id: string): Promise<ActionResponse> {
+  const res = await fetch(`${BACKEND_API_URL}/api/tasks/${id}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    return { ok: false, message: extractDetail(body, `Failed to delete task: ${res.status}`), session_id: null };
+  }
+  return res.json();
+}
+
 export async function listTasks(): Promise<TaskSummary[]> {
   const res = await fetch(`${BACKEND_API_URL}/api/tasks`);
   if (!res.ok) throw new Error(`Failed to list tasks: ${res.status}`);
@@ -78,7 +112,7 @@ export async function startCall(id: string): Promise<ActionResponse> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    return { ok: false, message: body.detail ?? `Failed to start call: ${res.status}`, session_id: null };
+    return { ok: false, message: extractDetail(body, `Failed to start call: ${res.status}`), session_id: null };
   }
   return res.json();
 }
@@ -89,7 +123,7 @@ export async function stopCall(id: string): Promise<ActionResponse> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    return { ok: false, message: body.detail ?? `Failed to stop call: ${res.status}`, session_id: null };
+    return { ok: false, message: extractDetail(body, `Failed to stop call: ${res.status}`), session_id: null };
   }
   return res.json();
 }
@@ -102,7 +136,7 @@ export async function transferCall(id: string, toPhone: string): Promise<ActionR
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    return { ok: false, message: body.detail ?? `Failed to transfer call: ${res.status}`, session_id: null };
+    return { ok: false, message: extractDetail(body, `Failed to transfer call: ${res.status}`), session_id: null };
   }
   return res.json();
 }
@@ -115,7 +149,7 @@ export async function sendCallDtmf(id: string, digits: string): Promise<ActionRe
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    return { ok: false, message: body.detail ?? `Failed to send keypad digits: ${res.status}`, session_id: null };
+    return { ok: false, message: extractDetail(body, `Failed to send keypad digits: ${res.status}`), session_id: null };
   }
   return res.json();
 }

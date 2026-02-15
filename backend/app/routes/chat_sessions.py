@@ -70,5 +70,18 @@ def get_routes(store: DataStore):
                 raise HTTPException(status_code=404, detail="Chat session not found")
             return ChatSessionResponse(**row)
 
-    return router
+    @router.delete("/{session_id}")
+    async def delete_chat_session(session_id: str):
+        with timed_step("api", "delete_chat_session", details={"session_id": session_id}):
+            deleted = store.delete_chat_session(session_id)
+            if not deleted:
+                still_exists = store.get_chat_session(session_id) is not None
+                if still_exists:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Chat session could not be fully deleted from remote storage",
+                    )
+                raise HTTPException(status_code=404, detail="Chat session not found")
+            return {"ok": True, "session_id": session_id, "message": "Chat session deleted"}
 
+    return router

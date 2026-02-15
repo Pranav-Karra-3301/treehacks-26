@@ -266,11 +266,26 @@ export type MultiCallSummaryResponse = {
   ok: boolean;
   call_count: number;
   summary: MultiCallSummaryPayload;
+  checks?: {
+    all_calls_terminal: boolean;
+    active_calls: Array<{
+      task_id: string;
+      target_phone: string;
+      status: string;
+    }>;
+    early_ended_calls: Array<{
+      task_id: string;
+      target_phone: string;
+      status: string;
+      reason: string;
+    }>;
+  };
   calls: Array<{
     task_id: string;
     target_phone: string;
     status: string;
     outcome: string;
+    transcript_turn_count?: number;
     score: number;
   }>;
 };

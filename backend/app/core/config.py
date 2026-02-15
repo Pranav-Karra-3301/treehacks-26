@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
@@ -13,9 +14,18 @@ else:  # fallback when launched from inside backend/
     load_dotenv()
 
 
+def _resolve_data_root() -> Path:
+    raw = os.getenv("KIRU_DATA_ROOT", os.getenv("NEGOTIATEAI_DATA_ROOT", "data"))
+    candidate = Path(raw).expanduser()
+    if candidate.is_absolute():
+        return candidate
+    return (Path(__file__).resolve().parents[2] / candidate).resolve()
+
+
 class Settings:
-    DATA_ROOT = Path(os.getenv("KIRU_DATA_ROOT", os.getenv("NEGOTIATEAI_DATA_ROOT", "data")))
-    SQLITE_PATH = DATA_ROOT / "calls.db"
+    # DATA_ROOT is used exclusively for telemetry/logging.
+    # Task/call artifacts are stored in Supabase, NOT on disk.
+    DATA_ROOT = _resolve_data_root()
 
     APP_HOST = os.getenv("HOST", "0.0.0.0")
     APP_PORT = int(os.getenv("PORT", "3001"))
@@ -25,6 +35,106 @@ class Settings:
         for origin in os.getenv("ALLOWED_ORIGINS", "*").split(",")
         if origin.strip()
     ]
+
+    # Supabase-backed chat-session persistence (optional)
+    SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
+    SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "").strip()
+    SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    SUPABASE_CHAT_SESSIONS_TABLE = os.getenv("SUPABASE_CHAT_SESSIONS_TABLE", "chat_sessions").strip()
+    SUPABASE_CALLS_TABLE = os.getenv("SUPABASE_CALLS_TABLE", "calls").strip()
+    SUPABASE_CALL_ARTIFACTS_TABLE = os.getenv("SUPABASE_CALL_ARTIFACTS_TABLE", "call_artifacts").strip()
+    _parsed_supabase_url = urlparse(SUPABASE_URL)
+    _HAS_VALID_SUPABASE_URL = bool(_parsed_supabase_url.scheme and _parsed_supabase_url.netloc)
+    _SUPABASE_CHAT_SESSIONS_ENABLED = (
+        os.getenv("SUPABASE_CHAT_SESSIONS_ENABLED", "auto").strip().lower()
+    )
+    if _SUPABASE_CHAT_SESSIONS_ENABLED in {"1", "true", "yes", "on", "enabled"}:
+        SUPABASE_CHAT_SESSIONS_ENABLED = True
+    elif _SUPABASE_CHAT_SESSIONS_ENABLED in {"0", "false", "no", "off", "disabled"}:
+        SUPABASE_CHAT_SESSIONS_ENABLED = False
+    else:
+        SUPABASE_CHAT_SESSIONS_ENABLED = (
+            bool(SUPABASE_URL and SUPABASE_ANON_KEY) and _HAS_VALID_SUPABASE_URL
+        )
+
+    _SUPABASE_CALLS_ENABLED = os.getenv("SUPABASE_CALLS_ENABLED", "").strip().lower()
+    if _SUPABASE_CALLS_ENABLED in {"1", "true", "yes", "on", "enabled"}:
+        SUPABASE_CALLS_ENABLED = True
+    elif _SUPABASE_CALLS_ENABLED in {"0", "false", "no", "off", "disabled"}:
+        SUPABASE_CALLS_ENABLED = False
+    else:
+        SUPABASE_CALLS_ENABLED = SUPABASE_CHAT_SESSIONS_ENABLED
+
+    _SUPABASE_CALL_ARTIFACTS_ENABLED = (
+        os.getenv("SUPABASE_CALL_ARTIFACTS_ENABLED", "").strip().lower()
+    )
+    if _SUPABASE_CALL_ARTIFACTS_ENABLED in {"1", "true", "yes", "on", "enabled"}:
+        SUPABASE_CALL_ARTIFACTS_ENABLED = True
+    elif _SUPABASE_CALL_ARTIFACTS_ENABLED in {"0", "false", "no", "off", "disabled"}:
+        SUPABASE_CALL_ARTIFACTS_ENABLED = False
+    else:
+        SUPABASE_CALL_ARTIFACTS_ENABLED = SUPABASE_CALLS_ENABLED
+
+    try:
+        SUPABASE_CALL_ARTIFACT_MAX_AUDIO_BYTES = int(
+            os.getenv("SUPABASE_CALL_ARTIFACT_MAX_AUDIO_BYTES", "67108864")
+        )
+    except ValueError:
+        SUPABASE_CALL_ARTIFACT_MAX_AUDIO_BYTES = 67108864
+    if SUPABASE_CALL_ARTIFACT_MAX_AUDIO_BYTES <= 0:
+        SUPABASE_CALL_ARTIFACT_MAX_AUDIO_BYTES = 67108864
+
+    SUPABASE_VERBOSE_SYNC_LOGGING = (
+        os.getenv("SUPABASE_VERBOSE_SYNC_LOGGING", "true").strip().lower() == "true"
+    )
+
+    AUTO_IVR_NAVIGATION_ENABLED = (
+        os.getenv("AUTO_IVR_NAVIGATION_ENABLED", "true").strip().lower() == "true"
+    )
+    try:
+        CALL_CONTROL_GLOBAL_COOLDOWN_SECONDS = float(
+            os.getenv("CALL_CONTROL_GLOBAL_COOLDOWN_SECONDS", "0.8")
+        )
+    except ValueError:
+        CALL_CONTROL_GLOBAL_COOLDOWN_SECONDS = 0.8
+    if CALL_CONTROL_GLOBAL_COOLDOWN_SECONDS < 0:
+        CALL_CONTROL_GLOBAL_COOLDOWN_SECONDS = 0.0
+
+    try:
+        CALL_CONTROL_DUPLICATE_DTMF_SECONDS = float(
+            os.getenv("CALL_CONTROL_DUPLICATE_DTMF_SECONDS", "2.0")
+        )
+    except ValueError:
+        CALL_CONTROL_DUPLICATE_DTMF_SECONDS = 2.0
+    if CALL_CONTROL_DUPLICATE_DTMF_SECONDS < 0:
+        CALL_CONTROL_DUPLICATE_DTMF_SECONDS = 0.0
+
+    try:
+        CALL_CONTROL_PENDING_TIMEOUT_SECONDS = float(
+            os.getenv("CALL_CONTROL_PENDING_TIMEOUT_SECONDS", "8.0")
+        )
+    except ValueError:
+        CALL_CONTROL_PENDING_TIMEOUT_SECONDS = 8.0
+    if CALL_CONTROL_PENDING_TIMEOUT_SECONDS < 0:
+        CALL_CONTROL_PENDING_TIMEOUT_SECONDS = 0.0
+
+    try:
+        CALL_CONTROL_MAX_DTMF_ATTEMPTS = int(
+            os.getenv("CALL_CONTROL_MAX_DTMF_ATTEMPTS", "24")
+        )
+    except ValueError:
+        CALL_CONTROL_MAX_DTMF_ATTEMPTS = 24
+    if CALL_CONTROL_MAX_DTMF_ATTEMPTS <= 0:
+        CALL_CONTROL_MAX_DTMF_ATTEMPTS = 24
+
+    try:
+        CALL_CONTROL_IVR_BUDGET_SECONDS = int(
+            os.getenv("CALL_CONTROL_IVR_BUDGET_SECONDS", "240")
+        )
+    except ValueError:
+        CALL_CONTROL_IVR_BUDGET_SECONDS = 240
+    if CALL_CONTROL_IVR_BUDGET_SECONDS <= 0:
+        CALL_CONTROL_IVR_BUDGET_SECONDS = 240
 
     # LLM provider selection
     # values: ollama (preferred) | openai | anthropic

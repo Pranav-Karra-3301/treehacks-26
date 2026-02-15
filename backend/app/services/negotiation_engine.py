@@ -203,7 +203,9 @@ class NegotiationEngine:
 
         generated = []
         async for token in self._llm.stream_completion(
-            messages, max_tokens=settings.LLM_MAX_TOKENS_ANALYSIS
+            messages,
+            max_tokens=settings.LLM_MAX_TOKENS_ANALYSIS,
+            allow_fallback=False,
         ):
             generated.append(token)
 
@@ -218,7 +220,7 @@ class NegotiationEngine:
                 lines = lines[:-1]
             raw = "\n".join(lines).strip()
 
-        analysis = json.loads(raw)
+        analysis = json.loads(raw, strict=False)
 
         # Normalize outcome
         valid_outcomes = {"unknown", "success", "partial", "failed", "walkaway"}
@@ -304,6 +306,7 @@ class NegotiationEngine:
             async for token in self._llm.stream_completion(
                 messages,
                 max_tokens=max(settings.LLM_MAX_TOKENS_ANALYSIS, 1400),
+                allow_fallback=False,
             ):
                 generated.append(token)
             raw = "".join(generated).strip()
@@ -313,7 +316,7 @@ class NegotiationEngine:
                 if lines and lines[-1].strip() == "```":
                     lines = lines[:-1]
                 raw = "\n".join(lines).strip()
-            parsed = json.loads(raw)
+            parsed = json.loads(raw, strict=False)
         except Exception as exc:
             log_event(
                 "negotiation",

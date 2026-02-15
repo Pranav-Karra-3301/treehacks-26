@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ChevronRight, ArrowLeft } from 'lucide-react';
-import { listTasks, getTaskAnalysis } from '../lib/api';
+import { X, ChevronRight, ArrowLeft, Trash2 } from 'lucide-react';
+import { listTasks, getTaskAnalysis, deleteTask } from '../lib/api';
 import type { TaskSummary, AnalysisPayload, CallOutcome } from '../lib/types';
 import AnalysisCard from './analysis-card';
 import AudioPlayer from './audio-player';
@@ -53,6 +53,23 @@ export default function HistoryPanel({ open, onClose }: { open: boolean; onClose
       setAnalysis(null);
     }
   }, [open, fetchTasks]);
+
+  async function handleDeleteTask(id: string, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const confirmed = window.confirm('Delete this task and all its data? This cannot be undone.');
+    if (!confirmed) return;
+    try {
+      await deleteTask(id);
+      setTasks((prev) => prev.filter((t) => t.id !== id));
+      if (selectedTask === id) {
+        setSelectedTask(null);
+        setAnalysis(null);
+      }
+    } catch (err) {
+      console.error('Failed to delete task:', err);
+    }
+  }
 
   async function selectTask(id: string) {
     setSelectedTask(id);
@@ -124,27 +141,41 @@ export default function HistoryPanel({ open, onClose }: { open: boolean; onClose
                     {tasks.map((t) => {
                       const badge = outcomeBadgeColors[t.outcome] ?? outcomeBadgeColors.unknown;
                       return (
-                        <button
-                          key={t.id}
-                          onClick={() => selectTask(t.id)}
-                          className="w-full text-left rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-soft hover:shadow-card transition-shadow"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0 flex-1">
-                              <p className="text-[13px] font-medium text-gray-900 truncate">{t.objective}</p>
-                              <div className="flex items-center gap-2 mt-1">
-                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${badge}`}>
-                                  {t.outcome}
-                                </span>
-                                {t.duration_seconds > 0 && (
-                                  <span className="text-[11px] text-gray-400">{formatDuration(t.duration_seconds)}</span>
-                                )}
-                                <span className="text-[11px] text-gray-400">{formatDate(t.created_at)}</span>
-                              </div>
+                        <div key={t.id} className="relative rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-soft hover:shadow-card transition-shadow">
+                          <div
+                            onClick={() => selectTask(t.id)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') selectTask(t.id); }}
+                            className="cursor-pointer pr-16"
+                          >
+                            <p className="text-[13px] font-medium text-gray-900 truncate">{t.objective}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${badge}`}>
+                                {t.outcome}
+                              </span>
+                              {t.duration_seconds > 0 && (
+                                <span className="text-[11px] text-gray-400">{formatDuration(t.duration_seconds)}</span>
+                              )}
+                              <span className="text-[11px] text-gray-400">{formatDate(t.created_at)}</span>
                             </div>
-                            <ChevronRight size={14} className="text-gray-300 shrink-0 mt-1" />
                           </div>
-                        </button>
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                void handleDeleteTask(t.id, e);
+                              }}
+                              className="flex h-7 w-7 items-center justify-center rounded-md text-gray-300 hover:bg-red-50 hover:text-red-500 transition-colors"
+                              title="Delete task"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                            <ChevronRight size={14} className="text-gray-300" />
+                          </div>
+                        </div>
                       );
                     })}
                   </div>

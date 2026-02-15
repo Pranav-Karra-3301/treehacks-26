@@ -258,7 +258,11 @@ class LLMClient:
             raise ValueError(f"Unsupported LLM provider '{self._provider_name}'")
 
     async def stream_completion(
-        self, messages: List[Dict[str, str]], max_tokens: int = 200
+        self,
+        messages: List[Dict[str, str]],
+        max_tokens: int = 200,
+        *,
+        allow_fallback: bool = True,
     ) -> AsyncGenerator[str, None]:
         try:
             async for token in self._provider.stream_completion(messages, max_tokens=max_tokens):
@@ -268,12 +272,26 @@ class LLMClient:
             log_event(
                 "llm",
                 "stream_completion_fallback",
-                status="fallback",
-                details={"provider": self._provider_name, "error": f"{type(exc).__name__}: {exc}"},
+                status="fallback" if allow_fallback else "warning",
+                details={
+                    "provider": self._provider_name,
+                    "allow_fallback": allow_fallback,
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "error_repr": repr(exc),
+                },
             )
+            if not allow_fallback:
+                raise
             # Keep the agent alive if the configured API is unavailable.
             for token in _fallback_stream():
                 yield token
+
+    async def complete(self, messages: List[Dict[str, str]], max_tokens: int = 200) -> str:
+        """Buffer streaming tokens into a single string."""
+        tokens: list[str] = []
+        async for token in self.stream_completion(messages, max_tokens=max_tokens, allow_fallback=False):
+            tokens.append(token)
+        return "".join(tokens)
 
     async def close(self) -> None:
         close_fn = getattr(self._provider, "aclose", None)

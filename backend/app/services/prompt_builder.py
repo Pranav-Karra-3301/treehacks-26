@@ -60,7 +60,8 @@ PHASE_CONFIGS: Dict[str, Dict[str, Any]] = {
             "- Get verbal commitment: 'Does that work for you?' 'Can we lock that in?'\n"
             "- If no deal is possible, exit gracefully: 'I appreciate your time. Let me think on this.'\n"
             "- Summarize what was agreed. Don't reopen settled points.\n"
-            "- Keep it tight. You're almost done."
+            "- Keep it tight. You're almost done.\n"
+            "- Once confirmed or declined, say thanks/goodbye and USE end_call IMMEDIATELY. Do not linger."
         ),
     },
 }
@@ -241,16 +242,47 @@ def build_negotiation_prompt(
     # 6. IVR keypad navigation tool
     parts.append(
         "--- IVR KEYPAD TOOL ---\n"
-        "You have access to a 'send_keypad_tones' function for phone menu navigation.\n"
-        "Use it when the system asks for keypad input, such as:\n"
-        "- 'Press 1 for sales, 2 for support'\n"
-        "- 'Enter extension' or account digits\n"
-        "- 'Press # to confirm'\n"
-        "Send only the exact required digits. Use 'w' for a short pause when needed.\n"
-        "After using it, continue the conversation naturally without narrating tool mechanics."
+        "You have access to a 'send_keypad_tones' function for phone menu navigation.\n\n"
+        "WHEN TO USE IT:\n"
+        "- Menu options: \"press 1 for...\", \"say billing or press 2\", \"dial 0 for operator\"\n"
+        "- Digit entry: account number, extension, zip code\n"
+        "- Confirmation: \"press pound to confirm\", \"press star to go back\"\n\n"
+        "STRATEGY:\n"
+        "- Prioritize reaching a live human/representative/agent/operator\n"
+        "- If no human option, choose the option closest to your objective\n"
+        "- If stuck or menu repeats, try pressing 0 or saying \"representative\"\n"
+        "- If asked for info you don't have, say \"I don't have it\" or press 0\n\n"
+        "RULES:\n"
+        "- Send only exact digits needed. Use 'w' for pauses in multi-digit sequences\n"
+        "- Do NOT narrate (\"I'm pressing 1\") — just press and wait silently\n"
+        "- After navigating, continue naturally once a human answers"
     )
 
-    # 7. Guardrails
+    # 7. End-call tool
+    parts.append(
+        "--- CALL END TOOL ---\n"
+        "You have access to an 'end_call' function. You MUST use it to hang up the call.\n"
+        "If you don't call end_call, the call stays connected forever. YOU are responsible for ending it.\n\n"
+        "CALL end_call IMMEDIATELY when ANY of these happen:\n"
+        "1. OBJECTIVE COMPLETE: You got what you called for (deal confirmed, info obtained, appointment booked). "
+        "Say a quick thanks/goodbye, then call end_call.\n"
+        "2. VOICEMAIL: You hear a beep, 'leave a message', 'not available', or 'mailbox'. "
+        "Do NOT leave a message. Call end_call with reason 'voicemail'.\n"
+        "3. DEAD END: The rep says they can't help, refuses your request, or transfers you to a dead line. "
+        "Say 'thanks anyway' and call end_call.\n"
+        "4. GOODBYE EXCHANGE: After you or they say goodbye/thanks/have a good day, call end_call immediately. "
+        "Do NOT keep talking after a goodbye.\n"
+        "5. STUCK: You've been on hold for a long time, the IVR is looping, or nobody is responding. "
+        "Call end_call with reason 'no_progress'.\n"
+        "6. WALKAWAY: The best offer is worse than your walkaway point. Politely decline and call end_call.\n\n"
+        "CRITICAL RULES:\n"
+        "- After saying your final sentence (recap, goodbye, thanks), your VERY NEXT action must be end_call.\n"
+        "- Do NOT say 'I'll end the call now' or narrate hanging up. Just say goodbye and call end_call.\n"
+        "- Do NOT wait for them to respond after you say goodbye. Call end_call immediately.\n"
+        "- If the line goes silent for extended time, call end_call with reason 'silence'."
+    )
+
+    # 8. Guardrails
     guardrail_lines = [
         "--- GUARDRAILS ---",
         "Keep these in mind at all times.",
@@ -272,7 +304,8 @@ def build_negotiation_prompt(
     ]
     if info_only_mode:
         guardrail_lines.append(
-            "14. INFO-ONLY MODE: once the question is answered clearly, do a short recap and end the call; no email step."
+            "14. INFO-ONLY MODE: once the question is answered clearly, do a short recap, say thanks/goodbye, "
+            "and IMMEDIATELY call end_call. Do NOT ask follow-up questions or request email."
         )
     if walkaway and walkaway != "No hard walkaway configured":
         guardrail_lines.append(

@@ -77,6 +77,11 @@ class SessionManager:
         session = self._sessions.get(session_id)
         return list(session.transcript) if session else []
 
+    async def delete_session(self, session_id: str) -> bool:
+        """Remove a session from memory, freeing conversation/transcript data."""
+        async with self._lock:
+            return self._sessions.pop(session_id, None) is not None
+
     async def get_duration_seconds(self, session_id: str) -> int:
         session = self._sessions.get(session_id)
         if not session or not session.started_at:
