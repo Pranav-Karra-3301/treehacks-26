@@ -7,7 +7,7 @@ import { Kiru, Reveal } from './shared';
 
 function BentoCallVisual() {
   return (
-    <div className="mt-6 flex items-center gap-3">
+    <div className="mt-6 flex items-center gap-3 pr-24 sm:pr-0">
       <div className="h-10 w-10 rounded-full bg-emerald-500/10 flex items-center justify-center"><Phone size={16} className="text-emerald-600" /></div>
       <div className="flex-1 space-y-1.5">
         <div className="flex items-center gap-2">
@@ -36,7 +36,7 @@ function BentoTacticsVisual() {
 
 function BentoScoreVisual() {
   return (
-    <div className="mt-6 flex items-end gap-3">
+    <div className="mt-6 flex items-end gap-3 pb-20 sm:pb-0">
       <span className="text-[40px] font-bold leading-none tracking-tighter text-gray-900">87</span>
       <div className="mb-1 space-y-0.5">
         <span className="text-[11px] font-medium text-emerald-600">Excellent</span>
@@ -48,7 +48,7 @@ function BentoScoreVisual() {
 
 function BentoTranscriptVisual() {
   return (
-    <div className="mt-6 space-y-1.5 text-[11px] font-mono">
+    <div className="mt-6 space-y-1.5 text-[11px] font-mono pb-20 sm:pb-0">
       {[
         { who: 'Agent', line: "I've been a loyal customer for five years..." },
         { who: 'Rep', line: 'Let me pull up your account.' },
@@ -64,7 +64,7 @@ function BentoTranscriptVisual() {
 
 function BentoPrivacyVisual() {
   return (
-    <div className="mt-6 flex flex-wrap gap-1.5">
+    <div className="mt-6 flex flex-wrap gap-1.5 pb-20 sm:pb-0">
       {['Encrypted', 'No training', 'Delete anytime'].map((t) => (
         <span key={t} className="flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-medium text-emerald-700">
           <Check size={8} />
@@ -127,7 +127,7 @@ export default function FeaturesBento() {
                 loop
                 muted
                 playsInline
-                className="absolute bottom-3 right-3 w-28 h-auto rounded-md opacity-90"
+                className="absolute bottom-2 right-2 w-20 sm:w-24 md:w-28 h-auto rounded-md opacity-90"
               >
                 <source src="/2.mp4" type="video/mp4" />
               </video>
@@ -152,7 +152,7 @@ export default function FeaturesBento() {
                 loop
                 muted
                 playsInline
-                className="absolute bottom-3 right-3 w-28 h-auto rounded-md opacity-90"
+                className="absolute bottom-2 right-2 w-20 sm:w-24 md:w-28 h-auto rounded-md opacity-90"
               >
                 <source src="/3.mp4" type="video/mp4" />
               </video>
@@ -169,7 +169,7 @@ export default function FeaturesBento() {
                 loop
                 muted
                 playsInline
-                className="absolute bottom-3 right-3 w-28 h-auto rounded-md opacity-90"
+                className="absolute bottom-2 right-2 w-20 sm:w-24 md:w-28 h-auto rounded-md opacity-90"
               >
                 <source src="/private.mp4" type="video/mp4" />
               </video>
@@ -186,7 +186,7 @@ export default function FeaturesBento() {
                 loop
                 muted
                 playsInline
-                className="absolute bottom-3 right-3 w-28 h-auto rounded-md opacity-90"
+                className="absolute bottom-2 right-2 w-20 sm:w-24 md:w-28 h-auto rounded-md opacity-90"
               >
                 <source src="/transcript.mp4" type="video/mp4" />
               </video>
