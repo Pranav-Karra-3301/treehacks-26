@@ -70,7 +70,7 @@ export default function HistoryPanel({ open, onClose }: { open: boolean; onClose
 
   return (
     <AnimatePresence>
-      {open && (
+      {open ? (
         <>
           {/* Backdrop */}
           <motion.div
@@ -92,14 +92,14 @@ export default function HistoryPanel({ open, onClose }: { open: boolean; onClose
             {/* Panel Header */}
             <div className="sticky top-0 z-10 flex items-center justify-between bg-white/90 backdrop-blur-xl border-b border-gray-200/60 px-5 py-3.5">
               <div className="flex items-center gap-2">
-                {selectedTask && (
+                {selectedTask ? (
                   <button
                     onClick={() => { setSelectedTask(null); setAnalysis(null); }}
                     className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
                   >
                     <ArrowLeft size={14} />
                   </button>
-                )}
+                ) : null}
                 <h2 className="text-[15px] font-semibold text-gray-900">
                   {selectedTask ? 'Negotiation Detail' : 'History'}
                 </h2>
@@ -136,9 +136,9 @@ export default function HistoryPanel({ open, onClose }: { open: boolean; onClose
                                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${badge}`}>
                                   {t.outcome}
                                 </span>
-                                {t.duration_seconds > 0 && (
+                                {t.duration_seconds > 0 ? (
                                   <span className="text-[11px] text-gray-400">{formatDuration(t.duration_seconds)}</span>
-                                )}
+                                ) : null}
                                 <span className="text-[11px] text-gray-400">{formatDate(t.created_at)}</span>
                               </div>
                             </div>
@@ -167,7 +167,7 @@ export default function HistoryPanel({ open, onClose }: { open: boolean; onClose
             </div>
           </motion.div>
         </>
-      )}
+      ) : null}
     </AnimatePresence>
   );
 }

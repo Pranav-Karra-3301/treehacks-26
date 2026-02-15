@@ -23,10 +23,12 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
   const [reloadTick, setReloadTick] = useState(0);
   const [retryCount, setRetryCount] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const side = AUDIO_SIDES[sideIndex] ?? 'mixed';
   const src = getAudioUrl(taskId, side);
 
   useEffect(() => {
+    if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     setError(null);
     setPlaying(false);
     setCurrentTime(0);
@@ -51,6 +53,15 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
         return;
       }
       setError('Recording is still processing.');
+      setRetryCount((prev) => {
+        if (prev >= 20) return prev;
+        retryTimerRef.current = setTimeout(() => {
+          setSideIndex(0);
+          setReloadTick((t) => t + 1);
+          setError(null);
+        }, 2500);
+        return prev + 1;
+      });
     };
 
     audio.addEventListener('timeupdate', onTime);
@@ -67,18 +78,6 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
       audio.removeEventListener('error', onError);
     };
   }, [sideIndex]);
-
-  useEffect(() => {
-    if (!error) return;
-    if (retryCount >= 20) return;
-    const timer = window.setTimeout(() => {
-      setRetryCount((prev) => prev + 1);
-      setSideIndex(0);
-      setReloadTick((prev) => prev + 1);
-      setError(null);
-    }, 2500);
-    return () => window.clearTimeout(timer);
-  }, [error, retryCount]);
 
   function togglePlay() {
     const audio = audioRef.current;

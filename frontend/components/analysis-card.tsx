@@ -113,7 +113,7 @@ function ExpandableSection({ icon: Icon, title, children, delay = 0 }: {
         />
       </button>
       <AnimatePresence>
-        {open && (
+        {open ? (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
@@ -123,7 +123,7 @@ function ExpandableSection({ icon: Icon, title, children, delay = 0 }: {
           >
             <div className="pt-2">{children}</div>
           </motion.div>
-        )}
+        ) : null}
       </AnimatePresence>
     </motion.div>
   );
@@ -157,9 +157,9 @@ export default function AnalysisCard({ analysis }: { analysis: AnalysisPayload }
               <p className="text-[13px] text-gray-400 italic">No summary available</p>
             )}
 
-            {analysis.score_reasoning && (
+            {analysis.score_reasoning ? (
               <p className="text-[11.5px] text-gray-400 mt-1.5 leading-relaxed">{analysis.score_reasoning}</p>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
@@ -170,7 +170,7 @@ export default function AnalysisCard({ analysis }: { analysis: AnalysisPayload }
       {/* Details sections */}
       <div className="px-5 py-4 space-y-4">
         {/* Tactics — always visible if present */}
-        {analysis.tactics_used?.length > 0 && (
+        {analysis.tactics_used?.length > 0 ? (
           <Section icon={Zap} title="Tactics" delay={0.1}>
             <div className="flex flex-wrap gap-1.5">
               {analysis.tactics_used.map((t, i) => {
@@ -192,10 +192,10 @@ export default function AnalysisCard({ analysis }: { analysis: AnalysisPayload }
               })}
             </div>
           </Section>
-        )}
+        ) : null}
 
         {/* Key Moments */}
-        {analysis.key_moments?.length > 0 && (
+        {analysis.key_moments?.length > 0 ? (
           <Section icon={Target} title="Key Moments" delay={0.15}>
             <div className="space-y-1.5">
               {analysis.key_moments.map((m, i) => (
@@ -206,29 +206,29 @@ export default function AnalysisCard({ analysis }: { analysis: AnalysisPayload }
               ))}
             </div>
           </Section>
-        )}
+        ) : null}
 
         {/* Concessions — collapsible */}
-        {analysis.concessions?.length > 0 && (
+        {analysis.concessions?.length > 0 ? (
           <ExpandableSection icon={ArrowUpRight} title="Concessions" delay={0.2}>
             <div className="space-y-2">
               {analysis.concessions.map((c, i) => (
                 <div key={i} className="rounded-lg bg-gray-50 px-3 py-2">
                   <div className="flex items-center gap-1.5">
                     <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">{c.party}</span>
-                    {c.significance && (
+                    {c.significance ? (
                       <span className="text-[10px] text-gray-400">/ {c.significance}</span>
-                    )}
+                    ) : null}
                   </div>
                   <p className="text-[12.5px] text-gray-600 mt-0.5 leading-relaxed">{c.description}</p>
                 </div>
               ))}
             </div>
           </ExpandableSection>
-        )}
+        ) : null}
 
         {/* Suggestions — collapsible */}
-        {analysis.improvement_suggestions?.length > 0 && (
+        {analysis.improvement_suggestions?.length > 0 ? (
           <ExpandableSection icon={Lightbulb} title="Next Time" delay={0.25}>
             <div className="space-y-1.5">
               {analysis.improvement_suggestions.map((s, i) => (
@@ -239,7 +239,7 @@ export default function AnalysisCard({ analysis }: { analysis: AnalysisPayload }
               ))}
             </div>
           </ExpandableSection>
-        )}
+        ) : null}
       </div>
     </motion.div>
   );

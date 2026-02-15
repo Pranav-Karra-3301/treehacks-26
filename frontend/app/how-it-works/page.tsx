@@ -1,10 +1,20 @@
 'use client';
 
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useRef, ReactNode } from 'react';
 import { motion, useInView } from 'framer-motion';
 import { ArrowUpRight, ArrowRight } from 'lucide-react';
-import MermaidDiagram from '@/components/mermaid-diagram';
+
+const MermaidDiagram = dynamic(() => import('../../components/mermaid-diagram'), {
+  ssr: false,
+  loading: () => (
+    <div className="animate-pulse space-y-3 py-8">
+      <div className="h-4 w-1/3 rounded bg-gray-200/60" />
+      <div className="h-48 w-full rounded-lg bg-gray-100/60" />
+    </div>
+  ),
+});
 
 // ─── Branded wordmark ──────────────────────────────────────────────────────────
 

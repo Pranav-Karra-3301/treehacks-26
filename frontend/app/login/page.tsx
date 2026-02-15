@@ -84,9 +84,9 @@ function LoginForm() {
             </div>
           </div>
 
-          {error && (
+          {error ? (
             <p className="text-center text-[13px] text-red-500">{error}</p>
-          )}
+          ) : null}
         </form>
       </div>
     </div>

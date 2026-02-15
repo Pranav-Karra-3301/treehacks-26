@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useRef } from 'react';
+import useSWR from 'swr';
 import Link from 'next/link';
 import { motion, AnimatePresence, useInView } from 'framer-motion';
 import {
@@ -115,36 +116,26 @@ type DetailData = {
 // ─── Main Page ──────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const [calls, setCalls] = useState<SupabaseCall[]>([]);
-  const [loading, setLoading] = useState(true);
+  // ── Fetch from Supabase via SWR ───────────────────────────────────────────
+  const fetcher = async () => {
+    const { data, error } = await supabase
+      .from('calls')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data ?? [];
+  };
+
+  const { data: calls = [], isLoading: loading } = useSWR<SupabaseCall[]>('dashboard-calls', fetcher, {
+    refreshInterval: 30_000,
+    revalidateOnFocus: true,
+  });
 
   // Detail drawer
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailData, setDetailData] = useState<DetailData>({});
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailTab, setDetailTab] = useState<'transcript' | 'analysis' | 'recording'>('transcript');
-
-  const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // ── Fetch from Supabase ───────────────────────────────────────────────────
-
-  const fetchCalls = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('calls')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (!error && data) setCalls(data);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchCalls();
-    refreshRef.current = setInterval(fetchCalls, 30_000);
-    return () => { if (refreshRef.current) clearInterval(refreshRef.current); };
-  }, [fetchCalls]);
 
   // ── Open detail drawer ────────────────────────────────────────────────────
 
@@ -235,7 +226,7 @@ export default function DashboardPage() {
                   <span className="text-[12px] font-semibold text-gray-400 uppercase tracking-wider">{s.label}</span>
                 </div>
                 <p className="text-[28px] font-bold tracking-tight text-gray-950 tabular-nums leading-none">{s.value}</p>
-                {s.sub && <p className="text-[12px] text-gray-400 mt-2">{s.sub}</p>}
+                {s.sub ? <p className="text-[12px] text-gray-400 mt-2">{s.sub}</p> : null}
               </div>
             </Reveal>
           ))}
@@ -245,9 +236,9 @@ export default function DashboardPage() {
         <Reveal delay={0.1}>
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-[18px] font-semibold text-gray-950">Recent Negotiations</h2>
-            {calls.length > 0 && (
+            {calls.length > 0 ? (
               <span className="text-[12px] text-gray-400">{calls.length} total</span>
-            )}
+            ) : null}
           </div>
         </Reveal>
 
@@ -278,7 +269,7 @@ export default function DashboardPage() {
 
       {/* ── Detail Drawer ──────────────────────────────────────────────── */}
       <AnimatePresence>
-        {selectedId && (
+        {selectedId ? (
           <DetailDrawer
             taskId={selectedId}
             data={detailData}
@@ -287,7 +278,7 @@ export default function DashboardPage() {
             setActiveTab={setDetailTab}
             onClose={closeDetail}
           />
-        )}
+        ) : null}
       </AnimatePresence>
     </div>
   );
@@ -306,6 +297,7 @@ function CallRow({ call, index, onSelect }: { call: SupabaseCall; index: number;
       transition={{ duration: 0.3, delay: Math.min(index * 0.03, 0.3), ease }}
       onClick={() => onSelect(call.id)}
       className="w-full text-left rounded-2xl border border-gray-100 bg-gray-50/50 px-6 py-5 hover:border-gray-200 hover:shadow-card hover:bg-white transition-all duration-200 group"
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '0 80px' }}
     >
       <div className="flex items-center gap-4">
         <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${dot}`} />
@@ -315,18 +307,18 @@ function CallRow({ call, index, onSelect }: { call: SupabaseCall; index: number;
           </p>
           <div className="flex items-center gap-2.5 mt-1.5 flex-wrap">
             <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${oc.bg} ${oc.text}`}>{oc.label}</span>
-            {call.target_phone && (
+            {call.target_phone ? (
               <span className="text-[11px] text-gray-400">{call.target_phone}</span>
-            )}
-            {call.duration_seconds != null && call.duration_seconds > 0 && (
+            ) : null}
+            {call.duration_seconds != null && call.duration_seconds > 0 ? (
               <span className="text-[11px] text-gray-400">{fmtDuration(call.duration_seconds)}</span>
-            )}
-            {call.style && (
+            ) : null}
+            {call.style ? (
               <span className="rounded-md bg-gray-100 border border-gray-200/60 px-2 py-0.5 text-[10px] font-medium text-gray-500">{call.style}</span>
-            )}
-            {call.created_at && (
+            ) : null}
+            {call.created_at ? (
               <span className="text-[11px] text-gray-300">{fmtDate(call.created_at)}</span>
-            )}
+            ) : null}
           </div>
         </div>
         <ChevronDown size={14} className="text-gray-300 -rotate-90 group-hover:text-gray-500 transition-colors shrink-0" />
@@ -391,23 +383,23 @@ function DetailDrawer({
             </button>
           </div>
 
-          {call && (
+          {call ? (
             <div>
               <h2 className="text-[17px] font-semibold text-gray-950 leading-snug">{call.objective || 'Untitled negotiation'}</h2>
               <div className="flex items-center gap-2.5 mt-2.5 flex-wrap">
                 <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${oc.bg} ${oc.text}`}>{oc.label}</span>
-                {call.target_phone && <span className="text-[11px] text-gray-400">{call.target_phone}</span>}
-                {call.duration_seconds != null && call.duration_seconds > 0 && <span className="text-[11px] text-gray-400">{fmtDuration(call.duration_seconds)}</span>}
-                {call.created_at && <span className="text-[11px] text-gray-300">{fmtDate(call.created_at)}</span>}
+                {call.target_phone ? <span className="text-[11px] text-gray-400">{call.target_phone}</span> : null}
+                {call.duration_seconds != null && call.duration_seconds > 0 ? <span className="text-[11px] text-gray-400">{fmtDuration(call.duration_seconds)}</span> : null}
+                {call.created_at ? <span className="text-[11px] text-gray-300">{fmtDate(call.created_at)}</span> : null}
               </div>
-              {(call.style || call.agent_persona) && (
+              {(call.style || call.agent_persona) ? (
                 <div className="flex items-center gap-2 mt-2.5">
-                  {call.style && <span className="rounded-md bg-gray-50 border border-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500">{call.style}</span>}
-                  {call.agent_persona && <span className="text-[11px] text-gray-400 truncate">{call.agent_persona}</span>}
+                  {call.style ? <span className="rounded-md bg-gray-50 border border-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500">{call.style}</span> : null}
+                  {call.agent_persona ? <span className="text-[11px] text-gray-400 truncate">{call.agent_persona}</span> : null}
                 </div>
-              )}
+              ) : null}
             </div>
-          )}
+          ) : null}
 
           {/* Detail tabs */}
           <div className="flex gap-1 mt-5 bg-gray-50 rounded-lg p-0.5">
@@ -419,13 +411,13 @@ function DetailDrawer({
                   activeTab === tab.key ? 'text-gray-900' : 'text-gray-400 hover:text-gray-600'
                 }`}
               >
-                {activeTab === tab.key && (
+                {activeTab === tab.key ? (
                   <motion.div layoutId="detail-tab" className="absolute inset-0 bg-white rounded-md shadow-soft" transition={{ type: 'spring', damping: 25, stiffness: 300 }} />
-                )}
+                ) : null}
                 <span className="relative z-10 flex items-center gap-1.5">
                   <tab.icon size={12} />
                   {tab.label}
-                  {tab.count != null && <span className="text-[10px] text-gray-300">{tab.count}</span>}
+                  {tab.count != null ? <span className="text-[10px] text-gray-300">{tab.count}</span> : null}
                 </span>
               </button>
             ))}
@@ -440,9 +432,9 @@ function DetailDrawer({
             </div>
           ) : (
             <div className="px-6 py-5">
-              {activeTab === 'transcript' && <TranscriptView transcript={transcript} />}
-              {activeTab === 'analysis' && <AnalysisView analysis={analysis} />}
-              {activeTab === 'recording' && <RecordingView taskId={taskId} />}
+              {activeTab === 'transcript' ? <TranscriptView transcript={transcript} /> : null}
+              {activeTab === 'analysis' ? <AnalysisView analysis={analysis} /> : null}
+              {activeTab === 'recording' ? <RecordingView taskId={taskId} /> : null}
             </div>
           )}
         </div>
@@ -480,11 +472,11 @@ function TranscriptView({ transcript }: { transcript?: TranscriptTurn[] }) {
                 <span className={`text-[11px] font-semibold ${isAgent ? 'text-gray-700' : 'text-gray-500'}`}>
                   {isAgent ? 'Agent' : 'Caller'}
                 </span>
-                {turn.created_at && (
+                {turn.created_at ? (
                   <span className="text-[10px] text-gray-300 font-mono tabular-nums">
                     {typeof turn.created_at === 'number' ? fmtUnixTime(turn.created_at) : ''}
                   </span>
-                )}
+                ) : null}
               </div>
               <div className={`inline-block rounded-2xl px-3.5 py-2 text-[13px] leading-relaxed ${
                 isAgent
@@ -525,43 +517,43 @@ function AnalysisView({ analysis }: { analysis?: SupabaseAnalysis }) {
           </div>
           <div className="flex items-center gap-2">
             <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${oc.bg} ${oc.text}`}>{oc.label}</span>
-            {analysis.rapport_quality && <span className="text-[11px] text-gray-400">Rapport: {analysis.rapport_quality}</span>}
+            {analysis.rapport_quality ? <span className="text-[11px] text-gray-400">Rapport: {analysis.rapport_quality}</span> : null}
           </div>
         </div>
       </div>
 
-      {analysis.summary && (
+      {analysis.summary ? (
         <Section label="Summary">
           <p className="text-[13px] text-gray-700 leading-relaxed">{analysis.summary}</p>
         </Section>
-      )}
+      ) : null}
 
-      {analysis.outcome_reasoning && (
+      {analysis.outcome_reasoning ? (
         <Section label="Outcome Reasoning">
           <p className="text-[13px] text-gray-600 leading-relaxed">{analysis.outcome_reasoning}</p>
         </Section>
-      )}
+      ) : null}
 
-      {analysis.tactics_used && analysis.tactics_used.length > 0 && (
+      {analysis.tactics_used && analysis.tactics_used.length > 0 ? (
         <Section label="Tactics Used">
           <div className="space-y-2">
             {analysis.tactics_used.map((t, i) => (
               <div key={i} className="flex items-start gap-2">
                 <span className="text-[13px] font-medium text-gray-700">{t.name}</span>
-                {t.effectiveness && (
+                {t.effectiveness ? (
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                     t.effectiveness === 'high' ? 'bg-emerald-50 text-emerald-600' :
                     t.effectiveness === 'medium' ? 'bg-amber-50 text-amber-600' :
                     'bg-gray-100 text-gray-500'
                   }`}>{t.effectiveness}</span>
-                )}
+                ) : null}
               </div>
             ))}
           </div>
         </Section>
-      )}
+      ) : null}
 
-      {analysis.key_moments && analysis.key_moments.length > 0 && (
+      {analysis.key_moments && analysis.key_moments.length > 0 ? (
         <Section label="Key Moments">
           <ul className="space-y-1">
             {analysis.key_moments.map((m, i) => (
@@ -571,21 +563,21 @@ function AnalysisView({ analysis }: { analysis?: SupabaseAnalysis }) {
             ))}
           </ul>
         </Section>
-      )}
+      ) : null}
 
-      {analysis.concessions && analysis.concessions.length > 0 && (
+      {analysis.concessions && analysis.concessions.length > 0 ? (
         <Section label="Concessions">
           {analysis.concessions.map((c, i) => (
             <div key={i} className="text-[13px] mb-1">
               <span className="font-medium text-gray-700">{c.party}:</span>{' '}
               <span className="text-gray-600">{c.description}</span>
-              {c.significance && <span className="text-gray-400 text-[12px]"> ({c.significance})</span>}
+              {c.significance ? <span className="text-gray-400 text-[12px]"> ({c.significance})</span> : null}
             </div>
           ))}
         </Section>
-      )}
+      ) : null}
 
-      {analysis.improvement_suggestions && analysis.improvement_suggestions.length > 0 && (
+      {analysis.improvement_suggestions && analysis.improvement_suggestions.length > 0 ? (
         <Section label="Improvement Suggestions">
           <ul className="space-y-1">
             {analysis.improvement_suggestions.map((s, i) => (
@@ -595,13 +587,13 @@ function AnalysisView({ analysis }: { analysis?: SupabaseAnalysis }) {
             ))}
           </ul>
         </Section>
-      )}
+      ) : null}
 
-      {analysis.score_reasoning && (
+      {analysis.score_reasoning ? (
         <Section label="Score Reasoning">
           <p className="text-[12px] text-gray-500 leading-relaxed">{analysis.score_reasoning}</p>
         </Section>
-      )}
+      ) : null}
     </div>
   );
 }

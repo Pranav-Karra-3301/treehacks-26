@@ -2,14 +2,18 @@
 
 import { useState, useRef, useEffect, useCallback, type FormEvent, type KeyboardEvent } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowUp, ArrowLeft, Phone, RotateCcw, AlertTriangle, Plus, PanelLeftClose, PanelLeft, BarChart3, X } from 'lucide-react';
 import { createTask, startCall, stopCall, transferCall, sendCallDtmf, createCallSocket, checkVoiceReadiness, searchResearch, getTaskAnalysis, getTaskTranscript, getTask, listTasks, getMultiCallSummary, getChatSessionById, getChatSessionLatest, upsertChatSession } from '../../lib/api';
 import { readActiveLocalSession, writeLocalSessionWithAttempts, type PersistedChatSessionEnvelope } from '../../lib/chat-session-store';
 import type { CallEvent, CallStatus, AnalysisPayload, TaskSummary, CallOutcome, BusinessResult, VoiceReadiness, MultiCallSummaryPayload, MultiCallPriceComparison, ChatSessionMode, ChatSessionRecord } from '../../lib/types';
-import AnalysisCard from '../../components/analysis-card';
-import AudioPlayer from '../../components/audio-player';
 import SearchResultCards from '../../components/search-result-cards';
+import MessageBubble from '../../components/chat/message-bubble';
+import MultiCallStatus from '../../components/chat/multi-call-status';
+
+const AnalysisCard = dynamic(() => import('../../components/analysis-card'), { ssr: false });
+const AudioPlayer = dynamic(() => import('../../components/audio-player'), { ssr: false });
 
 type Message = {
   id: string;
@@ -2540,7 +2544,7 @@ export default function ChatPage() {
     <div className="flex h-screen bg-[#fafaf9]">
       {/* ── Left Sidebar ──────────────────────────────────────────────── */}
       <AnimatePresence>
-        {sidebarOpen && (
+        {sidebarOpen ? (
           <motion.aside
             initial={{ width: 0, opacity: 0 }}
             animate={{ width: 260, opacity: 1 }}
@@ -2588,9 +2592,9 @@ export default function ChatPage() {
                         </div>
                         <div className="flex items-center gap-1.5 mt-0.5 ml-3.5">
                           <span className="text-[10px] text-gray-400">{t.outcome}</span>
-                          {t.duration_seconds > 0 && (
+                          {t.duration_seconds > 0 ? (
                             <span className="text-[10px] text-gray-300">{t.duration_seconds < 60 ? `${t.duration_seconds}s` : `${Math.floor(t.duration_seconds / 60)}m`}</span>
-                          )}
+                          ) : null}
                         </div>
                       </button>
                     );
@@ -2598,7 +2602,7 @@ export default function ChatPage() {
                 </div>
               )}
 
-              {multiRunEntries.length > 0 && (
+              {multiRunEntries.length > 0 ? (
                 <>
                   <div className="px-2 pt-4 pb-1.5">
                     <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Multi-Run</span>
@@ -2630,7 +2634,7 @@ export default function ChatPage() {
                     })}
                   </div>
                 </>
-              )}
+              ) : null}
             </div>
 
             {/* Sidebar footer */}
@@ -2647,7 +2651,7 @@ export default function ChatPage() {
               </button>
             </div>
           </motion.aside>
-        )}
+        ) : null}
       </AnimatePresence>
 
       {/* ── Main area ─────────────────────────────────────────────────── */}
@@ -2655,14 +2659,14 @@ export default function ChatPage() {
         {/* Header */}
         <header className="flex items-center justify-between mx-4 mt-3 rounded-2xl bg-white/80 backdrop-blur-xl border border-gray-200/60 shadow-soft px-5 py-3 shrink-0">
           <div className="flex items-center gap-3">
-            {!sidebarOpen && (
+            {!sidebarOpen ? (
               <button
                 onClick={() => setSidebarOpen(true)}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-all duration-150 hover:bg-gray-100 hover:text-gray-600"
               >
                 <PanelLeft size={16} />
               </button>
-            )}
+            ) : null}
             <Link
               href="/"
               className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-all duration-150 hover:bg-gray-100 hover:text-gray-600"
@@ -2678,7 +2682,7 @@ export default function ChatPage() {
             </span>
           </div>
           <div className="flex items-center gap-3">
-            {isOnCall && (
+            {isOnCall ? (
               <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -2691,20 +2695,20 @@ export default function ChatPage() {
                 </span>
                 <span className="text-xs font-medium text-emerald-600">On call</span>
               </motion.div>
-            )}
-            {isOnCall && (
+            ) : null}
+            {isOnCall ? (
               <button
                 onClick={handleEndCall}
                 className="rounded-full bg-red-50 px-3.5 py-1.5 text-[12px] font-medium text-red-600 transition-all duration-150 hover:bg-red-100 active:scale-[0.97]"
               >
                 End call
               </button>
-            )}
+            ) : null}
           </div>
         </header>
 
         {/* Readiness warning banner */}
-        {readinessWarning && (
+        {readinessWarning ? (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
@@ -2713,7 +2717,7 @@ export default function ChatPage() {
             <AlertTriangle size={13} className="text-amber-500" />
             <span className="text-[12px] text-amber-700">{readinessWarning}</span>
           </motion.div>
-        )}
+        ) : null}
 
         {/* Messages */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto">
@@ -2726,303 +2730,46 @@ export default function ChatPage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3, ease }}
                 >
-                  {msg.role === 'analysis' && msg.analysisData ? (
-                    <AnalysisCard analysis={msg.analysisData} />
-                  ) : msg.role === 'audio' && msg.audioTaskId ? (
-                    <AudioPlayer taskId={msg.audioTaskId} />
-                  ) : msg.role === 'search-results' && msg.searchResults ? (
-                    <div className="py-1">
-                      <SearchResultCards
-                        results={msg.searchResults}
-                        onCall={handleCallFromSearch}
-                        onSkip={handleSkipDiscovery}
-                        onCallAll={handleCallAllFromSearch}
-                      />
-                    </div>
-                  ) : msg.role === 'status' ? (
-                    <div className="flex justify-center py-1.5">
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-white/80 backdrop-blur-sm border border-gray-200/50 px-3 py-1 text-[11px] font-medium text-gray-500 shadow-soft">
-                        <Phone size={9} className="text-gray-400" />
-                        {msg.text}
-                      </span>
-                    </div>
-                  ) : msg.role === 'user' ? (
-                    <div className="flex justify-end">
-                      <div className="max-w-[75%] rounded-2xl rounded-tr-md bg-gray-900 px-4 py-2.5 text-[14px] leading-relaxed text-white shadow-card">
-                        {msg.text}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex justify-start items-start gap-2.5">
-                      <div className="h-7 w-7 shrink-0 rounded-full bg-gradient-to-br from-gray-800 to-gray-950 flex items-center justify-center mt-0.5 shadow-soft">
-                        <span className="text-[10px] font-serif italic text-gray-300">k</span>
-                      </div>
-                      <div className="max-w-[75%] rounded-2xl rounded-tl-md bg-white border border-gray-100 px-4 py-2.5 text-[14px] leading-relaxed text-gray-900 shadow-soft">
-                        {msg.text}
-                      </div>
-                    </div>
-                  )}
+                  <MessageBubble
+                    message={msg}
+                    AnalysisCard={AnalysisCard}
+                    AudioPlayer={AudioPlayer}
+                    SearchResultCards={SearchResultCards}
+                    onCallFromSearch={handleCallFromSearch}
+                    onSkipDiscovery={handleSkipDiscovery}
+                    onCallAllFromSearch={handleCallAllFromSearch}
+                  />
                 </motion.div>
               ))}
             </AnimatePresence>
 
-            {concurrentTestMode && multiCallEntries.length > 0 && (
-              <div className="pt-3">
-                <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-gray-500">
-                  Concurrent conversations
-                </div>
-                <div className="mb-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-soft">
-                  <div className="text-[12px] font-semibold text-gray-900">Call Targets</div>
-                  <div className="mt-2 grid gap-2 md:grid-cols-2">
-                    {multiTargetEntries.map(({ phone, target }) => (
-                      <div key={`target-${phone}`} className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="truncate text-[11.5px] font-semibold text-gray-800">
-                            {target.title || formatPhone(phone)}
-                          </div>
-                          <span className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[10px] text-gray-600">
-                            {target.source === 'exa' ? 'Exa' : 'Manual'}
-                          </span>
-                        </div>
-                        <div className="mt-0.5 text-[11px] text-gray-600">{formatPhone(phone)}</div>
-                        {target.url && (
-                          <a
-                            href={target.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="mt-0.5 block truncate text-[10.5px] text-blue-600 hover:text-blue-700"
-                          >
-                            {target.url}
-                          </a>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="mb-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-soft">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-[12px] font-semibold text-gray-900">Combined Decision Summary</div>
-                    {multiSummaryState === 'ready' && multiSummary?.recommended_phone && (
-                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                        Best: {formatPhone(multiSummary.recommended_phone)}
-                      </span>
-                    )}
-                  </div>
-                  {multiSummaryState === 'loading' && (
-                    <div className="mt-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-[12px] text-amber-700">
-                      Building one detailed recommendation across all calls...
-                    </div>
-                  )}
-                  {multiSummaryState === 'error' && (
-                    <div className="mt-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2">
-                      <div className="text-[12px] text-red-700">
-                        Combined summary unavailable: {multiSummaryError || 'Unknown error'}
-                      </div>
-                      {multiSummaryTaskIds.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => { void loadMultiSummary(multiSummaryTaskIds, objective, true); }}
-                          className="mt-2 rounded-lg border border-red-200 bg-white px-2.5 py-1 text-[11px] font-medium text-red-700 hover:bg-red-50"
-                        >
-                          Retry summary
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  {multiSummary && multiSummaryState === 'ready' && (
-                    <div className="mt-2 space-y-2">
-                      <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-                        <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">Recommendation</div>
-                        <p className="mt-1 text-[12px] leading-relaxed text-gray-800">{multiSummary.recommended_option}</p>
-                        <p className="mt-1 text-[11.5px] leading-relaxed text-gray-600">{multiSummary.decision_rationale}</p>
-                      </div>
-                      <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-                        <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">Cross-call Summary</div>
-                        <p className="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-gray-700">{multiSummary.overall_summary}</p>
-                      </div>
-                      {multiSummary.price_comparison?.length > 0 && (
-                        <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-                          <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">Price + Terms</div>
-                          <div className="mt-1 space-y-2">
-                            {multiSummary.price_comparison.map((item) => (
-                              <div key={item.task_id} className="rounded-lg border border-gray-100 bg-white px-2.5 py-2">
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="text-[11.5px] font-semibold text-gray-800">
-                                    {item.vendor || formatPhone(item.phone || '')}
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-[10px] text-gray-500">{item.confidence} confidence</span>
-                                    {item.phone && phase === 'ended' && (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleCallBackFromSummary(item)}
-                                        className="flex items-center gap-1 rounded-lg bg-gray-900 px-2 py-1 text-[10px] font-medium text-white transition-all duration-150 hover:bg-gray-700 active:scale-[0.96]"
-                                      >
-                                        <Phone size={10} strokeWidth={2.5} />
-                                        Call back
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                                <div className="mt-1 text-[11px] text-gray-600">
-                                  Prices: {item.quoted_prices?.length ? item.quoted_prices.join(' | ') : 'Not captured'}
-                                </div>
-                                {item.location && (
-                                  <div className="mt-0.5 text-[11px] text-gray-600">Location: {item.location}</div>
-                                )}
-                                {item.discounts?.length > 0 && (
-                                  <div className="mt-0.5 text-[11px] text-gray-600">Discounts: {item.discounts.join(' | ')}</div>
-                                )}
-                                {item.fees?.length > 0 && (
-                                  <div className="mt-0.5 text-[11px] text-gray-600">Fees: {item.fees.join(' | ')}</div>
-                                )}
-                                {item.constraints?.length > 0 && (
-                                  <div className="mt-0.5 text-[11px] text-gray-600">Constraints: {item.constraints.join(' | ')}</div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {multiSummary.important_facts?.length > 0 && (
-                        <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-                          <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">Important Facts</div>
-                          <div className="mt-1 space-y-1">
-                            {multiSummary.important_facts.map((fact, idx) => (
-                              <div key={`fact-${idx}`} className="text-[11.5px] text-gray-700">• {fact}</div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <div className="grid gap-3 md:grid-cols-2">
-                  {multiCallEntries.map(([phone, state]) => {
-                    const callTarget = multiCallTargets[phone];
-                    const statusLabel = MULTI_STATUS_LABEL[state.status] ?? state.status;
-                    const statusClass =
-                      state.status === 'active'
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        : state.status === 'ended'
-                          ? 'bg-gray-100 text-gray-600 border-gray-200'
-                          : state.status === 'failed'
-                            ? 'bg-red-50 text-red-700 border-red-200'
-                            : 'bg-amber-50 text-amber-700 border-amber-200';
-                    const canControlThisCall = Boolean(
-                      state.taskId
-                      && (state.status === 'dialing'
-                        || state.status === 'connected'
-                        || state.status === 'media_connected'
-                        || state.status === 'active'),
-                    );
-
-                    return (
-                      <div key={phone} className="rounded-2xl border border-gray-200 bg-white shadow-soft overflow-hidden">
-                        <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2.5">
-                          <div className="min-w-0">
-                            <div className="truncate text-[12px] font-semibold text-gray-900">
-                              {callTarget?.title || formatPhone(phone)}
-                            </div>
-                            <div className="text-[10.5px] text-gray-500">{formatPhone(phone)}</div>
-                          </div>
-                          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${statusClass}`}>
-                            {statusLabel}
-                          </span>
-                        </div>
-                        <div className="h-56 overflow-y-auto px-3 py-2 space-y-1.5">
-                          {state.transcript.length === 0 ? (
-                            <div className="text-[12px] text-gray-400">Waiting for call events...</div>
-                          ) : (
-                            state.transcript.map((entry) => (
-                              <div key={entry.id}>
-                                {entry.role === 'status' ? (
-                                  <div className="flex justify-center">
-                                    <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-[10px] text-gray-500">
-                                      {entry.text}
-                                    </span>
-                                  </div>
-                                ) : entry.role === 'caller' ? (
-                                  <div className="flex justify-end">
-                                    <div className="max-w-[85%] rounded-xl rounded-tr-sm bg-gray-900 px-2.5 py-1.5 text-[12px] text-white">
-                                      {entry.text}
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="flex justify-start">
-                                    <div className="max-w-[85%] rounded-xl rounded-tl-sm border border-gray-100 bg-gray-50 px-2.5 py-1.5 text-[12px] text-gray-900">
-                                      {entry.text}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            ))
-                          )}
-                          {state.thinking && (
-                            <div className="flex justify-start">
-                              <div className="rounded-xl rounded-tl-sm border border-gray-100 bg-gray-50 px-2.5 py-1.5 text-[11px] text-gray-500">
-                                Thinking...
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        <div className="border-t border-gray-100 px-3 py-2 space-y-2">
-                          {canControlThisCall && state.taskId && (
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <div className="inline-flex items-center gap-0.5 rounded-full border border-gray-200 bg-white overflow-hidden">
-                                <input
-                                  value={personalHandoffNumber}
-                                  onChange={(e) => setPersonalHandoffNumber(e.target.value)}
-                                  placeholder="Your #"
-                                  className="w-[80px] bg-transparent px-2 py-1 text-[10.5px] text-gray-800 placeholder-gray-400 outline-none"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => { void handleTransferToPersonal(state.taskId, phone); }}
-                                  disabled={!normalizePhone(personalHandoffNumber)}
-                                  className="shrink-0 rounded-full bg-gray-900 px-2 py-1 text-[10px] font-medium text-white hover:bg-gray-700 disabled:bg-gray-200 disabled:text-gray-400 transition-all duration-150"
-                                >
-                                  Transfer
-                                </button>
-                              </div>
-                              <div className="inline-flex items-center gap-0.5 rounded-full border border-gray-200 bg-white overflow-hidden">
-                                <input
-                                  value={multiDtmfInputs[phone] ?? ''}
-                                  onChange={(e) => {
-                                    const next = e.target.value;
-                                    setMultiDtmfInputs((prev) => ({ ...prev, [phone]: next }));
-                                  }}
-                                  placeholder="DTMF"
-                                  className="w-[70px] bg-transparent px-2 py-1 text-[10.5px] text-gray-800 placeholder-gray-400 outline-none"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const digits = multiDtmfInputs[phone] ?? '';
-                                    void handleSendDtmf(state.taskId, digits, phone);
-                                    setMultiDtmfInputs((prev) => ({ ...prev, [phone]: '' }));
-                                  }}
-                                  disabled={!(multiDtmfInputs[phone] ?? '').trim()}
-                                  className="shrink-0 rounded-full bg-gray-900 px-2 py-1 text-[10px] font-medium text-white hover:bg-gray-700 disabled:bg-gray-200 disabled:text-gray-400 transition-all duration-150"
-                                >
-                                  Send
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                          {state.taskId && (state.status === 'ended' || state.status === 'failed') && (
-                            <AudioPlayer taskId={state.taskId} />
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+            {concurrentTestMode && multiCallEntries.length > 0 ? (
+              <MultiCallStatus
+                multiCallEntries={multiCallEntries}
+                multiTargetEntries={multiTargetEntries}
+                multiCallTargets={multiCallTargets}
+                multiSummary={multiSummary}
+                multiSummaryState={multiSummaryState}
+                multiSummaryError={multiSummaryError}
+                multiSummaryTaskIds={multiSummaryTaskIds}
+                phase={phase}
+                personalHandoffNumber={personalHandoffNumber}
+                multiDtmfInputs={multiDtmfInputs}
+                objective={objective}
+                formatPhone={formatPhone}
+                normalizePhone={normalizePhone}
+                onLoadMultiSummary={loadMultiSummary}
+                onTransferToPersonal={handleTransferToPersonal}
+                onSendDtmf={handleSendDtmf}
+                onSetPersonalHandoffNumber={setPersonalHandoffNumber}
+                onSetMultiDtmfInputs={setMultiDtmfInputs}
+                onCallBackFromSummary={handleCallBackFromSummary}
+                AudioPlayer={AudioPlayer}
+              />
+            ) : null}
 
             {/* Typing indicator */}
-            {typing && !concurrentTestMode && (
+            {typing && !concurrentTestMode ? (
               <motion.div
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -3045,17 +2792,17 @@ export default function ChatPage() {
                   </div>
                 </div>
               </motion.div>
-            )}
+            ) : null}
 
             {/* Post-call actions */}
-            {showNewNegotiation && (
+            {showNewNegotiation ? (
               <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2, duration: 0.4, ease }}
                 className="flex justify-center gap-2.5 pt-3"
               >
-                {objective && phoneNumber && (
+                {objective && phoneNumber ? (
                   <button
                     onClick={() => {
                       closeAllSockets();
@@ -3088,7 +2835,7 @@ export default function ChatPage() {
                     <Phone size={13} />
                     Call again
                   </button>
-                )}
+                ) : null}
                 <button
                   onClick={handleNewNegotiation}
                   className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-4 py-2 text-[12.5px] font-medium text-gray-700 shadow-soft transition-all duration-150 hover:shadow-card hover:border-gray-300 active:scale-[0.97]"
@@ -3097,14 +2844,14 @@ export default function ChatPage() {
                   New negotiation
                 </button>
               </motion.div>
-            )}
+            ) : null}
           </div>
         </div>
 
         {/* Input */}
         <div className="shrink-0 border-t border-gray-200/60 bg-white/80 backdrop-blur-xl px-5 py-3.5">
           <form onSubmit={onSubmit} className="mx-auto max-w-2xl">
-            {canControlSingleCall && taskId && (
+            {canControlSingleCall && taskId ? (
               <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
                 <div className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white shadow-soft overflow-hidden">
                   <input
@@ -3142,7 +2889,7 @@ export default function ChatPage() {
                   </button>
                 </div>
               </div>
-            )}
+            ) : null}
             <div className="flex items-end gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-2.5 shadow-soft transition-all duration-200 focus-within:border-gray-300 focus-within:shadow-card">
               <textarea
                 ref={inputRef}

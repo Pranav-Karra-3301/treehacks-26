@@ -127,7 +127,7 @@ export default function SearchResultCards({ results, onCall, onSkip, onCallAll }
                   <span className="truncate text-[13px] font-medium text-gray-900">
                     {result.title || 'Untitled'}
                   </span>
-                  {domain && (
+                  {domain ? (
                     <a
                       href={result.url!}
                       target="_blank"
@@ -138,22 +138,22 @@ export default function SearchResultCards({ results, onCall, onSkip, onCallAll }
                       <Globe size={9} />
                       <span className="hidden sm:inline">{domain}</span>
                     </a>
-                  )}
+                  ) : null}
                 </div>
-                {snippet && (
+                {snippet ? (
                   <p className="mt-0.5 text-[11.5px] leading-snug text-gray-400 line-clamp-1">
                     {snippet}
                   </p>
-                )}
-                {phone && (
+                ) : null}
+                {phone ? (
                   <p className="mt-0.5 text-[11px] text-gray-400 tabular-nums">
                     {formatPhone(phone)}
                   </p>
-                )}
+                ) : null}
               </div>
 
               {/* Call button */}
-              {phone && (
+              {phone ? (
                 <button
                   onClick={() => onCall(result, phone)}
                   className="shrink-0 flex items-center gap-1 rounded-lg bg-gray-900 pl-2.5 pr-3 py-1.5 text-[11.5px] font-medium text-white transition-all duration-150 hover:bg-gray-700 active:scale-[0.96]"
@@ -161,7 +161,7 @@ export default function SearchResultCards({ results, onCall, onSkip, onCallAll }
                   <Phone size={10} strokeWidth={2.5} />
                   Call
                 </button>
-              )}
+              ) : null}
             </motion.div>
           );
         })}
@@ -173,7 +173,7 @@ export default function SearchResultCards({ results, onCall, onSkip, onCallAll }
         transition={{ delay: display.length * 0.05 + 0.08, duration: 0.25 }}
         className="flex items-center justify-center gap-3 pt-0.5 pb-1"
       >
-        {showCallAll && (
+        {showCallAll ? (
           <button
             onClick={() => {
               const phones = callableResults.map((r) => r.phone_numbers[0]);
@@ -184,10 +184,10 @@ export default function SearchResultCards({ results, onCall, onSkip, onCallAll }
             <Phone size={10} strokeWidth={2.5} />
             Call All ({callableResults.length})
           </button>
-        )}
-        {showCallAll && (
+        ) : null}
+        {showCallAll ? (
           <span className="text-[10px] text-gray-300">&middot;</span>
-        )}
+        ) : null}
         <button
           onClick={onSkip}
           className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-gray-600 transition-colors"
