@@ -171,6 +171,41 @@ class DataStore:
     def get_task_dir(self, task_id: str) -> Path:
         return self._data_root / task_id
 
+    def save_artifact(self, task_id: str, artifact_type: str, data: Any) -> None:
+        """Save JSON artifact to filesystem."""
+        filename_map = {
+            "transcript": "transcript.json",
+            "analysis": "analysis.json",
+            "conversation": "conversation.json",
+            "recording_stats": "recording_stats.json",
+        }
+        filename = filename_map.get(artifact_type)
+        if not filename:
+            return
+        with timed_step("storage", f"save_artifact_{artifact_type}", task_id=task_id):
+            call_dir = self.get_task_dir(task_id)
+            call_dir.mkdir(parents=True, exist_ok=True)
+            with open(call_dir / filename, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+
+    def get_artifact(self, task_id: str, artifact_type: str) -> Optional[Any]:
+        """Read JSON artifact from filesystem."""
+        filename_map = {
+            "transcript": "transcript.json",
+            "analysis": "analysis.json",
+            "conversation": "conversation.json",
+            "recording_stats": "recording_stats.json",
+        }
+        filename = filename_map.get(artifact_type)
+        if not filename:
+            return None
+        with timed_step("storage", f"get_artifact_{artifact_type}", task_id=task_id):
+            path = self.get_task_dir(task_id) / filename
+            if not path.exists():
+                return None
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+
     def upsert_chat_session(
         self,
         session_id: str,

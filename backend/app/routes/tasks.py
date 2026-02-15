@@ -190,17 +190,6 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
             return ActionResponse(ok=True, message=f"sent keypad digits: {payload.digits}")
 
-    @router.get("/{task_id}/transcript")
-    async def get_transcript(task_id: str):
-        with timed_step("api", "get_transcript", task_id=task_id):
-            call_dir = store.get_task_dir(task_id)
-            transcript_path = call_dir / "transcript.json"
-            if not transcript_path.exists():
-                raise HTTPException(status_code=404, detail="Transcript not found")
-            with open(transcript_path, "r", encoding="utf-8") as f:
-                turns = json.load(f)
-            return {"task_id": task_id, "turns": turns}
-
     def _mulaw_decode_table() -> list[int]:
         """Build mulaw byte → 16-bit PCM lookup table (ITU G.711)."""
         table = []
@@ -286,11 +275,8 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
     @router.get("/{task_id}/recording-metadata")
     async def get_recording_metadata(task_id: str):
         with timed_step("api", "get_recording_metadata", task_id=task_id):
-            call_dir = store.get_task_dir(task_id)
-            metadata_path = call_dir / "recording_stats.json"
-            if not call_dir.exists():
-                raise HTTPException(status_code=404, detail="Task recordings not found")
-            if not metadata_path.exists():
+            metadata = store.get_artifact(task_id, "recording_stats")
+            if not metadata:
                 metadata = {
                     "task_id": task_id,
                     "status": "missing",
@@ -298,14 +284,7 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
                     "chunks_by_side": {"caller": 0, "agent": 0},
                     "last_chunk_at": None,
                 }
-                return {
-                    "recording": {},
-                    "files": _build_recording_files(call_dir),
-                    **metadata,
-                }
-
-            with open(metadata_path, "r", encoding="utf-8") as f:
-                metadata = json.load(f)
+            call_dir = store.get_task_dir(task_id)
             metadata["files"] = _build_recording_files(call_dir)
             return metadata
 
@@ -326,12 +305,9 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
             row = store.get_task(task_id)
             if not row:
                 raise HTTPException(status_code=404, detail="Task not found")
-            call_dir = store.get_task_dir(task_id)
-            transcript_path = call_dir / "transcript.json"
-            if not transcript_path.exists():
+            raw = store.get_artifact(task_id, "transcript")
+            if raw is None:
                 return {"task_id": task_id, "turns": [], "count": 0}
-            with open(transcript_path, "r", encoding="utf-8") as f:
-                raw = json.load(f)
             return {
                 "task_id": task_id,
                 "turns": raw,
@@ -350,25 +326,20 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
             if not row:
                 raise HTTPException(status_code=404, detail="Task not found")
 
-            call_dir = store.get_task_dir(task_id)
-            analysis_path = call_dir / "analysis.json"
-            if analysis_path.exists():
-                with open(analysis_path, "r", encoding="utf-8") as f:
-                    return AnalysisPayload(**json.load(f))
+            existing_analysis = store.get_artifact(task_id, "analysis")
+            if existing_analysis:
+                return AnalysisPayload(**existing_analysis)
 
-            transcript_file = call_dir / "transcript.json"
+            transcript_raw = store.get_artifact(task_id, "transcript")
             transcript: List[TranscriptTurn] = []
-            if transcript_file.exists():
-                with open(transcript_file, "r", encoding="utf-8") as f:
-                    transcript = [TranscriptTurn(**entry) for entry in json.load(f)]
+            if transcript_raw:
+                transcript = [TranscriptTurn(**entry) for entry in transcript_raw]
 
             analysis = await _summarize_transcript(transcript, row)
-            with open(analysis_path, "w", encoding="utf-8") as f:
-                json.dump(analysis, f, indent=2)
+            store.save_artifact(task_id, "analysis", analysis)
             outcome_value = analysis.get("outcome", "unknown")
             valid_outcomes = {"unknown", "success", "partial", "failed", "walkaway"}
             outcome = outcome_value if outcome_value in valid_outcomes else "unknown"
-            # Always write the outcome back to the task record
             store.update_status(task_id, row.get("status", "ended"), outcome=outcome)
             if local_cache is not None:
                 await local_cache.delete(_task_cache_key(task_id))
@@ -443,23 +414,13 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
                 if not row:
                     continue
 
-                call_dir = store.get_task_dir(task_id)
-                transcript_file = call_dir / "transcript.json"
-                transcript: List[TranscriptTurn] = []
-                transcript_raw: List[dict[str, object]] = []
-                if transcript_file.exists():
-                    with open(transcript_file, "r", encoding="utf-8") as f:
-                        transcript_raw = json.load(f)
-                    transcript = [TranscriptTurn(**entry) for entry in transcript_raw]
+                transcript_raw = store.get_artifact(task_id, "transcript") or []
+                transcript: List[TranscriptTurn] = [TranscriptTurn(**entry) for entry in transcript_raw]
 
-                analysis_path = call_dir / "analysis.json"
-                if analysis_path.exists():
-                    with open(analysis_path, "r", encoding="utf-8") as f:
-                        analysis = json.load(f)
-                else:
+                analysis = store.get_artifact(task_id, "analysis")
+                if not analysis:
                     analysis = await _summarize_transcript(transcript, row)
-                    with open(analysis_path, "w", encoding="utf-8") as f:
-                        json.dump(analysis, f, indent=2)
+                    store.save_artifact(task_id, "analysis", analysis)
 
                 calls.append(
                     {

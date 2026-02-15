@@ -65,6 +65,7 @@ class CallOrchestrator:
         self._outbound_bytes: dict[str, int] = {}
 
     def _session_recording_path(self, task_id: str) -> Path:
+        # Legacy: kept for backward compat, prefer store.save_artifact("recording_stats", ...)
         return self._store.get_task_dir(task_id) / "recording_stats.json"
 
     def _voice_mode_enabled(self) -> bool:
@@ -676,12 +677,9 @@ class CallOrchestrator:
         if not session:
             return
 
-        call_dir = self._store.get_task_dir(session.task_id)
         with timed_step("storage", "persist_messages", session_id=session_id, task_id=session.task_id):
-            with open(call_dir / "conversation.json", "w", encoding="utf-8") as f:
-                json.dump(session.conversation, f, indent=2)
-            with open(call_dir / "transcript.json", "w", encoding="utf-8") as f:
-                json.dump(session.transcript, f, indent=2)
+            self._store.save_artifact(session.task_id, "conversation", session.conversation)
+            self._store.save_artifact(session.task_id, "transcript", session.transcript)
 
     async def save_audio_chunk(self, session_id: str, side: str, chunk: bytes) -> None:
         if not chunk:
@@ -870,19 +868,15 @@ class CallOrchestrator:
         """Generate analysis and persist outcome immediately after call ends."""
         try:
             with timed_step("orchestrator", "auto_analyze", task_id=task_id):
-                call_dir = self._store.get_task_dir(task_id)
-                transcript_file = call_dir / "transcript.json"
+                transcript_raw = self._store.get_artifact(task_id, "transcript")
                 transcript = []
-                if transcript_file.exists():
-                    with open(transcript_file, "r", encoding="utf-8") as f:
-                        transcript = [TranscriptTurn(**entry) for entry in json.load(f)]
+                if transcript_raw:
+                    transcript = [TranscriptTurn(**entry) for entry in transcript_raw]
 
                 task = self._store.get_task(task_id)
                 analysis = await self._engine.summarize_turn(transcript, task)
 
-                analysis_path = call_dir / "analysis.json"
-                with open(analysis_path, "w", encoding="utf-8") as f:
-                    json.dump(analysis, f, indent=2)
+                self._store.save_artifact(task_id, "analysis", analysis)
 
                 outcome = analysis.get("outcome", "unknown")
                 valid = {"unknown", "success", "partial", "failed", "walkaway"}
@@ -896,8 +890,6 @@ class CallOrchestrator:
         session = await self._sessions.get(session_id)
         if not session:
             return
-        call_dir = self._store.get_task_dir(session.task_id)
-        call_dir.mkdir(parents=True, exist_ok=True)
         stats = self._audio_stats.get(session_id)
         if not stats:
             return
@@ -938,5 +930,4 @@ class CallOrchestrator:
                 "messages_received": getattr(dg, "_messages_received", 0),
             }
 
-        with open(self._session_recording_path(session.task_id), "w", encoding="utf-8") as f:
-            json.dump(stats, f, indent=2)
+        self._store.save_artifact(session.task_id, "recording_stats", stats)

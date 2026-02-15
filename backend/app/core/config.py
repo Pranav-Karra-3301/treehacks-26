@@ -159,6 +159,11 @@ class Settings:
         os.getenv("PERPLEXITY_SEARCH_ENABLED", "false").strip().lower() == "true"
     )
 
+    # Supabase
+    SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
+    SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "").strip()
+    SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+
     # Redis / caching
     UPSTASH_REDIS_URL = os.getenv("UPSTASH_REDIS_URL", "").strip()
     REDIS_URL = os.getenv("REDIS_URL", "").strip() or UPSTASH_REDIS_URL
