@@ -1221,7 +1221,7 @@ export default function ChatPage() {
               const state = multiCallsRef.current[call.phone];
               return {
                 ...call,
-                vendor: state?.analysis?.vendor || call.vendor,
+                // Keep existing vendor (already set from targetDirectory)
                 summary: state?.analysis?.summary || call.summary,
               };
             });
@@ -2103,7 +2103,7 @@ export default function ChatPage() {
       const businesses = Object.entries(currentMultiCalls).map(([phone, state]) => ({
         phone,
         taskId: state.taskId,
-        vendor: state.analysis?.vendor || multiCallTargets[phone]?.title || null,
+        vendor: multiCallTargets[phone]?.title || null,
         summary: state.analysis?.summary || null,
       }));
 
