@@ -10,13 +10,12 @@ import type {
   TranscriptResponse,
 } from './types';
 
-// Common headers to bypass ngrok free-tier interstitial
-const NGROK_HEADERS = { 'ngrok-skip-browser-warning': '1' };
+const API_HEADERS: Record<string, string> = {};
 
 export async function createTask(payload: unknown): Promise<TaskSummary> {
   const res = await fetch(`${BACKEND_API_URL}/api/tasks`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...NGROK_HEADERS },
+    headers: { 'Content-Type': 'application/json', ...API_HEADERS },
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(`Failed to create task: ${res.status}`);
@@ -24,13 +23,13 @@ export async function createTask(payload: unknown): Promise<TaskSummary> {
 }
 
 export async function listTasks(): Promise<TaskSummary[]> {
-  const res = await fetch(`${BACKEND_API_URL}/api/tasks`, { headers: NGROK_HEADERS });
+  const res = await fetch(`${BACKEND_API_URL}/api/tasks`, { headers: API_HEADERS });
   if (!res.ok) throw new Error(`Failed to list tasks: ${res.status}`);
   return res.json();
 }
 
 export async function getTask(id: string): Promise<TaskDetail> {
-  const res = await fetch(`${BACKEND_API_URL}/api/tasks/${id}`, { headers: NGROK_HEADERS });
+  const res = await fetch(`${BACKEND_API_URL}/api/tasks/${id}`, { headers: API_HEADERS });
   if (!res.ok) throw new Error(`Failed to load task: ${res.status}`);
   return res.json();
 }
@@ -38,7 +37,7 @@ export async function getTask(id: string): Promise<TaskDetail> {
 export async function startCall(id: string): Promise<ActionResponse> {
   const res = await fetch(`${BACKEND_API_URL}/api/tasks/${id}/call`, {
     method: 'POST',
-    headers: NGROK_HEADERS,
+    headers: API_HEADERS,
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -50,7 +49,7 @@ export async function startCall(id: string): Promise<ActionResponse> {
 export async function stopCall(id: string): Promise<ActionResponse> {
   const res = await fetch(`${BACKEND_API_URL}/api/tasks/${id}/stop`, {
     method: 'POST',
-    headers: NGROK_HEADERS,
+    headers: API_HEADERS,
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -60,13 +59,13 @@ export async function stopCall(id: string): Promise<ActionResponse> {
 }
 
 export async function getTaskAnalysis(id: string): Promise<AnalysisPayload> {
-  const res = await fetch(`${BACKEND_API_URL}/api/tasks/${id}/analysis`, { headers: NGROK_HEADERS });
+  const res = await fetch(`${BACKEND_API_URL}/api/tasks/${id}/analysis`, { headers: API_HEADERS });
   if (!res.ok) throw new Error(`Failed to load analysis: ${res.status}`);
   return res.json();
 }
 
 export async function checkVoiceReadiness(): Promise<VoiceReadiness> {
-  const res = await fetch(`${BACKEND_API_URL}/api/system/voice-readiness`, { headers: NGROK_HEADERS });
+  const res = await fetch(`${BACKEND_API_URL}/api/system/voice-readiness`, { headers: API_HEADERS });
   if (!res.ok) throw new Error(`Failed to check readiness: ${res.status}`);
   return res.json();
 }
@@ -74,7 +73,7 @@ export async function checkVoiceReadiness(): Promise<VoiceReadiness> {
 export async function searchResearch(query: string, limit?: number): Promise<ResearchResponse> {
   const res = await fetch(`${BACKEND_API_URL}/api/research`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...NGROK_HEADERS },
+    headers: { 'Content-Type': 'application/json', ...API_HEADERS },
     body: JSON.stringify({ query, ...(limit != null && { limit }) }),
   });
   if (!res.ok) throw new Error(`Research failed: ${res.status}`);
@@ -86,7 +85,7 @@ export function getAudioUrl(taskId: string, side: 'mixed' | 'inbound' | 'outboun
 }
 
 export async function getTaskTranscript(id: string): Promise<TranscriptResponse> {
-  const res = await fetch(`${BACKEND_API_URL}/api/tasks/${id}/transcript`, { headers: NGROK_HEADERS });
+  const res = await fetch(`${BACKEND_API_URL}/api/tasks/${id}/transcript`, { headers: API_HEADERS });
   if (!res.ok) throw new Error(`Failed to load transcript: ${res.status}`);
   return res.json();
 }

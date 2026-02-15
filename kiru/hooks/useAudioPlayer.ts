@@ -38,10 +38,7 @@ export function useAudioPlayer(uri: string) {
     try {
       const localPath = `${FileSystem.cacheDirectory}audio_${Date.now()}.wav`;
       const result = await FileSystem.downloadAsync(uri, localPath, {
-        headers: {
-          'ngrok-skip-browser-warning': '1',
-          'Accept': 'audio/wav, audio/*',
-        },
+        headers: { 'Accept': 'audio/wav, audio/*' },
       });
 
       if (!mountedRef.current) return;
