@@ -84,6 +84,7 @@ export default memo(function MessageBubble({ message, onCall, onSkip }: Props) {
     <View style={{ paddingRight: 56 }}>
       <View
         style={{
+          alignSelf: 'flex-start',
           backgroundColor: colors.white,
           borderRadius: 18,
           borderBottomLeftRadius: 4,

@@ -8,9 +8,16 @@ type Props = {
   style?: TextStyle;
 };
 
-const BASE_CHAR_DELAY = 22;
-const MAX_ANIMATION_MS = 2000;
+const BASE_CHAR_DELAY = 12;
+const MAX_ANIMATION_MS = 1200;
 const HAPTIC_EVERY_N = 4;
+
+/** Calculate how long a typewriter animation will take for a given text length. */
+export function typewriterDuration(textLength: number): number {
+  if (textLength === 0) return 0;
+  const delay = Math.min(BASE_CHAR_DELAY, MAX_ANIMATION_MS / textLength);
+  return Math.ceil(delay * textLength);
+}
 
 export default memo(function TypewriterText({ text, animate = true, style }: Props) {
   const [displayed, setDisplayed] = useState(animate ? '' : text);
