@@ -48,11 +48,10 @@ function BentoScoreVisual() {
 
 function BentoTranscriptVisual() {
   return (
-    <div className="mt-6 space-y-2 text-[12px] font-mono">
+    <div className="mt-6 space-y-1.5 text-[11px] font-mono">
       {[
-        { who: 'Agent', line: "I've been a loyal customer for five years and I'd like to discuss my rate." },
-        { who: 'Rep', line: 'Let me pull up your account and see what options we have.' },
-        { who: 'Agent', line: "I've seen competitors offering $79/mo for the same speed..." },
+        { who: 'Agent', line: "I've been a loyal customer for five years..." },
+        { who: 'Rep', line: 'Let me pull up your account.' },
       ].map((l, i) => (
         <div key={i} className="flex gap-2">
           <span className="text-gray-400 shrink-0 w-10">{l.who}</span>
@@ -160,19 +159,37 @@ export default function FeaturesBento() {
             </div>
           </Reveal>
           <Reveal delay={0.2}>
-            <div className="group h-full rounded-2xl border border-gray-100 bg-gray-50/50 p-6 sm:p-8 transition-all duration-200 hover:border-gray-200 hover:shadow-card hover:bg-white">
+            <div className="group h-full rounded-2xl border border-gray-100 bg-gray-50/50 p-6 sm:p-8 transition-all duration-200 hover:border-gray-200 hover:shadow-card hover:bg-white relative overflow-hidden">
               <div className="flex items-center gap-2 mb-1"><Shield size={14} className="text-gray-400" /><span className="text-[12px] font-semibold text-gray-400 uppercase tracking-wider">Privacy</span></div>
               <h3 className="text-[18px] font-semibold text-gray-950 mt-2">Your data stays yours</h3>
               <p className="mt-2 text-[14px] leading-relaxed text-gray-500">Calls are processed securely. No training on your conversations. Delete anytime.</p>
               <BentoPrivacyVisual />
+              <video
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="absolute bottom-3 right-3 w-28 h-auto rounded-md opacity-90"
+              >
+                <source src="/private.mp4" type="video/mp4" />
+              </video>
             </div>
           </Reveal>
           <Reveal delay={0.25}>
-            <div className="group h-full rounded-2xl border border-gray-100 bg-gray-50/50 p-6 sm:p-8 transition-all duration-200 hover:border-gray-200 hover:shadow-card hover:bg-white">
+            <div className="group h-full rounded-2xl border border-gray-100 bg-gray-50/50 p-6 sm:p-8 transition-all duration-200 hover:border-gray-200 hover:shadow-card hover:bg-white relative overflow-hidden">
               <div className="flex items-center gap-2 mb-1"><Mic size={14} className="text-gray-400" /><span className="text-[12px] font-semibold text-gray-400 uppercase tracking-wider">Transcript</span></div>
               <h3 className="text-[18px] font-semibold text-gray-950 mt-2">Full transcript + recording</h3>
               <p className="mt-2 text-[14px] leading-relaxed text-gray-500">Replay the audio or read the transcript. Know exactly what was said and agreed to.</p>
               <BentoTranscriptVisual />
+              <video
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="absolute bottom-3 right-3 w-28 h-auto rounded-md opacity-90"
+              >
+                <source src="/transcript.mp4" type="video/mp4" />
+              </video>
             </div>
           </Reveal>
           <Reveal delay={0.3} className="sm:col-span-2 lg:col-span-3">
