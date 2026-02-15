@@ -55,7 +55,6 @@ class Settings:
     # OpenAI API
     OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
     OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-    OPENAI_ANALYSIS_MODEL = os.getenv("OPENAI_ANALYSIS_MODEL", "gpt-5-nano")
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
     # Anthropic Claude API
