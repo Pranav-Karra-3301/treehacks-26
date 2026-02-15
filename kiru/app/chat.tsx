@@ -6,7 +6,7 @@ import * as Haptics from 'expo-haptics';
 
 import { useChatMachine } from '../hooks/useChatMachine';
 import { useVoiceReadiness } from '../hooks/useVoiceReadiness';
-import { colors, fonts, shadows } from '../lib/theme';
+import { colors, fonts } from '../lib/theme';
 
 import MessageList from '../components/chat/MessageList';
 import ChatInput from '../components/chat/ChatInput';
@@ -67,11 +67,10 @@ export default function ChatScreen() {
           alignItems: 'center',
           justifyContent: 'space-between',
           paddingHorizontal: 16,
-          paddingVertical: 12,
-          backgroundColor: colors.white,
+          paddingVertical: 10,
+          backgroundColor: colors.bg,
           borderBottomWidth: 0.5,
           borderBottomColor: 'rgba(0,0,0,0.06)',
-          ...shadows.soft,
         }}
       >
         {/* Left: sidebar toggle */}
@@ -80,18 +79,18 @@ export default function ChatScreen() {
           style={{ height: 44, width: 44, alignItems: 'center', justifyContent: 'center' }}
           hitSlop={4}
         >
-          <Menu size={20} color={colors.gray600} strokeWidth={1.8} />
+          <Menu size={20} color={colors.gray500} />
         </Pressable>
 
         {/* Center: branding */}
-        <Text style={{ fontFamily: fonts.serifBoldItalic, fontSize: 24, color: colors.gray950, letterSpacing: -0.5 }}>
+        <Text style={{ fontFamily: fonts.serifItalic, fontSize: 20, color: colors.gray950, letterSpacing: -0.5 }}>
           kiru
         </Text>
 
         {/* Right: context action */}
         {isOnCall ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.emerald500 }} />
               <Text style={{ fontFamily: fonts.medium, fontSize: 11, color: colors.emerald600 }}>
                 Live
@@ -105,11 +104,11 @@ export default function ChatScreen() {
               style={{
                 borderRadius: 99,
                 backgroundColor: colors.red50,
-                paddingHorizontal: 14,
-                paddingVertical: 7,
+                paddingHorizontal: 12,
+                paddingVertical: 6,
               }}
             >
-              <Text style={{ fontFamily: fonts.semibold, fontSize: 12, color: colors.red600 }}>
+              <Text style={{ fontFamily: fonts.medium, fontSize: 12, color: colors.red600 }}>
                 End call
               </Text>
             </Pressable>
@@ -123,7 +122,7 @@ export default function ChatScreen() {
             style={{ height: 44, width: 44, alignItems: 'center', justifyContent: 'center' }}
             hitSlop={4}
           >
-            <SquarePen size={18} color={colors.gray400} strokeWidth={1.8} />
+            <SquarePen size={18} color={colors.gray400} />
           </Pressable>
         )}
       </View>

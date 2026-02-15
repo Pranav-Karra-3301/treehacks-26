@@ -1,6 +1,6 @@
 import { View, TextInput, Pressable, Platform, KeyboardAvoidingView } from 'react-native';
 import { ArrowUp } from 'lucide-react-native';
-import { colors, fonts, shadows } from '../../lib/theme';
+import { colors, fonts } from '../../lib/theme';
 import * as Haptics from 'expo-haptics';
 
 type Props = {
@@ -33,12 +33,12 @@ export default function ChatInput({
     >
       <View
         style={{
-          backgroundColor: colors.white,
+          backgroundColor: colors.bg,
           borderTopWidth: 0.5,
           borderTopColor: 'rgba(0,0,0,0.06)',
           paddingHorizontal: 16,
           paddingTop: 10,
-          paddingBottom: 10,
+          paddingBottom: 8,
         }}
       >
         <View
@@ -46,12 +46,12 @@ export default function ChatInput({
             flexDirection: 'row',
             alignItems: 'flex-end',
             gap: 10,
-            borderRadius: 24,
+            borderRadius: 22,
             borderWidth: 1,
-            borderColor: disabled ? colors.gray100 : colors.gray200,
-            backgroundColor: colors.gray50,
-            paddingHorizontal: 16,
-            paddingVertical: 10,
+            borderColor: colors.gray200,
+            backgroundColor: colors.white,
+            paddingHorizontal: 14,
+            paddingVertical: 8,
           }}
         >
           <TextInput
@@ -68,28 +68,29 @@ export default function ChatInput({
             style={{
               flex: 1,
               fontFamily: fonts.regular,
-              fontSize: 15,
-              lineHeight: 21,
+              fontSize: 16,
+              lineHeight: 22,
               color: disabled ? colors.gray400 : colors.gray900,
-              minHeight: 24,
+              minHeight: 28,
               maxHeight: 120,
-              paddingTop: Platform.OS === 'ios' ? 2 : 0,
-              paddingBottom: Platform.OS === 'ios' ? 2 : 0,
+              paddingTop: Platform.OS === 'ios' ? 4 : 2,
+              paddingBottom: Platform.OS === 'ios' ? 4 : 2,
             }}
           />
           <Pressable
             onPress={handleSend}
             disabled={sendDisabled}
             style={{
-              height: 32,
-              width: 32,
-              borderRadius: 16,
+              height: 30,
+              width: 30,
+              borderRadius: 15,
               alignItems: 'center',
               justifyContent: 'center',
               backgroundColor: sendDisabled ? colors.gray200 : colors.gray900,
+              marginBottom: 1,
             }}
           >
-            <ArrowUp size={16} strokeWidth={2.5} color={sendDisabled ? colors.gray400 : '#fff'} />
+            <ArrowUp size={15} strokeWidth={2.5} color={sendDisabled ? colors.gray400 : '#fff'} />
           </Pressable>
         </View>
       </View>

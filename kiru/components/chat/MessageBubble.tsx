@@ -35,7 +35,7 @@ export default function MessageBubble({ message, onCall, onSkip }: Props) {
 
   if (message.role === 'status') {
     return (
-      <View style={{ alignItems: 'center', paddingVertical: 6 }}>
+      <View style={{ alignItems: 'center', paddingVertical: 4 }}>
         <Text
           style={{
             fontFamily: fonts.regular,
@@ -56,11 +56,10 @@ export default function MessageBubble({ message, onCall, onSkip }: Props) {
         <View
           style={{
             backgroundColor: colors.gray900,
-            borderRadius: 20,
-            borderBottomRightRadius: 6,
-            paddingHorizontal: 16,
-            paddingVertical: 11,
-            ...shadows.card,
+            borderRadius: 18,
+            borderBottomRightRadius: 4,
+            paddingHorizontal: 14,
+            paddingVertical: 10,
           }}
         >
           <Text
@@ -84,13 +83,12 @@ export default function MessageBubble({ message, onCall, onSkip }: Props) {
       <View
         style={{
           backgroundColor: colors.white,
-          borderRadius: 20,
-          borderBottomLeftRadius: 6,
+          borderRadius: 18,
+          borderBottomLeftRadius: 4,
           borderWidth: 0.5,
           borderColor: 'rgba(0,0,0,0.06)',
-          paddingHorizontal: 16,
-          paddingVertical: 11,
-          ...shadows.soft,
+          paddingHorizontal: 14,
+          paddingVertical: 10,
         }}
       >
         <Text

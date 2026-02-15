@@ -1,6 +1,6 @@
 /** Color tokens for inline styles (SVG, reanimated, etc.) */
 export const colors = {
-  bg: '#fafaf9',
+  bg: '#f8f8f8',
   sidebarBg: '#f2f2f7',
   white: '#ffffff',
   black: '#000000',
@@ -41,8 +41,8 @@ export const shadows = {
   soft: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
     elevation: 2,
   },
   card: {
@@ -55,8 +55,8 @@ export const shadows = {
   elevated: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.1,
-    shadowRadius: 48,
+    shadowOpacity: 0.12,
+    shadowRadius: 60,
     elevation: 8,
   },
 } as const;
@@ -66,8 +66,6 @@ export const fonts = {
   medium: 'Inter_500Medium',
   semibold: 'Inter_600SemiBold',
   bold: 'Inter_700Bold',
-  serif: 'MartinaPl_Regular',
-  serifItalic: 'MartinaPl_Italic',
-  serifBold: 'MartinaPl_Bold',
-  serifBoldItalic: 'MartinaPl_BoldItalic',
+  serif: 'InstrumentSerif_400Regular',
+  serifItalic: 'InstrumentSerif_400Regular_Italic',
 } as const;

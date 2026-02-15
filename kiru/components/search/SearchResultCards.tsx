@@ -1,7 +1,7 @@
 import { View, Text, Pressable, Linking } from 'react-native';
 import { Phone, ArrowRight, Globe } from 'lucide-react-native';
 import type { BusinessResult } from '../../lib/types';
-import { colors, fonts, shadows } from '../../lib/theme';
+import { colors, fonts } from '../../lib/theme';
 import BizIcon from './BizIcon';
 import * as Haptics from 'expo-haptics';
 
@@ -49,7 +49,7 @@ export default function SearchResultCards({ results, onCall, onSkip }: Props) {
 
   return (
     <View style={{ gap: 8 }}>
-      <View style={{ gap: 8 }}>
+      <View style={{ gap: 6 }}>
         {display.map((result, i) => {
           const phone = result.phone_numbers[0] ?? null;
           const snippet = result.snippet ? cleanSnippet(result.snippet) : '';
@@ -61,15 +61,14 @@ export default function SearchResultCards({ results, onCall, onSkip }: Props) {
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
-                gap: 12,
-                borderRadius: 16,
+                gap: 10,
+                borderRadius: 12,
                 backgroundColor: colors.white,
                 borderWidth: 0.5,
                 borderColor: 'rgba(0,0,0,0.06)',
-                paddingLeft: 12,
-                paddingRight: 10,
-                paddingVertical: 10,
-                ...shadows.soft,
+                paddingLeft: 10,
+                paddingRight: 8,
+                paddingVertical: 8,
               }}
             >
               <BizIcon url={result.url} title={result.title || 'Untitled'} />
@@ -78,7 +77,7 @@ export default function SearchResultCards({ results, onCall, onSkip }: Props) {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <Text
                     numberOfLines={1}
-                    style={{ fontFamily: fonts.medium, fontSize: 14, color: colors.gray900, flex: 1 }}
+                    style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.gray900, flex: 1 }}
                   >
                     {result.title || 'Untitled'}
                   </Text>
@@ -87,14 +86,14 @@ export default function SearchResultCards({ results, onCall, onSkip }: Props) {
                       onPress={() => result.url && Linking.openURL(result.url)}
                       hitSlop={8}
                     >
-                      <Globe size={11} color={colors.gray300} />
+                      <Globe size={10} color={colors.gray300} />
                     </Pressable>
                   ) : null}
                 </View>
                 {snippet ? (
                   <Text
                     numberOfLines={1}
-                    style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.gray400, lineHeight: 17, marginTop: 2 }}
+                    style={{ fontFamily: fonts.regular, fontSize: 11.5, color: colors.gray400, lineHeight: 16, marginTop: 2 }}
                   >
                     {snippet}
                   </Text>
@@ -103,10 +102,10 @@ export default function SearchResultCards({ results, onCall, onSkip }: Props) {
                   <Text
                     style={{
                       fontFamily: fonts.regular,
-                      fontSize: 11.5,
+                      fontSize: 11,
                       color: colors.gray400,
                       fontVariant: ['tabular-nums'],
-                      marginTop: 3,
+                      marginTop: 2,
                     }}
                   >
                     {formatPhone(phone)}
@@ -120,19 +119,18 @@ export default function SearchResultCards({ results, onCall, onSkip }: Props) {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                     onCall(result, phone);
                   }}
-                  style={({ pressed }) => ({
+                  style={{
                     flexDirection: 'row',
                     alignItems: 'center',
-                    gap: 5,
-                    borderRadius: 99,
-                    backgroundColor: colors.gray950,
-                    paddingHorizontal: 14,
-                    paddingVertical: 8,
-                    opacity: pressed ? 0.8 : 1,
-                  })}
+                    gap: 4,
+                    borderRadius: 8,
+                    backgroundColor: colors.gray900,
+                    paddingHorizontal: 10,
+                    paddingVertical: 6,
+                  }}
                 >
-                  <Phone size={11} strokeWidth={2.5} color="#fff" />
-                  <Text style={{ fontFamily: fonts.medium, fontSize: 12, color: '#fff' }}>
+                  <Phone size={10} strokeWidth={2.5} color="#fff" />
+                  <Text style={{ fontFamily: fonts.medium, fontSize: 11.5, color: '#fff' }}>
                     Call
                   </Text>
                 </Pressable>
@@ -147,15 +145,15 @@ export default function SearchResultCards({ results, onCall, onSkip }: Props) {
         style={{
           flexDirection: 'row',
           alignItems: 'center',
-          gap: 5,
+          gap: 4,
           alignSelf: 'center',
-          paddingVertical: 6,
+          paddingVertical: 4,
         }}
       >
-        <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.gray400 }}>
+        <Text style={{ fontFamily: fonts.regular, fontSize: 11, color: colors.gray400 }}>
           I have my own number
         </Text>
-        <ArrowRight size={11} color={colors.gray400} />
+        <ArrowRight size={10} color={colors.gray400} />
       </Pressable>
     </View>
   );

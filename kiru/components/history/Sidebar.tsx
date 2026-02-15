@@ -1,19 +1,18 @@
 import { useEffect, useCallback } from 'react';
-import { View, Text, Pressable, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, FlatList, ActivityIndicator, Dimensions } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withSpring,
   withTiming,
   runOnJS,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Plus } from 'lucide-react-native';
 import type { TaskSummary } from '../../lib/types';
 import { colors, fonts } from '../../lib/theme';
 import TaskRow from './TaskRow';
 
-const SIDEBAR_WIDTH = 300;
+const SIDEBAR_WIDTH = 280;
+const ANIM_DURATION = 250;
 
 type Props = {
   open: boolean;
@@ -53,11 +52,11 @@ export default function Sidebar({ open, onClose, tasks, loading, onSelectTask }:
 
   useEffect(() => {
     if (open) {
-      translateX.value = withSpring(0, { damping: 25, stiffness: 200 });
-      backdropOpacity.value = withTiming(1, { duration: 250 });
+      translateX.value = withTiming(0, { duration: ANIM_DURATION });
+      backdropOpacity.value = withTiming(1, { duration: ANIM_DURATION });
     } else {
-      translateX.value = withSpring(-SIDEBAR_WIDTH, { damping: 25, stiffness: 200 });
-      backdropOpacity.value = withTiming(0, { duration: 200 });
+      translateX.value = withTiming(-SIDEBAR_WIDTH, { duration: ANIM_DURATION });
+      backdropOpacity.value = withTiming(0, { duration: ANIM_DURATION });
     }
   }, [open, translateX, backdropOpacity]);
 
@@ -79,11 +78,11 @@ export default function Sidebar({ open, onClose, tasks, loading, onSelectTask }:
     })
     .onEnd((e) => {
       if (e.translationX < -60 || e.velocityX < -400) {
-        translateX.value = withSpring(-SIDEBAR_WIDTH, { damping: 25, stiffness: 200 });
+        translateX.value = withTiming(-SIDEBAR_WIDTH, { duration: 200 });
         backdropOpacity.value = withTiming(0, { duration: 200 });
         runOnJS(onClose)();
       } else {
-        translateX.value = withSpring(0, { damping: 25, stiffness: 200 });
+        translateX.value = withTiming(0, { duration: 200 });
         backdropOpacity.value = withTiming(1, { duration: 200 });
       }
     });
@@ -103,6 +102,7 @@ export default function Sidebar({ open, onClose, tasks, loading, onSelectTask }:
     [onSelectTask, onClose],
   );
 
+  // Build flat data with section headers
   const flatData: (TaskSummary | { _header: string })[] = [];
   for (const group of groups) {
     flatData.push({ _header: group.title } as any);
@@ -120,7 +120,7 @@ export default function Sidebar({ open, onClose, tasks, loading, onSelectTask }:
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.3)',
+            backgroundColor: 'rgba(0,0,0,0.25)',
             zIndex: 50,
           },
           backdropStyle,
@@ -139,10 +139,8 @@ export default function Sidebar({ open, onClose, tasks, loading, onSelectTask }:
               left: 0,
               bottom: 0,
               width: SIDEBAR_WIDTH,
-              backgroundColor: colors.white,
+              backgroundColor: colors.sidebarBg,
               zIndex: 51,
-              borderRightWidth: 0.5,
-              borderRightColor: 'rgba(0,0,0,0.06)',
             },
             sidebarStyle,
           ]}
@@ -153,46 +151,30 @@ export default function Sidebar({ open, onClose, tasks, loading, onSelectTask }:
               paddingTop: 64,
               paddingHorizontal: 20,
               paddingBottom: 16,
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
+              borderBottomWidth: 0.5,
+              borderBottomColor: 'rgba(0,0,0,0.06)',
             }}
           >
-            <Text style={{ fontFamily: fonts.serifBoldItalic, fontSize: 26, color: colors.gray950, letterSpacing: -0.5 }}>
+            <Text style={{ fontFamily: fonts.serifItalic, fontSize: 22, color: colors.gray950 }}>
               kiru
             </Text>
-            <Pressable
-              onPress={onClose}
-              style={{
-                height: 32,
-                width: 32,
-                borderRadius: 8,
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: colors.gray100,
-              }}
-              hitSlop={4}
-            >
-              <Plus size={16} color={colors.gray500} style={{ transform: [{ rotate: '45deg' }] }} />
-            </Pressable>
           </View>
 
           {/* Task List */}
           {loading ? (
             <ActivityIndicator color={colors.gray400} style={{ marginTop: 32 }} />
           ) : tasks.length === 0 ? (
-            <View style={{ paddingTop: 60, alignItems: 'center' }}>
-              <Text
-                style={{
-                  fontFamily: fonts.regular,
-                  fontSize: 14,
-                  color: colors.gray400,
-                  textAlign: 'center',
-                }}
-              >
-                No past negotiations
-              </Text>
-            </View>
+            <Text
+              style={{
+                fontFamily: fonts.regular,
+                fontSize: 13,
+                color: colors.gray400,
+                textAlign: 'center',
+                paddingTop: 40,
+              }}
+            >
+              No past negotiations
+            </Text>
           ) : (
             <FlatList
               data={flatData}
@@ -208,8 +190,8 @@ export default function Sidebar({ open, onClose, tasks, loading, onSelectTask }:
                         textTransform: 'uppercase',
                         letterSpacing: 0.8,
                         paddingHorizontal: 20,
-                        paddingTop: 24,
-                        paddingBottom: 8,
+                        paddingTop: 20,
+                        paddingBottom: 6,
                       }}
                     >
                       {(item as any)._header}
