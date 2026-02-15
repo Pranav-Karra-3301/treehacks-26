@@ -248,25 +248,73 @@ export default function HowItWorksPage() {
         </section>
       ))}
 
-      {/* ── Bottom CTA ───────────────────────────── */}
-      <section className="px-6 py-20 sm:py-28 bg-gray-50/60">
-        <div className="mx-auto max-w-5xl text-center">
-          <Reveal>
-            <h2 className="text-[clamp(1.75rem,4vw,2.5rem)] font-bold tracking-[-0.03em] text-gray-950">
-              Ready to{' '}<span className="font-serif italic font-normal">try it?</span>
+      {/* ── Smooth white to dark transition ─────────── */}
+      <div
+        className="h-64 sm:h-96 -mb-px"
+        style={{
+          background: 'linear-gradient(180deg, #ffffff 0%, #fefefe 8%, #f9f9fa 16%, #f0f0f2 24%, #dddde2 32%, #c4c4cc 40%, #9a9aa6 48%, #6e6e7a 56%, #4a4a54 64%, #2e2e36 72%, #1a1a22 80%, #101018 88%, #09090b 96%)',
+        }}
+      />
+
+      {/* ── Bottom CTA + Footer ─────────────────── */}
+      <section className="relative px-6 pt-32 sm:pt-44 pb-0 overflow-hidden bg-gray-950 min-h-screen flex flex-col">
+        {/* Aurora gradient orbs */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute bottom-0 left-[5%] h-[70%] w-[55%] translate-y-[40%] rounded-full bg-violet-600/30 blur-[120px] animate-aurora-drift" />
+          <div className="absolute bottom-0 right-[0%] h-[65%] w-[50%] translate-y-[35%] rounded-full bg-blue-500/45 blur-[100px] animate-aurora-drift-2" />
+          <div className="absolute bottom-0 left-[20%] h-[55%] w-[45%] translate-y-[25%] rounded-full bg-rose-500/30 blur-[100px] animate-aurora-drift" />
+          <div className="absolute bottom-0 right-[10%] h-[75%] w-[50%] translate-y-[50%] rounded-full bg-indigo-600/40 blur-[140px] animate-aurora-drift-2" />
+          <div className="absolute bottom-0 left-[40%] h-[50%] w-[35%] translate-y-[40%] rounded-full bg-fuchsia-500/25 blur-[90px] animate-aurora-drift" />
+          <div className="absolute bottom-0 left-[-5%] h-[60%] w-[40%] translate-y-[55%] rounded-full bg-amber-500/20 blur-[120px] animate-aurora-drift-2" />
+        </div>
+
+        {/* Grain texture */}
+        <div className="absolute inset-0 grain" />
+
+        <Reveal>
+          <div className="mx-auto max-w-5xl relative z-10">
+            <h2 className="text-[clamp(2rem,5vw,3.75rem)] font-bold tracking-[-0.04em] leading-[1.08] text-white max-w-xl">
+              Ready to{' '}<br className="hidden sm:block" />
+              <span className="font-serif italic font-normal">try it?</span>
             </h2>
-            <p className="mt-4 text-[15px] text-gray-500 max-w-md mx-auto leading-relaxed">
+            <p className="mt-5 text-[16px] text-gray-400 max-w-md leading-relaxed">
               Start a negotiation and see the full pipeline in action.
             </p>
-            <div className="mt-8 flex items-center gap-3 justify-center">
-              <Link href="/chat" className="group inline-flex items-center gap-2 rounded-full bg-gray-950 pl-5 pr-4 py-2.5 text-[14px] font-medium text-white transition-all hover:bg-gray-800 hover:shadow-card active:scale-[0.98]">
+            <div className="mt-10 flex items-center gap-4 pb-24">
+              <Link href="/chat" className="group inline-flex items-center gap-2 rounded-full bg-white pl-6 pr-5 py-3 text-[14px] font-semibold text-gray-950 transition-all hover:bg-gray-100 hover:shadow-elevated active:scale-[0.98]">
                 Start negotiating <ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" />
               </Link>
-              <Link href="/" className="inline-flex items-center gap-1 rounded-full px-4 py-2.5 text-[14px] font-medium text-gray-500 transition hover:text-gray-900">
-                Back to home
-              </Link>
+              <Link href="/" className="text-[13px] text-gray-500 transition hover:text-white">Back to home</Link>
             </div>
-          </Reveal>
+          </div>
+        </Reveal>
+
+        {/* Spacer */}
+        <div className="flex-1" aria-hidden="true" />
+
+        {/* Footer */}
+        <div className="relative z-10 pb-10">
+          <div className="flex justify-center overflow-hidden pointer-events-none select-none mix-blend-difference">
+            <span className="font-serif italic text-white text-[clamp(12rem,42vw,36rem)] leading-[0.82] tracking-[-0.04em]">
+              kiru
+            </span>
+          </div>
+          <div className="mx-auto max-w-5xl mt-10 px-6">
+            <div className="flex flex-col items-center gap-6">
+              <div className="flex items-center gap-2 text-[13px] text-white/50">
+                <span>Built by</span>
+                <span className="text-white/80 font-medium">Pranav</span>
+                <span>&middot;</span>
+                <span className="text-white/80 font-medium">Ethan</span>
+                <span>&middot;</span>
+                <span className="text-white/80 font-medium">Jayanth</span>
+              </div>
+              <div className="flex items-center gap-6">
+                <Link href="/chat" className="text-[13px] text-white/60 transition hover:text-white">Launch App</Link>
+                <span className="text-[12px] text-white/40">TreeHacks 2026</span>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
     </div>
