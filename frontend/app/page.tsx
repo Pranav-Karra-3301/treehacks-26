@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { ArrowRight, ArrowUpRight, ChevronRight } from 'lucide-react';
 import dynamic from 'next/dynamic';
@@ -17,9 +17,52 @@ const UseCases = dynamic(() => import('../components/landing/use-cases'), { ssr:
 const Testimonials = dynamic(() => import('../components/landing/testimonials'), { ssr: true });
 const CtaFooter = dynamic(() => import('../components/landing/cta-footer'), { ssr: true });
 
-// ── Hero orb (glassy animated sphere) ─────────────────────────────────────────
+// ── Hero orb (video, ping-pong: forward then backward) ─────────────────────────
+
+// Throttled reverse: seek at ~30fps with fixed step so decode aligns to frames and we don't stutter
+const REVERSE_FPS = 30;
+const REVERSE_STEP = 1 / REVERSE_FPS;
+const REVERSE_INTERVAL_MS = 1000 / REVERSE_FPS;
 
 function HeroOrb() {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const rafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const playForward = () => video.play();
+
+    const runReverse = () => {
+      let lastSeekAt = performance.now();
+      const tick = (now: number) => {
+        if (video.currentTime <= 0.001) {
+          video.currentTime = 0;
+          rafRef.current = null;
+          playForward();
+          return;
+        }
+        const elapsed = now - lastSeekAt;
+        if (elapsed >= REVERSE_INTERVAL_MS) {
+          lastSeekAt = now;
+          video.currentTime = Math.max(0, video.currentTime - REVERSE_STEP);
+        }
+        rafRef.current = requestAnimationFrame(tick);
+      };
+      rafRef.current = requestAnimationFrame(tick);
+    };
+
+    const onEnded = () => runReverse();
+
+    video.addEventListener('ended', onEnded);
+
+    return () => {
+      video.removeEventListener('ended', onEnded);
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.9 }}
@@ -27,26 +70,15 @@ function HeroOrb() {
       transition={{ duration: 1, delay: 0.4, ease: [0.16, 1, 0.3, 1] }}
       className="relative flex justify-center items-center w-full max-w-[320px] aspect-square mx-auto lg:mx-0 lg:max-w-none lg:w-[clamp(260px,28vw,320px)]"
     >
-      {/* Soft outer glow */}
-      <div
-        className="absolute inset-0 rounded-full blur-3xl opacity-50"
-        style={{
-          background: 'radial-gradient(circle at 50% 50%, rgba(147, 197, 253, 0.5) 0%, rgba(196, 181, 253, 0.25) 40%, transparent 70%)',
-        }}
-      />
-      {/* Orb sphere */}
-      <motion.div
-        animate={{ y: [0, -12, 0] }}
-        transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-        className="relative w-[85%] aspect-square rounded-full overflow-hidden"
-        style={{
-          background: `
-            radial-gradient(ellipse 80% 50% at 25% 25%, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.15) 35%, transparent 55%),
-            radial-gradient(ellipse 60% 40% at 75% 70%, rgba(255,255,255,0.2) 0%, transparent 50%),
-            radial-gradient(circle at 50% 50%, rgba(186,230,253,0.9) 0%, rgba(147,197,253,0.85) 25%, rgba(129,140,248,0.8) 50%, rgba(139,92,246,0.4) 75%, rgba(196,181,253,0.2) 100%)
-          `,
-          boxShadow: 'inset -8px -12px 24px -8px rgba(30,58,138,0.25), inset 12px 8px 28px -4px rgba(255,255,255,0.4), 0 24px 48px -12px rgba(59,130,246,0.25)',
-        }}
+      <video
+        ref={videoRef}
+        src="/orb.mp4"
+        autoPlay
+        loop={false}
+        muted
+        playsInline
+        className="w-full h-full object-contain rounded-full"
+        aria-hidden
       />
     </motion.div>
   );
@@ -65,7 +97,19 @@ export default function LandingPage() {
 
       {/* ── Nav ─────────────────────────────────── */}
       <div className="sticky top-0 z-50 flex justify-center px-4 pt-3">
-        <nav className="w-full max-w-5xl rounded-2xl bg-white/80 backdrop-blur-xl border border-gray-200/60 shadow-soft relative overflow-hidden">
+        <nav className="w-full max-w-5xl rounded-2xl backdrop-blur-xl border border-white/40 relative overflow-hidden"
+          style={{
+            background: 'linear-gradient(135deg, rgba(255,255,255,0.52) 0%, rgba(255,255,255,0.28) 45%, rgba(255,255,255,0.18) 100%)',
+            boxShadow: 'inset 1px 1px 0 0 rgba(255,255,255,0.6), inset -1px -1px 0 0 rgba(0,0,0,0.04), 0 8px 32px rgba(0,0,0,0.06)',
+          }}
+        >
+          {/* Light from top-left (-45°, ~80%) — glass highlight */}
+          <div
+            className="absolute inset-0 rounded-2xl pointer-events-none"
+            style={{
+              background: 'linear-gradient(135deg, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0.08) 40%, transparent 70%)',
+            }}
+          />
           {/* Inner bottom half: full-width wavy blue gradient */}
           <div className="absolute left-0 right-0 bottom-0 top-[38%] w-full pointer-events-none">
             <svg className="absolute inset-0 w-full h-full min-w-full" viewBox="0 0 800 56" preserveAspectRatio="none">
