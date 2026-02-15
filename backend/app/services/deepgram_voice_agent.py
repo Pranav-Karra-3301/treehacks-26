@@ -9,7 +9,7 @@ import websockets
 
 from app.core.config import settings
 from app.core.telemetry import log_event, timed_step
-from app.services.prompt_builder import build_negotiation_prompt, build_greeting
+from app.services.prompt_builder import build_negotiation_prompt
 
 
 def _coerce_headers(raw: str) -> Dict[str, str]:
