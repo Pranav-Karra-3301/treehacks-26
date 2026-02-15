@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#fafaf9"
+      "backgroundColor": "#18181b"
     },
     "ios": {
       "supportsTablet": true,
@@ -23,7 +23,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#fafaf9"
+        "backgroundColor": "#18181b"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.kiru.app",
