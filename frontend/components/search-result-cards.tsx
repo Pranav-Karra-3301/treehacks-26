@@ -116,7 +116,7 @@ export default function SearchResultCards({ results, onCall, onSkip }: Props) {
               className="group flex items-center gap-2.5 rounded-xl bg-white border border-gray-100 pl-2.5 pr-2 py-2 transition-all duration-150 hover:border-gray-200 hover:shadow-soft"
             >
               {/* Favicon */}
-              <BizIcon url={result.url} title={result.title || 'Untitled'} />
+              <BizIcon url={result.url ?? undefined} title={result.title || 'Untitled'} />
 
               {/* Content */}
               <div className="min-w-0 flex-1">

@@ -68,7 +68,7 @@ function ChatMockup() {
   useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight; }, [messages, typing]);
 
   return (
-    <div className="relative w-full min-w-[420px] max-w-[420px]">
+    <div className="relative w-full min-w-[520px] max-w-[520px]">
       {/* Soft ambient glow */}
       <div className="absolute -inset-16 bg-gradient-to-br from-violet-100/40 via-rose-50/30 to-amber-50/30 rounded-[80px] blur-3xl -z-10" />
       <div className="rounded-2xl border border-gray-200/60 bg-white/90 backdrop-blur-sm shadow-elevated overflow-hidden">
@@ -265,7 +265,7 @@ export default function LandingPage() {
               <span className="font-serif italic text-[28px]">kiru</span>
             </Link>
             <div className="flex items-center gap-6">
-              <a href="#how-it-works" className="hidden sm:block text-[13px] text-gray-500 transition hover:text-gray-900">How it works</a>
+              <Link href="/how-it-works" className="hidden sm:block text-[13px] text-gray-500 transition hover:text-gray-900">How it works</Link>
               <a href="#features" className="hidden sm:block text-[13px] text-gray-500 transition hover:text-gray-900">Features</a>
               <Link href="/dashboard" className="hidden sm:block text-[13px] text-gray-500 transition hover:text-gray-900">Dashboard</Link>
               <Link href="/chat" className="group inline-flex items-center gap-1.5 rounded-full bg-gray-950 px-4 py-1.5 text-[13px] font-medium text-white transition hover:bg-gray-800">
@@ -284,8 +284,8 @@ export default function LandingPage() {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,white_70%)]" />
 
         <motion.div style={{ opacity: heroOpacity, y: heroY }} className="relative px-6 pt-24 sm:pt-32 pb-8">
-          <div className="mx-auto max-w-5xl lg:flex lg:items-center lg:justify-between lg:gap-16">
-            <div className="max-w-xl lg:shrink-0">
+          <div className="mx-auto max-w-5xl">
+            <div className="max-w-xl mx-auto text-center lg:text-left lg:mx-0">
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}
                 className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[12px] font-medium text-gray-500 mb-6 shadow-soft"
               >
@@ -303,30 +303,39 @@ export default function LandingPage() {
               <motion.p
                 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.7, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
-                className="mt-5 text-[17px] leading-relaxed text-gray-500 max-w-md"
+                className="mt-5 text-[17px] leading-relaxed text-gray-500 max-w-md mx-auto lg:mx-0"
               >
                 Tell <Kiru className="text-gray-700" /> what you want. It calls, negotiates in real-time, and saves you money — while you do literally anything else.
               </motion.p>
               <motion.div
                 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.7, delay: 0.25, ease: [0.16, 1, 0.3, 1] }}
-                className="mt-8 flex items-center gap-3"
+                className="mt-8 flex items-center gap-3 justify-center lg:justify-start"
               >
                 <Link href="/chat" className="group inline-flex items-center gap-2 rounded-full bg-gray-950 pl-5 pr-4 py-2.5 text-[14px] font-medium text-white transition-all hover:bg-gray-800 hover:shadow-card active:scale-[0.98]">
                   Start negotiating <ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" />
                 </Link>
-                <a href="#how-it-works" className="inline-flex items-center gap-1 rounded-full px-4 py-2.5 text-[14px] font-medium text-gray-500 transition hover:text-gray-900">
+                <Link href="/how-it-works" className="inline-flex items-center gap-1 rounded-full px-4 py-2.5 text-[14px] font-medium text-gray-500 transition hover:text-gray-900">
                   See how it works <ChevronRight size={14} />
-                </a>
+                </Link>
               </motion.div>
             </div>
 
+            {/* YouTube demo video */}
             <motion.div
               initial={{ opacity: 0, y: 30, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.9, delay: 0.35, ease: [0.16, 1, 0.3, 1] }}
-              className="mt-16 lg:mt-0"
+              className="mt-12"
             >
-              <ChatMockup />
+              <div className="rounded-2xl overflow-hidden border border-gray-200/60 shadow-card aspect-video">
+                <iframe
+                  className="w-full h-full"
+                  src="https://www.youtube.com/embed/YOUR_VIDEO_ID"
+                  title="Kiru Demo"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
             </motion.div>
           </div>
         </motion.div>
@@ -357,6 +366,15 @@ export default function LandingPage() {
               </Reveal>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* ── Chat mockup showcase ────────────── */}
+      <section className="px-6 pb-20">
+        <div className="mx-auto max-w-5xl flex justify-center">
+          <Reveal>
+            <ChatMockup />
+          </Reveal>
         </div>
       </section>
 
