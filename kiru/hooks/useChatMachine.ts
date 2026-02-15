@@ -68,6 +68,7 @@ export function useChatMachine() {
 
   const analysisLoadedRef = useRef(false);
   const thinkingBufferRef = useRef('');
+  const connectedProcessedRef = useRef(false);
   const endedProcessedRef = useRef(false);
   const appActiveRef = useRef(AppState.currentState === 'active');
   const chatSessionIdRef = useRef<string>(genId());
@@ -217,6 +218,8 @@ export function useChatMachine() {
           if (status === 'dialing') {
             addMessage({ role: 'status', text: 'Dialing...' });
           } else if (status === 'connected') {
+            if (connectedProcessedRef.current) break;
+            connectedProcessedRef.current = true;
             addMessage({ role: 'status', text: 'Connected to carrier' });
           } else if (status === 'media_connected') {
             addMessage({ role: 'status', text: 'Media stream established' });
@@ -394,6 +397,7 @@ export function useChatMachine() {
     setDiscoveryResults([]);
     analysisLoadedRef.current = false;
     thinkingBufferRef.current = '';
+    connectedProcessedRef.current = false;
     endedProcessedRef.current = false;
     chatSessionIdRef.current = genId();
     chatSessionRevisionRef.current = 0;
@@ -513,6 +517,7 @@ export function useChatMachine() {
     setDiscoveryResults([]);
     analysisLoadedRef.current = false;
     thinkingBufferRef.current = '';
+    connectedProcessedRef.current = false;
     endedProcessedRef.current = false;
     startNegotiation(phoneNumber);
   }, [disconnectWs, objective, phoneNumber, startNegotiation]);
