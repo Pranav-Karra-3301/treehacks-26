@@ -284,7 +284,7 @@ export default function LandingPage() {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,white_70%)]" />
 
         <motion.div style={{ opacity: heroOpacity, y: heroY }} className="relative px-6 pt-24 sm:pt-32 pb-8">
-          <div className="mx-auto max-w-6xl lg:flex lg:items-center lg:justify-between lg:gap-16">
+          <div className="mx-auto max-w-5xl lg:flex lg:items-center lg:justify-between lg:gap-16">
             <div className="max-w-xl lg:shrink-0">
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}
                 className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[12px] font-medium text-gray-500 mb-6 shadow-soft"
@@ -342,7 +342,7 @@ export default function LandingPage() {
 
       {/* ── Stats bar ───────────────────────────── */}
       <section className="px-6 py-16 sm:py-20">
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto max-w-5xl">
           <div className="grid grid-cols-3 divide-x divide-gray-100">
             {[
               { end: 2400000, prefix: '$', suffix: '+', label: 'Saved for users', display: '$2.4M+' },
@@ -413,7 +413,7 @@ export default function LandingPage() {
 
       {/* ── Bento Feature Grid ──────────────────── */}
       <section id="features" className="px-6 py-20 sm:py-28">
-        <div className="mx-auto max-w-6xl">
+        <div className="mx-auto max-w-5xl">
           <Reveal>
             <p className="text-[13px] font-medium text-gray-400 tracking-wide uppercase mb-3">Capabilities</p>
             <h2 className="text-[clamp(1.75rem,4vw,2.5rem)] font-bold tracking-[-0.03em] text-gray-950 max-w-lg">
@@ -485,7 +485,7 @@ export default function LandingPage() {
 
       {/* ── Use Cases ───────────────────────────── */}
       <section className="px-6 py-20 sm:py-28 bg-gray-50/60">
-        <div className="mx-auto max-w-6xl">
+        <div className="mx-auto max-w-5xl">
           <div className="grid gap-12 lg:grid-cols-5 lg:gap-16 items-start">
             <Reveal className="lg:col-span-2">
               <p className="text-[13px] font-medium text-gray-400 tracking-wide uppercase mb-3">Use cases</p>
@@ -587,14 +587,14 @@ export default function LandingPage() {
 
       {/* ── Smooth white → dark transition ─────────── */}
       <div
-        className="h-48 sm:h-64 -mb-px"
+        className="h-64 sm:h-96 -mb-px"
         style={{
-          background: 'linear-gradient(180deg, #ffffff 0%, #fafafa 15%, #e4e4e7 30%, #71717a 50%, #27272a 70%, #09090b 90%, #09090b 100%)',
+          background: 'linear-gradient(180deg, #ffffff 0%, #fefefe 8%, #f9f9fa 16%, #f0f0f2 24%, #dddde2 32%, #c4c4cc 40%, #9a9aa6 48%, #6e6e7a 56%, #4a4a54 64%, #2e2e36 72%, #1a1a22 80%, #101018 88%, #09090b 96%)',
         }}
       />
 
       {/* ── Bottom CTA + Gradient ─────────────────── */}
-      <section className="relative px-6 pt-16 sm:pt-24 pb-0 overflow-hidden bg-gray-950">
+      <section className="relative px-6 pt-32 sm:pt-44 pb-0 overflow-hidden bg-gray-950 min-h-screen flex flex-col">
 
         {/* Animated aurora gradient orbs */}
         <div className="absolute inset-0 overflow-hidden">
@@ -610,7 +610,7 @@ export default function LandingPage() {
         <div className="absolute inset-0 grain" />
 
         <Reveal>
-          <div className="mx-auto max-w-6xl relative z-10">
+          <div className="mx-auto max-w-5xl relative z-10">
             <h2 className="text-[clamp(2rem,5vw,3.75rem)] font-bold tracking-[-0.04em] leading-[1.08] text-white max-w-xl">
               Stop leaving money{' '}<br className="hidden sm:block" />
               <span className="font-serif italic font-normal">on the table.</span>
@@ -627,27 +627,34 @@ export default function LandingPage() {
           </div>
         </Reveal>
 
-        {/* Spacer for gradient to breathe */}
-        <div className="h-[280px] sm:h-[340px]" aria-hidden="true" />
+        {/* Flex spacer pushes footer to bottom */}
+        <div className="flex-1" aria-hidden="true" />
 
         {/* ── Footer (seamless, inside CTA section) ─── */}
-        <div className="relative z-10 pb-8">
+        <div className="relative z-10 pb-10">
           {/* Giant "kiru" with mix-blend-difference */}
           <div className="flex justify-center overflow-hidden pointer-events-none select-none mix-blend-difference">
-            <span className="font-serif italic text-white text-[clamp(8rem,28vw,22rem)] leading-[0.85] tracking-[-0.04em]">
+            <span className="font-serif italic text-white text-[clamp(12rem,42vw,36rem)] leading-[0.82] tracking-[-0.04em]">
               kiru
             </span>
           </div>
 
-          {/* Footer meta row */}
-          <div className="mx-auto max-w-6xl mt-8 px-6">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-6">
-                <span className="text-[13px] text-gray-500">AI-powered phone negotiation</span>
+          {/* Team + meta row */}
+          <div className="mx-auto max-w-5xl mt-10 px-6">
+            <div className="flex flex-col items-center gap-6">
+              {/* Team */}
+              <div className="flex items-center gap-2 text-[13px] text-white/50">
+                <span>Built by</span>
+                <span className="text-white/80 font-medium">Pranav</span>
+                <span>&middot;</span>
+                <span className="text-white/80 font-medium">Ethan</span>
+                <span>&middot;</span>
+                <span className="text-white/80 font-medium">Jayanth</span>
               </div>
+              {/* Links */}
               <div className="flex items-center gap-6">
-                <Link href="/chat" className="text-[13px] text-gray-500 transition hover:text-gray-300">Launch App</Link>
-                <span className="text-[12px] text-gray-600">Built at TreeHacks 2026</span>
+                <Link href="/chat" className="text-[13px] text-white/60 transition hover:text-white">Launch App</Link>
+                <span className="text-[12px] text-white/40">TreeHacks 2026</span>
               </div>
             </div>
           </div>
