@@ -83,7 +83,7 @@ export default function MessageList({ messages, typing, onCall, onSkip, ListFoot
       data={visibleMessages}
       renderItem={renderItem}
       keyExtractor={keyExtractor}
-      contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 }}
+      contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 56 }}
       showsVerticalScrollIndicator={false}
       onContentSizeChange={scrollToEnd}
       ListFooterComponent={
