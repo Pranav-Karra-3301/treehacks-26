@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { motion } from 'framer-motion';
 import { Phone, ArrowRight, Globe } from 'lucide-react';
 import type { BusinessResult } from '../lib/types';
@@ -73,11 +74,12 @@ function BizIcon({ url, title }: { url?: string; title: string }) {
 
   if (src && !failed) {
     return (
-      <img
+      <Image
         src={src}
         alt=""
         width={28}
         height={28}
+        unoptimized
         className="rounded-md object-contain shrink-0"
         onError={() => setFailed(true)}
       />

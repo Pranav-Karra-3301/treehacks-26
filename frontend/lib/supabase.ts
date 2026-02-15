@@ -1,9 +1,17 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+// Avoid "supabaseUrl is required" during build when env vars are unset (e.g. Vercel without envs).
+// Use explicit fallbacks so createClient is never called with undefined or empty string.
+const supabaseUrl =
+  typeof process.env.NEXT_PUBLIC_SUPABASE_URL === 'string' && process.env.NEXT_PUBLIC_SUPABASE_URL.trim()
+    ? process.env.NEXT_PUBLIC_SUPABASE_URL.trim()
+    : 'https://placeholder.supabase.co';
+const supabaseAnonKey =
+  typeof process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY === 'string' && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY.trim()
+    ? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY.trim()
+    : 'placeholder-anon-key';
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey);
 
 // ─── Types matching Supabase table schemas ──────────────────────────────────────
 
