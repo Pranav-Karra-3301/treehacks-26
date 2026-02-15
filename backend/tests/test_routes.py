@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from app.core.config import settings
+
+pytestmark = pytest.mark.unit
 from app.main import app
 
 

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from fastapi import FastAPI
+
+pytestmark = pytest.mark.unit
 from fastapi.testclient import TestClient
 
 from app.core.config import settings

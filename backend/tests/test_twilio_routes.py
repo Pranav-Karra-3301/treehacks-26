@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import base64
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 
 def _create_task(client):
     payload = {
