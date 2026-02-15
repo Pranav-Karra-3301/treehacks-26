@@ -1,7 +1,8 @@
-import { useCallback, useMemo, useState, useEffect, forwardRef } from 'react';
-import { View, Text, Pressable, ActivityIndicator, ScrollView } from 'react-native';
+import { useCallback, useMemo, useState, forwardRef } from 'react';
+import { View, Text, Pressable, ActivityIndicator } from 'react-native';
 import { BottomSheetModal, BottomSheetBackdrop, BottomSheetScrollView } from '@gorhom/bottom-sheet';
-import { ArrowLeft, X } from 'lucide-react-native';
+import type { BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
+import { ArrowLeft } from 'lucide-react-native';
 import { listTasks, getTaskAnalysis } from '../../lib/api';
 import type { TaskSummary, AnalysisPayload } from '../../lib/types';
 import { colors, fonts } from '../../lib/theme';
@@ -59,7 +60,7 @@ const HistoryBottomSheet = forwardRef<BottomSheetModal, Props>(({ onLoadChat }, 
   }, []);
 
   const renderBackdrop = useCallback(
-    (props: any) => (
+    (props: BottomSheetBackdropProps) => (
       <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} opacity={0.3} />
     ),
     [],
@@ -123,7 +124,9 @@ const HistoryBottomSheet = forwardRef<BottomSheetModal, Props>(({ onLoadChat }, 
                 <Pressable
                   onPress={() => {
                     onLoadChat(selectedTask);
-                    (ref as any)?.current?.dismiss();
+                    if (ref && typeof ref === 'object' && 'current' in ref) {
+                      ref.current?.dismiss();
+                    }
                   }}
                   className="rounded-xl bg-gray-900 py-3 items-center mt-2"
                 >

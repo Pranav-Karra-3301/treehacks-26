@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { View, TextInput, Pressable, Platform, KeyboardAvoidingView } from 'react-native';
 import { ArrowUp } from 'lucide-react-native';
 import { colors, fonts } from '../../lib/theme';
@@ -20,11 +21,11 @@ export default function ChatInput({
   disabled,
   sendDisabled,
 }: Props) {
-  const handleSend = () => {
+  const handleSend = useCallback(() => {
     if (sendDisabled) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onSend();
-  };
+  }, [sendDisabled, onSend]);
 
   return (
     <KeyboardAvoidingView
@@ -65,6 +66,8 @@ export default function ChatInput({
             returnKeyType="send"
             blurOnSubmit={false}
             onSubmitEditing={handleSend}
+            accessibilityLabel="Message input"
+            accessibilityHint={placeholder}
             style={{
               flex: 1,
               fontFamily: fonts.regular,
@@ -80,6 +83,9 @@ export default function ChatInput({
           <Pressable
             onPress={handleSend}
             disabled={sendDisabled}
+            accessibilityRole="button"
+            accessibilityLabel="Send message"
+            accessibilityState={{ disabled: sendDisabled }}
             style={{
               height: 30,
               width: 30,

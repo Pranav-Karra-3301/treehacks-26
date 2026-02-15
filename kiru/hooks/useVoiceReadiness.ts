@@ -5,8 +5,11 @@ export function useVoiceReadiness() {
   const [warning, setWarning] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     checkVoiceReadiness()
       .then((r) => {
+        if (cancelled) return;
         if (!r.can_dial_live) {
           const issues: string[] = [];
           if (!r.twilio_configured) issues.push('Twilio not configured');
@@ -15,7 +18,15 @@ export function useVoiceReadiness() {
           setWarning(issues.join(', ') || 'Voice system not ready');
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) {
+          setWarning('Could not check voice readiness');
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return warning;

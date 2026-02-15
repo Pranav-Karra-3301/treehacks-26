@@ -86,7 +86,7 @@ export function getAudioUrl(taskId: string, side: 'mixed' | 'inbound' | 'outboun
 }
 
 export async function getTaskTranscript(id: string): Promise<TranscriptResponse> {
-  const res = await fetch(`${BACKEND_API_URL}/api/tasks/${id}/transcript`);
+  const res = await fetch(`${BACKEND_API_URL}/api/tasks/${id}/transcript`, { headers: NGROK_HEADERS });
   if (!res.ok) throw new Error(`Failed to load transcript: ${res.status}`);
   return res.json();
 }

@@ -26,6 +26,8 @@ export default function PostCallActions({ canCallAgain, onCallAgain, onNewNegoti
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             onCallAgain();
           }}
+          accessibilityRole="button"
+          accessibilityLabel="Call again"
           style={{
             flexDirection: 'row',
             alignItems: 'center',
@@ -49,6 +51,8 @@ export default function PostCallActions({ canCallAgain, onCallAgain, onNewNegoti
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           onNewNegotiation();
         }}
+        accessibilityRole="button"
+        accessibilityLabel="Start new negotiation"
         style={{
           flexDirection: 'row',
           alignItems: 'center',

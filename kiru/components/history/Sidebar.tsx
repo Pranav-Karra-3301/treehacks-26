@@ -1,5 +1,5 @@
-import { useEffect, useCallback } from 'react';
-import { View, Text, Pressable, FlatList, ActivityIndicator, Dimensions } from 'react-native';
+import { useEffect, useCallback, useMemo } from 'react';
+import { View, Text, Pressable, FlatList, ActivityIndicator } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -7,9 +7,13 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { TaskSummary } from '../../lib/types';
 import { colors, fonts } from '../../lib/theme';
 import TaskRow from './TaskRow';
+
+type SectionHeader = { _type: 'header'; title: string };
+type FlatDataItem = TaskSummary | SectionHeader;
 
 const SIDEBAR_WIDTH = 280;
 const ANIM_DURATION = 250;
@@ -47,6 +51,7 @@ function groupByDate(tasks: TaskSummary[]): { title: string; data: TaskSummary[]
 }
 
 export default function Sidebar({ open, onClose, tasks, loading, onSelectTask }: Props) {
+  const insets = useSafeAreaInsets();
   const translateX = useSharedValue(-SIDEBAR_WIDTH);
   const backdropOpacity = useSharedValue(0);
 
@@ -58,7 +63,8 @@ export default function Sidebar({ open, onClose, tasks, loading, onSelectTask }:
       translateX.value = withTiming(-SIDEBAR_WIDTH, { duration: ANIM_DURATION });
       backdropOpacity.value = withTiming(0, { duration: ANIM_DURATION });
     }
-  }, [open, translateX, backdropOpacity]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const sidebarStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
@@ -87,7 +93,15 @@ export default function Sidebar({ open, onClose, tasks, loading, onSelectTask }:
       }
     });
 
-  const groups = groupByDate(tasks);
+  const flatData = useMemo(() => {
+    const groups = groupByDate(tasks);
+    const data: FlatDataItem[] = [];
+    for (const group of groups) {
+      data.push({ _type: 'header', title: group.title });
+      for (const task of group.data) data.push(task);
+    }
+    return data;
+  }, [tasks]);
 
   const renderItem = useCallback(
     ({ item }: { item: TaskSummary }) => (
@@ -101,13 +115,6 @@ export default function Sidebar({ open, onClose, tasks, loading, onSelectTask }:
     ),
     [onSelectTask, onClose],
   );
-
-  // Build flat data with section headers
-  const flatData: (TaskSummary | { _header: string })[] = [];
-  for (const group of groups) {
-    flatData.push({ _header: group.title } as any);
-    for (const task of group.data) flatData.push(task);
-  }
 
   return (
     <>
@@ -126,7 +133,12 @@ export default function Sidebar({ open, onClose, tasks, loading, onSelectTask }:
           backdropStyle,
         ]}
       >
-        <Pressable style={{ flex: 1 }} onPress={onClose} />
+        <Pressable
+          style={{ flex: 1 }}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Close sidebar"
+        />
       </Animated.View>
 
       {/* Sidebar Panel */}
@@ -148,7 +160,7 @@ export default function Sidebar({ open, onClose, tasks, loading, onSelectTask }:
           {/* Sidebar Header */}
           <View
             style={{
-              paddingTop: 64,
+              paddingTop: insets.top + 16,
               paddingHorizontal: 20,
               paddingBottom: 16,
               borderBottomWidth: 0.5,
@@ -176,11 +188,11 @@ export default function Sidebar({ open, onClose, tasks, loading, onSelectTask }:
               No past negotiations
             </Text>
           ) : (
-            <FlatList
+            <FlatList<FlatDataItem>
               data={flatData}
-              keyExtractor={(item, i) => ('_header' in item ? `h-${i}` : (item as TaskSummary).id)}
+              keyExtractor={(item) => ('_type' in item ? `h-${item.title}` : item.id)}
               renderItem={({ item }) => {
-                if ('_header' in item) {
+                if ('_type' in item) {
                   return (
                     <Text
                       style={{
@@ -194,14 +206,14 @@ export default function Sidebar({ open, onClose, tasks, loading, onSelectTask }:
                         paddingBottom: 6,
                       }}
                     >
-                      {(item as any)._header}
+                      {item.title}
                     </Text>
                   );
                 }
-                return renderItem({ item: item as TaskSummary });
+                return renderItem({ item });
               }}
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 40 }}
+              contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
             />
           )}
         </Animated.View>

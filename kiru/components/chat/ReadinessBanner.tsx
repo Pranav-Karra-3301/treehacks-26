@@ -11,6 +11,7 @@ export default function ReadinessBanner({ warning }: Props) {
   return (
     <Animated.View
       entering={FadeIn.duration(300)}
+      accessibilityRole="alert"
       style={{
         flexDirection: 'row',
         alignItems: 'center',

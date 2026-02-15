@@ -116,7 +116,7 @@ export default function AnalysisCard({ analysis }: { analysis: AnalysisPayload }
         {analysis.tactics_used?.length > 0 && (
           <Section icon={Zap} title="Tactics">
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              {analysis.tactics_used.map((t, i) => {
+              {analysis.tactics_used.map((t) => {
                 const eff = t.effectiveness?.toLowerCase();
                 const bg =
                   eff === 'high' ? colors.emerald50 : eff === 'medium' ? colors.amber50 : colors.gray100;
@@ -124,7 +124,7 @@ export default function AnalysisCard({ analysis }: { analysis: AnalysisPayload }
                   eff === 'high' ? colors.emerald600 : eff === 'medium' ? colors.amber700 : colors.gray600;
                 return (
                   <View
-                    key={i}
+                    key={t.name}
                     style={{
                       borderRadius: 8,
                       borderWidth: 0.5,
@@ -148,8 +148,8 @@ export default function AnalysisCard({ analysis }: { analysis: AnalysisPayload }
         {analysis.key_moments?.length > 0 && (
           <Section icon={Target} title="Key Moments">
             <View style={{ gap: 8 }}>
-              {analysis.key_moments.map((m, i) => (
-                <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+              {analysis.key_moments.map((m) => (
+                <View key={m} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
                   <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: colors.gray300, marginTop: 7 }} />
                   <Text
                     style={{ flex: 1, fontFamily: fonts.regular, fontSize: 13, lineHeight: 19, color: colors.gray600 }}
@@ -166,8 +166,8 @@ export default function AnalysisCard({ analysis }: { analysis: AnalysisPayload }
         {analysis.concessions?.length > 0 && (
           <ExpandableSection icon={ArrowUpRight} title="Concessions">
             <View style={{ gap: 10 }}>
-              {analysis.concessions.map((c, i) => (
-                <View key={i} style={{ borderRadius: 10, backgroundColor: colors.gray50, paddingHorizontal: 14, paddingVertical: 10 }}>
+              {analysis.concessions.map((c) => (
+                <View key={`${c.party}-${c.description.slice(0, 20)}`} style={{ borderRadius: 10, backgroundColor: colors.gray50, paddingHorizontal: 14, paddingVertical: 10 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <Text
                       style={{
@@ -201,8 +201,8 @@ export default function AnalysisCard({ analysis }: { analysis: AnalysisPayload }
         {analysis.improvement_suggestions?.length > 0 && (
           <ExpandableSection icon={Lightbulb} title="Next Time">
             <View style={{ gap: 8 }}>
-              {analysis.improvement_suggestions.map((s, i) => (
-                <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+              {analysis.improvement_suggestions.map((s) => (
+                <View key={s} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
                   <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: colors.gray300, marginTop: 7 }} />
                   <Text
                     style={{ flex: 1, fontFamily: fonts.regular, fontSize: 13, lineHeight: 19, color: colors.gray600 }}

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import type { TaskSummary, CallOutcome } from '../../lib/types';
 import { colors, fonts } from '../../lib/theme';
@@ -22,12 +23,14 @@ type Props = {
   onPress: () => void;
 };
 
-export default function TaskRow({ task, onPress }: Props) {
+export default memo(function TaskRow({ task, onPress }: Props) {
   const badge = outcomeBadge[task.outcome] ?? outcomeBadge.unknown;
 
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${task.objective || 'Untitled'}, ${task.outcome}, ${formatDate(task.created_at)}`}
       style={{
         paddingHorizontal: 16,
         paddingVertical: 10,
@@ -60,4 +63,4 @@ export default function TaskRow({ task, onPress }: Props) {
       </View>
     </Pressable>
   );
-}
+});

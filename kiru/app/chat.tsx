@@ -76,6 +76,8 @@ export default function ChatScreen() {
         {/* Left: sidebar toggle */}
         <Pressable
           onPress={openSidebar}
+          accessibilityRole="button"
+          accessibilityLabel="Open history sidebar"
           style={{ height: 44, width: 44, alignItems: 'center', justifyContent: 'center' }}
           hitSlop={4}
         >
@@ -101,6 +103,8 @@ export default function ChatScreen() {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 handleEndCall();
               }}
+              accessibilityRole="button"
+              accessibilityLabel="End call"
               style={{
                 borderRadius: 99,
                 backgroundColor: colors.red50,
@@ -119,6 +123,8 @@ export default function ChatScreen() {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               handleNewNegotiation();
             }}
+            accessibilityRole="button"
+            accessibilityLabel="New negotiation"
             style={{ height: 44, width: 44, alignItems: 'center', justifyContent: 'center' }}
             hitSlop={4}
           >

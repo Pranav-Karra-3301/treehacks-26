@@ -1,7 +1,8 @@
+import { memo } from 'react';
 import { View, Text } from 'react-native';
 import type { Message } from '../../hooks/useChatMachine';
 import type { BusinessResult } from '../../lib/types';
-import { colors, fonts, shadows } from '../../lib/theme';
+import { colors, fonts } from '../../lib/theme';
 import AnalysisCard from '../analysis/AnalysisCard';
 import AudioPlayer from '../audio/AudioPlayer';
 import SearchResultCards from '../search/SearchResultCards';
@@ -12,7 +13,7 @@ type Props = {
   onSkip?: () => void;
 };
 
-export default function MessageBubble({ message, onCall, onSkip }: Props) {
+export default memo(function MessageBubble({ message, onCall, onSkip }: Props) {
   if (message.role === 'analysis' && message.analysisData) {
     return <AnalysisCard analysis={message.analysisData} />;
   }
@@ -104,4 +105,4 @@ export default function MessageBubble({ message, onCall, onSkip }: Props) {
       </View>
     </View>
   );
-}
+});
