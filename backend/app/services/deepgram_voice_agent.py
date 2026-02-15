@@ -87,6 +87,7 @@ def _build_function_definitions(
     *,
     research_enabled: bool,
     dtmf_enabled: bool,
+    end_call_enabled: bool,
 ) -> list[Dict[str, Any]]:
     """Build function definitions for Deepgram voice agent tool use."""
     functions: list[Dict[str, Any]] = []
@@ -137,6 +138,28 @@ def _build_function_definitions(
                 },
             }
         )
+    if end_call_enabled:
+        functions.append(
+            {
+                "name": "end_call",
+                "description": (
+                    "Hang up the phone call. Use this when the conversation has reached a natural "
+                    "conclusion — you've gotten the information you need, a deal has been reached "
+                    "or rejected, the other party says goodbye, or you're told the office is closed. "
+                    "Say your goodbye FIRST, then call this function to disconnect."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "reason": {
+                            "type": "string",
+                            "description": "Brief reason for ending the call (e.g. 'deal reached', 'info gathered', 'office closed').",
+                        },
+                    },
+                    "required": ["reason"],
+                },
+            }
+        )
     return functions
 
 
@@ -153,6 +176,7 @@ class DeepgramVoiceAgentSession:
         on_event: Callable[[Dict[str, Any]], Awaitable[None]],
         on_research: Optional[Callable[[str], Awaitable[Dict[str, Any]]]] = None,
         on_send_dtmf: Optional[Callable[[str], Awaitable[Dict[str, Any]]]] = None,
+        on_end_call: Optional[Callable[[str], Awaitable[None]]] = None,
     ) -> None:
         self._task_id = task_id
         self._task = task
@@ -162,6 +186,7 @@ class DeepgramVoiceAgentSession:
         self._on_event = on_event
         self._on_research = on_research
         self._on_send_dtmf = on_send_dtmf
+        self._on_end_call = on_end_call
 
         self._ws: Optional[websockets.WebSocketClientProtocol] = None
         self._receive_task: Optional[asyncio.Task[None]] = None
@@ -282,6 +307,7 @@ class DeepgramVoiceAgentSession:
         function_definitions = _build_function_definitions(
             research_enabled=self._on_research is not None,
             dtmf_enabled=self._on_send_dtmf is not None,
+            end_call_enabled=self._on_end_call is not None,
         )
         if function_definitions:
             think["functions"] = function_definitions
@@ -549,6 +575,18 @@ class DeepgramVoiceAgentSession:
                     "digits": digits,
                     "error": f"{type(exc).__name__}: {exc}",
                 }
+        elif function_name == "end_call" and self._on_end_call is not None:
+            reason = str(parameters.get("reason", "") or "conversation ended")
+            print(f"[CALL] AGENT HANGUP: reason='{reason}'")
+            try:
+                await self._on_end_call(reason)
+                result = {"ok": True, "reason": reason, "status": "call_ending"}
+            except Exception as exc:
+                log_event(
+                    "deepgram", "function_call_error", task_id=self._task_id,
+                    status="error", details={"error": f"{type(exc).__name__}: {exc}", "function": function_name},
+                )
+                result = {"ok": False, "reason": reason, "error": f"{type(exc).__name__}: {exc}"}
         else:
             result = {"error": f"Unknown function: {function_name}"}
 

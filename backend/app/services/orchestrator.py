@@ -63,6 +63,11 @@ class CallOrchestrator:
         # Track inbound byte counts so outbound can be time-aligned
         self._inbound_bytes: dict[str, int] = {}
         self._outbound_bytes: dict[str, int] = {}
+        # DTMF in-flight tracking: prevents stream stop from ending the call
+        # when a TwiML update (for DTMF) causes the media stream to reconnect.
+        self._dtmf_in_flight: set[str] = set()
+        # Pending end-call tasks (agent-initiated hangup after goodbye TTS)
+        self._pending_end_call: dict[str, asyncio.Task[None]] = {}
 
     def _session_recording_path(self, task_id: str) -> Path:
         # Legacy: kept for backward compat, prefer store.save_artifact("recording_stats", ...)
@@ -301,6 +306,10 @@ class CallOrchestrator:
             if status in {"ended", "failed"}:
                 raise LookupError(f"Task call is already {status}.")
 
+            # Mark DTMF in-flight so the stream stop from the TwiML update
+            # doesn't terminate the call.
+            self._dtmf_in_flight.add(task_id)
+
             payload = await self._twilio.send_dtmf(call_sid, task_id, digits)
             await self._ws.broadcast(
                 task_id,
@@ -320,6 +329,31 @@ class CallOrchestrator:
                 details={"call_sid": call_sid, "digits": digits},
             )
             return payload
+
+    def consume_dtmf_in_flight(self, task_id: str) -> bool:
+        """Check and consume DTMF in-flight flag. Returns True if DTMF was in progress."""
+        if task_id in self._dtmf_in_flight:
+            self._dtmf_in_flight.discard(task_id)
+            return True
+        return False
+
+    async def schedule_agent_hangup(self, task_id: str, delay_seconds: float = 2.0) -> None:
+        """Schedule a delayed hangup after the agent says goodbye.
+
+        Gives TTS time to finish speaking the farewell before disconnecting.
+        """
+        # Cancel any existing pending end-call for this task
+        existing = self._pending_end_call.pop(task_id, None)
+        if existing and not existing.done():
+            existing.cancel()
+
+        async def _delayed_hangup() -> None:
+            await asyncio.sleep(delay_seconds)
+            log_event("orchestrator", "agent_initiated_hangup", task_id=task_id)
+            await self.stop_task_call(task_id, stop_reason="agent_hangup")
+            self._pending_end_call.pop(task_id, None)
+
+        self._pending_end_call[task_id] = asyncio.create_task(_delayed_hangup())
 
     async def get_task_id_for_call_sid(self, call_sid: str) -> Optional[str]:
         return self._call_sid_to_task.get(call_sid)
@@ -652,6 +686,10 @@ class CallOrchestrator:
             async def on_send_dtmf(digits: str) -> Dict[str, Any]:
                 return await self.send_task_dtmf(task_id, digits)
 
+            async def on_end_call(reason: str) -> None:
+                log_event("orchestrator", "agent_end_call_requested", task_id=task_id, details={"reason": reason})
+                await self.schedule_agent_hangup(task_id, delay_seconds=2.0)
+
             session = DeepgramVoiceAgentSession(
                 task_id=task_id,
                 task=task,
@@ -661,6 +699,7 @@ class CallOrchestrator:
                 on_event=on_event,
                 on_research=on_research,
                 on_send_dtmf=on_send_dtmf,
+                on_end_call=on_end_call,
             )
             self._deepgram_sessions[session_id] = session
 

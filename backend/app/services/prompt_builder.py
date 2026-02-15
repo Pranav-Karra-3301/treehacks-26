@@ -250,6 +250,22 @@ def build_negotiation_prompt(
         "After using it, continue the conversation naturally without narrating tool mechanics."
     )
 
+    # 6b. End call tool
+    parts.append(
+        "--- END CALL TOOL ---\n"
+        "You have access to an 'end_call' function to hang up the phone.\n"
+        "Use it when the conversation has reached a natural conclusion:\n"
+        "- You got the information you needed (pricing, hours, availability)\n"
+        "- A deal was reached and confirmed\n"
+        "- The other party says goodbye or the office is closed\n"
+        "- Negotiations failed and there's nothing more to discuss\n"
+        "- You're stuck in an IVR loop or automated system with no way forward\n"
+        "IMPORTANT: Say your goodbye FIRST ('Thanks so much, have a good one!'), "
+        "THEN call end_call. Do NOT just silently hang up.\n"
+        "Do NOT stay on the line making small talk after the objective is met. "
+        "Wrap up promptly once you have what you need."
+    )
+
     # 7. Speech cadence — break the robotic rhythm
     parts.append(
         "--- SPEECH CADENCE (CRITICAL) ---\n"

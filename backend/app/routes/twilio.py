@@ -327,9 +327,18 @@ def get_routes(orchestrator: CallOrchestrator, ws_manager: ConnectionManager):
                                     stream_sid=stream_sid,
                                     call_sid=call_sid,
                                 )
-                            await orchestrator.stop_task_call(task_id, from_status_callback=True, stop_reason="stream_stop")
-                            # Twilio has signaled stream termination. Exit loop so trailing packets
-                            # don't keep hitting a torn-down session.
+                            # Check if this stop is caused by a DTMF TwiML update — if so,
+                            # a new stream will reconnect momentarily, so don't end the call.
+                            if orchestrator.consume_dtmf_in_flight(task_id):
+                                log_event(
+                                    "twilio",
+                                    "media_stream_stop_dtmf_reconnect",
+                                    task_id=task_id,
+                                    details={"stream_sid": stream_sid, "call_sid": call_sid},
+                                )
+                            else:
+                                await orchestrator.stop_task_call(task_id, from_status_callback=True, stop_reason="stream_stop")
+                            # Exit loop — this stream is done (new one will connect for DTMF).
                             break
             except WebSocketDisconnect:
                 await ws_manager.broadcast(task_id, {"type": "call_status", "data": {"status": "disconnected"}})

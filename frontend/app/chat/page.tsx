@@ -642,7 +642,7 @@ export default function ChatPage() {
     setDiscoveryResults(snapshot.discoveryResults ?? []);
     setManualPhones(snapshot.manualPhones ?? []);
     setManualPhoneInput(snapshot.manualPhoneInput ?? '');
-    setConcurrentTestMode(false);
+    setConcurrentTestMode(snapshot.concurrentTestMode ?? false);
     setConcurrentRunMode(snapshot.concurrentRunMode === 'real' ? 'real' : 'test');
     setConcurrentTargetCount(clampConcurrentCount(snapshot.concurrentTargetCount ?? 3));
     setAutoSourceNumbers(snapshot.autoSourceNumbers ?? true);
@@ -2293,10 +2293,54 @@ export default function ChatPage() {
     const text = input.trim();
     if (!text || typing) return;
 
+    // If negotiation ended, start a fresh one with this message as the new objective
+    let currentPhase = phase;
+    if (currentPhase === 'ended') {
+      closeAllSockets();
+      resetChatSessionIdentity('chat');
+      try {
+        window.localStorage.removeItem(CHAT_SNAPSHOT_STORAGE_KEY);
+        window.localStorage.removeItem(CHAT_SNAPSHOT_FALLBACK_STORAGE_KEY);
+      } catch { /* ignore */ }
+      setMessages([{ id: 'welcome', role: 'ai', text: 'What would you like me to negotiate?' }]);
+      setInput('');
+      setTyping(false);
+      setObjective('');
+      setPhoneNumber('');
+      setTaskId(null);
+      setSessionId(null);
+      setCallStatus('pending');
+      setResearchContext('');
+      setAnalysisLoaded(false);
+      analysisLoadedRef.current = false;
+      setDiscoveryResults([]);
+      setManualPhones([]);
+      setManualPhoneInput('');
+      setConcurrentTestMode(false);
+      setConcurrentRunMode('test');
+      setConcurrentTargetCount(3);
+      setAutoSourceNumbers(true);
+      setMultiCallTargets({});
+      setMultiCalls({});
+      multiCallsRef.current = {};
+      setMultiSummary(null);
+      setMultiSummaryState('idle');
+      setMultiSummaryError(null);
+      setSingleDtmfInput('');
+      setMultiDtmfInputs({});
+      setPersonalHandoffNumber('');
+      activeSummaryRequestRef.current = null;
+      multiEndedAnnouncedRef.current = false;
+      setActiveMultiHistoryId(null);
+      setPhase('objective');
+      currentPhase = 'objective';
+      refreshPastTasks();
+    }
+
     addMessage({ role: 'user', text });
     setInput('');
 
-    if (phase === 'objective') {
+    if (currentPhase === 'objective') {
       const objectiveText = text.trim();
       setObjective(objectiveText);
 
@@ -2415,7 +2459,7 @@ export default function ChatPage() {
           setPhase('phone');
           addMessage({ role: 'ai', text: "Got it. What's the phone number I should call?" });
         });
-    } else if (phase === 'discovery') {
+    } else if (currentPhase === 'discovery') {
       // In discovery, if user types a phone number, use it
       if (looksLikePhone(text)) {
         const parsedPhones = parsePhonesFromText(text);
@@ -2436,7 +2480,7 @@ export default function ChatPage() {
         setPhase('phone');
         aiReply("What's the phone number I should call?", 400);
       }
-    } else if (phase === 'phone') {
+    } else if (currentPhase === 'phone') {
       const parsedPhones = parsePhonesFromText(text);
       if (parsedPhones.length > 1) {
         setManualPhones((prev) => Array.from(new Set([...prev, ...parsedPhones])));
@@ -2450,7 +2494,7 @@ export default function ChatPage() {
       }
       setPhoneNumber(phone);
       startNegotiation(phone);
-    } else if (phase === 'active') {
+    } else if (currentPhase === 'active') {
       aiReply("I'm currently on the call negotiating. I'll keep you posted on progress.", 400);
     }
   }
@@ -2537,7 +2581,7 @@ export default function ChatPage() {
         : phase === 'active'
           ? 'Send a note...'
           : phase === 'ended'
-            ? 'Negotiation complete'
+            ? 'Start a new negotiation...'
             : 'Describe what you want to negotiate...';
 
   return (
@@ -2903,14 +2947,14 @@ export default function ChatPage() {
                 }}
                 onKeyDown={onKeyDown}
                 placeholder={placeholderText}
-                disabled={inputDisabled || phase === 'ended'}
+                disabled={inputDisabled}
                 rows={1}
                 className="flex-1 resize-none bg-transparent text-[14px] leading-5 text-gray-900 placeholder-gray-400 outline-none disabled:text-gray-400"
                 style={{ maxHeight: '120px', minHeight: '20px', overflow: 'hidden' }}
               />
               <button
                 type="submit"
-                disabled={!input.trim() || inputDisabled || typing || phase === 'ended'}
+                disabled={!input.trim() || inputDisabled || typing}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-900 text-white shadow-soft transition-all duration-150 hover:bg-gray-700 hover:shadow-card active:scale-[0.93] disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none mb-px"
               >
                 <ArrowUp size={15} strokeWidth={2.5} />
