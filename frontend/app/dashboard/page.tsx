@@ -21,9 +21,8 @@ import {
   Target,
   ChevronRight,
 } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
-import type { SupabaseCall, SupabaseCallArtifact, SupabaseAnalysis, TranscriptTurn } from '../../lib/supabase';
-import { getAudioUrl } from '../../lib/api';
+import { listTasks, getTask, getTaskAnalysis, getTaskTranscript, getAudioUrl } from '../../lib/api';
+import type { TaskSummary, TaskDetail, AnalysisPayload, TranscriptEntry } from '../../lib/types';
 
 // ─── Design tokens ──────────────────────────────────────────────────────────────
 
@@ -60,10 +59,6 @@ function fmtDuration(s: number | null) {
   const m = Math.floor(s / 60);
   const sec = s % 60;
   return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
-}
-
-function fmtUnixTime(ts: number) {
-  return new Date(ts * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 }
 
 function scoreColor(score: number) {
@@ -108,25 +103,22 @@ function Kiru({ className = '' }: { className?: string }) {
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
 type DetailData = {
-  call?: SupabaseCall;
-  analysis?: SupabaseAnalysis;
-  transcript?: TranscriptTurn[];
+  call?: TaskDetail;
+  analysis?: AnalysisPayload;
+  transcript?: TranscriptEntry[];
 };
 
 // ─── Main Page ──────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  // ── Fetch from Supabase via SWR ───────────────────────────────────────────
+  // ── Fetch from backend API via SWR ──────────────────────────────────────
   const fetcher = async () => {
-    const { data, error } = await supabase
-      .from('calls')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (error) throw error;
-    return data ?? [];
+    const tasks = await listTasks();
+    // Sort by created_at descending (newest first)
+    return tasks.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   };
 
-  const { data: calls = [], isLoading: loading } = useSWR<SupabaseCall[]>('dashboard-calls', fetcher, {
+  const { data: calls = [], isLoading: loading } = useSWR<TaskSummary[]>('dashboard-calls', fetcher, {
     refreshInterval: 30_000,
     revalidateOnFocus: true,
   });
@@ -145,19 +137,17 @@ export default function DashboardPage() {
     setDetailTab('transcript');
     setDetailData({});
 
-    const [callRes, artifactRes] = await Promise.allSettled([
-      supabase.from('calls').select('*').eq('id', callId).single(),
-      supabase.from('call_artifacts').select('*').eq('task_id', callId).single(),
+    const [callRes, analysisRes, transcriptRes] = await Promise.allSettled([
+      getTask(callId),
+      getTaskAnalysis(callId),
+      getTaskTranscript(callId),
     ]);
 
-    const call = callRes.status === 'fulfilled' && callRes.value.data ? callRes.value.data : undefined;
-    const artifact: SupabaseCallArtifact | undefined = artifactRes.status === 'fulfilled' && artifactRes.value.data ? artifactRes.value.data : undefined;
+    const call = callRes.status === 'fulfilled' ? callRes.value : undefined;
+    const analysis = analysisRes.status === 'fulfilled' ? analysisRes.value : undefined;
+    const transcript = transcriptRes.status === 'fulfilled' ? transcriptRes.value.turns : undefined;
 
-    setDetailData({
-      call,
-      analysis: artifact?.analysis_json ?? undefined,
-      transcript: artifact?.transcript_json ?? undefined,
-    });
+    setDetailData({ call, analysis, transcript });
     setDetailLoading(false);
   }
 
@@ -286,7 +276,7 @@ export default function DashboardPage() {
 
 // ─── Call Row ───────────────────────────────────────────────────────────────────
 
-function CallRow({ call, index, onSelect }: { call: SupabaseCall; index: number; onSelect: (id: string) => void }) {
+function CallRow({ call, index, onSelect }: { call: TaskSummary; index: number; onSelect: (id: string) => void }) {
   const oc = outcomeConfig[getOutcome(call.outcome)];
   const dot = statusDot[call.status ?? ''] ?? 'bg-gray-300';
 
@@ -312,9 +302,6 @@ function CallRow({ call, index, onSelect }: { call: SupabaseCall; index: number;
             ) : null}
             {call.duration_seconds != null && call.duration_seconds > 0 ? (
               <span className="text-[11px] text-gray-400">{fmtDuration(call.duration_seconds)}</span>
-            ) : null}
-            {call.style ? (
-              <span className="rounded-md bg-gray-100 border border-gray-200/60 px-2 py-0.5 text-[10px] font-medium text-gray-500">{call.style}</span>
             ) : null}
             {call.created_at ? (
               <span className="text-[11px] text-gray-300">{fmtDate(call.created_at)}</span>
@@ -345,7 +332,7 @@ function DetailDrawer({
   onClose: () => void;
 }) {
   const { call, analysis, transcript } = data;
-  const oc = call ? outcomeConfig[getOutcome(call.outcome)] : outcomeConfig.unknown;
+  const oc = call ? outcomeConfig[getOutcome(call.outcome ?? null)] : outcomeConfig.unknown;
 
   const detailTabs: { key: typeof activeTab; label: string; icon: typeof MessageSquare; count?: number }[] = [
     { key: 'transcript', label: 'Transcript', icon: MessageSquare, count: transcript?.length },
@@ -445,7 +432,7 @@ function DetailDrawer({
 
 // ─── Transcript View ────────────────────────────────────────────────────────────
 
-function TranscriptView({ transcript }: { transcript?: TranscriptTurn[] }) {
+function TranscriptView({ transcript }: { transcript?: TranscriptEntry[] }) {
   if (!transcript || transcript.length === 0) {
     return <EmptyInline icon={MessageSquare} text="No transcript available" />;
   }
@@ -474,7 +461,7 @@ function TranscriptView({ transcript }: { transcript?: TranscriptTurn[] }) {
                 </span>
                 {turn.created_at ? (
                   <span className="text-[10px] text-gray-300 font-mono tabular-nums">
-                    {typeof turn.created_at === 'number' ? fmtUnixTime(turn.created_at) : ''}
+                    {new Date(turn.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
                   </span>
                 ) : null}
               </div>
@@ -495,7 +482,7 @@ function TranscriptView({ transcript }: { transcript?: TranscriptTurn[] }) {
 
 // ─── Analysis View ──────────────────────────────────────────────────────────────
 
-function AnalysisView({ analysis }: { analysis?: SupabaseAnalysis }) {
+function AnalysisView({ analysis }: { analysis?: AnalysisPayload }) {
   if (!analysis) {
     return <EmptyInline icon={BarChart3} text="No analysis available" />;
   }
