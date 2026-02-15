@@ -5,19 +5,21 @@ import './globals.css';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://kiru.chat'),
-  title: 'kiru - AI-powered negotiation',
-  description: 'Your AI negotiates bills, prices, and contracts on your behalf. Just tell it what you want.',
+  title: 'kiru — Never sit on hold again',
+  description: 'Tell kiru what you want. It calls the company, negotiates your bill or price, and gets you a better deal. You save money; you skip the hold music.',
   openGraph: {
-    title: 'kiru - AI-powered negotiation',
-    description: 'Your AI negotiates bills, prices, and contracts on your behalf. Just tell it what you want.',
+    title: 'kiru — Never sit on hold again',
+    description: 'Tell kiru what you want. It calls the company, negotiates your bill or price, and gets you a better deal. You save money; you skip the hold music.',
     url: 'https://kiru.chat',
     siteName: 'kiru',
     type: 'website',
+    images: [{ url: '/og-preview.jpg', width: 1200, height: 630, alt: 'kiru — Never sit on hold again' }],
   },
   twitter: {
-    card: 'summary',
-    title: 'kiru - AI-powered negotiation',
-    description: 'Your AI negotiates bills, prices, and contracts on your behalf. Just tell it what you want.',
+    card: 'summary_large_image',
+    title: 'kiru — Never sit on hold again',
+    description: 'Tell kiru what you want. It calls the company, negotiates your bill or price, and gets you a better deal. You save money; you skip the hold music.',
+    images: ['/og-preview.jpg'],
   },
 };
 
