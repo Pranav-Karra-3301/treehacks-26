@@ -160,31 +160,51 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
                 turns = json.load(f)
             return {"task_id": task_id, "turns": turns}
 
-    def _wrap_mulaw_wav(raw_data: bytes, sample_rate: int = 8000, channels: int = 1) -> bytes:
-        """Wrap raw mulaw PCM data with a proper WAV header."""
-        bits_per_sample = 8
+    def _mulaw_decode_table() -> list[int]:
+        """Build mulaw byte → 16-bit PCM lookup table (ITU G.711)."""
+        table = []
+        for byte_val in range(256):
+            complement = ~byte_val & 0xFF
+            sign = (complement & 0x80) >> 7
+            exponent = (complement & 0x70) >> 4
+            mantissa = complement & 0x0F
+            magnitude = ((mantissa << 1) + 33) << (exponent + 2)
+            magnitude -= 132
+            sample = -magnitude if sign else magnitude
+            table.append(max(-32768, min(32767, sample)))
+        return table
+
+    _MULAW_TABLE = _mulaw_decode_table()
+
+    def _mulaw_to_pcm_wav(raw_data: bytes, sample_rate: int = 8000, channels: int = 1) -> bytes:
+        """Decode raw mulaw bytes to 16-bit PCM and wrap in a standard WAV."""
+        # Decode mulaw → 16-bit signed PCM
+        pcm_samples = bytearray(len(raw_data) * 2)
+        for i, byte_val in enumerate(raw_data):
+            sample = _MULAW_TABLE[byte_val]
+            pcm_samples[i * 2] = sample & 0xFF
+            pcm_samples[i * 2 + 1] = (sample >> 8) & 0xFF
+
+        bits_per_sample = 16
         byte_rate = sample_rate * channels * bits_per_sample // 8
         block_align = channels * bits_per_sample // 8
-        data_size = len(raw_data)
-        # RIFF header (12) + fmt chunk (26 for non-PCM) + data chunk header (8)
-        fmt_chunk_size = 18  # 16 base + 2 for cbSize
-        header_size = 12 + 8 + fmt_chunk_size + 8
-        riff_size = header_size + data_size - 8
+        data_size = len(pcm_samples)
+        # Standard PCM WAV: RIFF(12) + fmt(24) + data(8+data)
+        fmt_chunk_size = 16
+        riff_size = 4 + (8 + fmt_chunk_size) + (8 + data_size)
 
         header = struct.pack(
             '<4sI4s'       # RIFF, size, WAVE
             '4sI'          # fmt, chunk size
             'HHIIHH'       # audioFormat, channels, sampleRate, byteRate, blockAlign, bitsPerSample
-            'H'            # cbSize (extra format bytes)
             '4sI',         # data, data size
             b'RIFF', riff_size, b'WAVE',
             b'fmt ', fmt_chunk_size,
-            7,             # 7 = mulaw
+            1,             # 1 = PCM (universally supported)
             channels, sample_rate, byte_rate, block_align, bits_per_sample,
-            0,             # no extra format data
             b'data', data_size,
         )
-        return header + raw_data
+        return header + bytes(pcm_samples)
 
     @router.get("/{task_id}/audio")
     async def get_audio(task_id: str, side: str = Query(default="mixed")):
@@ -208,9 +228,13 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
                 file_path = fallback
 
             raw_data = file_path.read_bytes()
-            # If the file lacks a RIFF header, wrap raw mulaw bytes
+            # If the file lacks a RIFF header, it's raw mulaw — decode to PCM WAV
             if not raw_data[:4] == b'RIFF':
-                raw_data = _wrap_mulaw_wav(raw_data)
+                raw_data = _mulaw_to_pcm_wav(raw_data)
+            # If it has a RIFF header but mulaw format tag, also decode to PCM
+            elif raw_data[20:22] == b'\x07\x00':
+                # Strip existing header, decode payload to PCM
+                raw_data = _mulaw_to_pcm_wav(raw_data[44:])
 
             return Response(
                 content=raw_data,
