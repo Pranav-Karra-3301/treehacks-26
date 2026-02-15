@@ -182,6 +182,27 @@ def create_app(
         with timed_step("http", "healthcheck"):
             return {"status": "ok"}
 
+    # On startup, mark any stale active/dialing calls as ended.
+    # When Cloud Run recycles the container mid-call, those calls never get
+    # properly ended — their status stays stuck as 'active' in the DB forever.
+    @app.on_event("startup")
+    async def cleanup_stale_calls() -> None:
+        try:
+            count = local_store.mark_stale_calls_ended()
+            if count:
+                log_event(
+                    "system",
+                    "cleanup_stale_calls",
+                    details={"stale_calls_ended": count},
+                )
+        except Exception as exc:
+            log_event(
+                "system",
+                "cleanup_stale_calls",
+                status="error",
+                details={"error": str(exc)},
+            )
+
     # Startup telemetry — dump full config so we can trace issues back to settings
     @app.on_event("startup")
     async def startup_telemetry() -> None:

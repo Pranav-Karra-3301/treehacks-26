@@ -156,6 +156,24 @@ class DataStore:
             with self._connect() as conn:
                 conn.execute("UPDATE calls SET duration_seconds = ? WHERE id = ?", (seconds, task_id))
 
+    def mark_stale_calls_ended(self) -> int:
+        """Mark any active/dialing calls as ended (server restart cleanup).
+
+        Returns the number of rows updated.
+        """
+        with timed_step("storage", "mark_stale_calls_ended"):
+            now = datetime.utcnow().isoformat()
+            with self._connect() as conn:
+                cursor = conn.execute(
+                    """
+                    UPDATE calls
+                    SET status = 'ended', outcome = COALESCE(outcome, 'unknown'), ended_at = ?
+                    WHERE status IN ('active', 'dialing')
+                    """,
+                    (now,),
+                )
+                return cursor.rowcount
+
     def list_tasks(self) -> List[Dict]:
         with timed_step("storage", "list_tasks"):
             with self._connect() as conn:

@@ -77,6 +77,31 @@ class SupabaseStore:
                 "updated_at": datetime.utcnow().isoformat(),
             }).eq("id", task_id).execute()
 
+    def mark_stale_calls_ended(self) -> int:
+        """Mark any active/dialing calls as ended (server restart cleanup).
+
+        Returns the number of rows updated.
+        """
+        with timed_step("storage", "mark_stale_calls_ended"):
+            now = datetime.utcnow().isoformat()
+            # Supabase doesn't support `in` filter directly with update,
+            # so we do two queries.
+            count = 0
+            for stale_status in ("active", "dialing"):
+                result = (
+                    self._client.table("calls")
+                    .update({
+                        "status": "ended",
+                        "outcome": "unknown",
+                        "ended_at": now,
+                        "updated_at": now,
+                    })
+                    .eq("status", stale_status)
+                    .execute()
+                )
+                count += len(result.data or [])
+            return count
+
     def list_tasks(self) -> List[Dict]:
         with timed_step("storage", "list_tasks"):
             result = self._client.table("calls").select("*").order("created_at", desc=True).execute()
