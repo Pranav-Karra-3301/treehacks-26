@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 
 type AudioState = {
   playing: boolean;
@@ -12,6 +13,7 @@ export function useAudioPlayer(uri: string) {
   const soundRef = useRef<Audio.Sound | null>(null);
   const playingRef = useRef(false);
   const loadingRef = useRef(false);
+  const localUriRef = useRef<string | null>(null);
   const [state, setState] = useState<AudioState>({
     playing: false,
     duration: 0,
@@ -29,6 +31,10 @@ export function useAudioPlayer(uri: string) {
 
     return () => {
       soundRef.current?.unloadAsync();
+      // Clean up temp file
+      if (localUriRef.current) {
+        FileSystem.deleteAsync(localUriRef.current, { idempotent: true }).catch(() => {});
+      }
     };
   }, []);
 
@@ -40,10 +46,33 @@ export function useAudioPlayer(uri: string) {
         await soundRef.current.unloadAsync();
         soundRef.current = null;
       }
-      console.log('[AudioPlayer] Loading audio from:', uri);
+      console.log('[AudioPlayer] Downloading audio from:', uri);
+
+      // Download with ngrok-skip-browser-warning header to bypass interstitial
+      const localPath = `${FileSystem.cacheDirectory}audio_${Date.now()}.wav`;
+      const result = await FileSystem.downloadAsync(uri, localPath, {
+        headers: {
+          'ngrok-skip-browser-warning': '1',
+          'Accept': 'audio/wav, audio/*',
+        },
+      });
+
+      if (result.status !== 200) {
+        console.warn('[AudioPlayer] Download failed, status:', result.status);
+        setState((prev) => ({ ...prev, error: true }));
+        return;
+      }
+
+      // Clean up previous temp file
+      if (localUriRef.current && localUriRef.current !== result.uri) {
+        FileSystem.deleteAsync(localUriRef.current, { idempotent: true }).catch(() => {});
+      }
+      localUriRef.current = result.uri;
+
+      console.log('[AudioPlayer] Downloaded to:', result.uri);
 
       const { sound } = await Audio.Sound.createAsync(
-        { uri },
+        { uri: result.uri },
         { shouldPlay: false, progressUpdateIntervalMillis: 250 },
         (status) => {
           if (!status.isLoaded) return;
