@@ -103,7 +103,7 @@ export default function MermaidDiagram({ chart, className = '', highlightLabel }
 
   if (error) {
     return (
-      <div className={`rounded-2xl border border-red-200 bg-red-50/50 p-6 text-[13px] text-red-600 ${className}`}>
+      <div className={`py-6 text-[13px] text-red-600 ${className}`}>
         Diagram error: {error}
       </div>
     );
@@ -111,10 +111,10 @@ export default function MermaidDiagram({ chart, className = '', highlightLabel }
 
   if (!svg) {
     return (
-      <div className={`rounded-2xl border border-gray-200 bg-gray-50/50 p-8 ${className}`}>
+      <div className={`py-8 ${className}`}>
         <div className="animate-pulse space-y-3">
           <div className="h-4 w-1/3 rounded bg-gray-200/60" />
-          <div className="h-48 w-full rounded-lg bg-gray-100/80" />
+          <div className="h-48 w-full rounded-lg bg-gray-100/60" />
         </div>
       </div>
     );
@@ -123,7 +123,7 @@ export default function MermaidDiagram({ chart, className = '', highlightLabel }
   return (
     <div
       ref={containerRef}
-      className={`rounded-2xl border border-gray-200 shadow-soft overflow-x-auto bg-white p-6 sm:p-8 flex items-center justify-center ${className}`}
+      className={`overflow-x-auto flex items-center justify-center ${className}`}
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );
