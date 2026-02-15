@@ -137,7 +137,8 @@ export default function AudioPlayer({ taskId }: { taskId: string }) {
       audio.removeEventListener('error', onError);
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     };
-  }, [sideIndex]);
+    // Re-run whenever the <audio> element is recreated (key = taskId-side-reloadTick)
+  }, [sideIndex, taskId, reloadTick]);
 
   function togglePlay() {
     const audio = audioRef.current;
