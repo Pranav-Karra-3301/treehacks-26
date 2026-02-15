@@ -141,6 +141,14 @@ class NegotiationEngine:
                 generated.append(token)
 
             response = "".join(generated).strip()
+            
+            # #region agent log
+            import json
+            from pathlib import Path
+            log_path = Path("/Users/pranavkarra/Developer/treehacks-26/.cursor/debug.log")
+            with open(log_path, "a") as f:
+                f.write(json.dumps({"location":"backend/app/services/negotiation_engine.py:144","message":"LLM response generated","data":{"task_id":task.get("id"),"response_length":len(response),"response_text":response[:200],"sentence_count":response.count('.')+response.count('?')+response.count('!')},"timestamp":int(__import__('time').time()*1000),"hypothesisId":"H2,H3"})+"\n")
+            # #endregion
 
             log_event(
                 "negotiation",

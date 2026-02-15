@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
-import { Phone } from 'lucide-react';
+import React, { useState } from 'react';
+import { Phone, ChevronDown, ChevronRight } from 'lucide-react';
 import type {
   AnalysisPayload,
   CallStatus,
@@ -97,53 +97,73 @@ const MultiCallStatus = React.memo(function MultiCallStatus({
     ([, s]) => s.status === 'ended' || s.status === 'failed',
   );
 
+  const [targetsExpanded, setTargetsExpanded] = useState(false);
+  const [transcriptsExpanded, setTranscriptsExpanded] = useState(false);
+
   return (
     <div className="pt-3">
-      <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-gray-500">
-        Concurrent conversations
+      <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+        Concurrent Conversations
       </div>
       {/* Call Targets — above call cards */}
-      <div className="mb-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-soft">
-        <div className="text-[12px] font-semibold text-gray-900">Call Targets</div>
-        <div className="mt-2 grid gap-2 md:grid-cols-2">
-          {multiTargetEntries.map(({ phone, target }) => (
-            <div key={`target-${phone}`} className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-              <div className="flex items-center justify-between gap-2">
-                <div className="truncate text-[11.5px] font-semibold text-gray-800">
-                  {target.title ? target.title : formatPhone(phone)}
+      <div className="mb-3 rounded-[10px] border border-gray-100 bg-white px-4 py-3 shadow-soft">
+        <button
+          onClick={() => setTargetsExpanded(!targetsExpanded)}
+          className="flex items-center gap-2 text-[13px] font-medium text-gray-900 hover:text-gray-700 transition-colors w-full"
+        >
+          {targetsExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          View targets
+        </button>
+        {targetsExpanded ? (
+          <div className="grid gap-2 md:grid-cols-2 mt-2.5">
+            {multiTargetEntries.map(({ phone, target }) => (
+              <div key={`target-${phone}`} className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="truncate text-[13px] font-medium text-gray-900">
+                    {target.title ? target.title : formatPhone(phone)}
+                  </div>
+                  <span className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-medium text-gray-500">
+                    {target.source === 'exa' ? 'Exa' : 'Manual'}
+                  </span>
                 </div>
-                <span className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[10px] text-gray-600">
-                  {target.source === 'exa' ? 'Exa' : 'Manual'}
-                </span>
+                <div className="mt-0.5 text-[12px] text-gray-600 tabular-nums">{formatPhone(phone)}</div>
+                {target.url ? (
+                  <a
+                    href={target.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-0.5 block truncate text-[11px] text-gray-400 hover:text-gray-600"
+                  >
+                    {target.url}
+                  </a>
+                ) : null}
               </div>
-              <div className="mt-0.5 text-[11px] text-gray-600">{formatPhone(phone)}</div>
-              {target.url ? (
-                <a
-                  href={target.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-0.5 block truncate text-[10.5px] text-blue-600 hover:text-blue-700"
-                >
-                  {target.url}
-                </a>
-              ) : null}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : null}
       </div>
       {/* Call cards */}
-      <div className="grid gap-3 md:grid-cols-2 mb-3">
-        {multiCallEntries.map(([phone, state]) => {
+      <div className="mb-3 rounded-[10px] border border-gray-100 bg-white px-4 py-3 shadow-soft">
+        <button
+          onClick={() => setTranscriptsExpanded(!transcriptsExpanded)}
+          className="flex items-center gap-2 text-[13px] font-medium text-gray-900 hover:text-gray-700 transition-colors w-full"
+        >
+          {transcriptsExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          View transcripts
+        </button>
+        {transcriptsExpanded ? (
+          <div className="grid gap-2.5 md:grid-cols-2 mt-2.5">
+            {multiCallEntries.map(([phone, state]) => {
           const callTarget = multiCallTargets[phone];
           const statusLabel = MULTI_STATUS_LABEL[state.status] ?? state.status;
           const statusClass =
             state.status === 'active'
-              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+              ? 'bg-white/80 backdrop-blur-sm border-gray-200/50 text-emerald-600'
               : state.status === 'ended'
-                ? 'bg-gray-100 text-gray-600 border-gray-200'
+                ? 'bg-white/80 backdrop-blur-sm border-gray-200/50 text-gray-600'
                 : state.status === 'failed'
-                  ? 'bg-red-50 text-red-700 border-red-200'
-                  : 'bg-amber-50 text-amber-700 border-amber-200';
+                  ? 'bg-white/80 backdrop-blur-sm border-gray-200/50 text-red-600'
+                  : 'bg-white/80 backdrop-blur-sm border-gray-200/50 text-amber-600';
           const canControlThisCall = Boolean(
             state.taskId
             && (state.status === 'dialing'
@@ -153,16 +173,16 @@ const MultiCallStatus = React.memo(function MultiCallStatus({
           );
 
           return (
-            <div key={phone} className="rounded-2xl border border-gray-200 bg-white shadow-soft overflow-hidden">
-              <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2.5">
+            <div key={phone} className="rounded-[10px] border border-gray-100 bg-white shadow-soft overflow-hidden">
+              <div className="flex items-center justify-between border-b border-gray-100 px-3.5 py-2.5">
                 <div className="min-w-0">
-                  <div className="truncate text-[12px] font-semibold text-gray-900">
+                  <div className="truncate text-[13px] font-medium text-gray-900">
                     {callTarget?.title ? callTarget.title : formatPhone(phone)}
                   </div>
-                  <div className="text-[10.5px] text-gray-500">{formatPhone(phone)}</div>
+                  <div className="text-[12px] text-gray-500 tabular-nums">{formatPhone(phone)}</div>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${statusClass}`}>
+                  <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium shadow-soft ${statusClass}`}>
                     {statusLabel}
                   </span>
                   {canControlThisCall && state.taskId ? (
@@ -176,27 +196,27 @@ const MultiCallStatus = React.memo(function MultiCallStatus({
                   ) : null}
                 </div>
               </div>
-              <div className="h-56 overflow-y-auto px-3 py-2 space-y-1.5">
+              <div className="h-56 overflow-y-auto scrollbar-hide px-3.5 py-2.5 space-y-1.5">
                 {state.transcript.length === 0 ? (
-                  <div className="text-[12px] text-gray-400">Waiting for call events...</div>
+                  <div className="text-[13px] text-gray-400">Waiting for call events...</div>
                 ) : (
                   state.transcript.map((entry) => (
                     <div key={entry.id}>
                       {entry.role === 'status' ? (
                         <div className="flex justify-center">
-                          <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-[10px] text-gray-500">
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/80 backdrop-blur-sm border border-gray-200/50 px-2.5 py-0.5 text-[10px] font-medium text-gray-500 shadow-soft">
                             {entry.text}
                           </span>
                         </div>
                       ) : entry.role === 'caller' ? (
                         <div className="flex justify-end">
-                          <div className="max-w-[85%] rounded-xl rounded-tr-sm bg-gray-900 px-2.5 py-1.5 text-[12px] text-white">
+                          <div className="max-w-[85%] rounded-lg rounded-tr-sm bg-gray-200 px-2.5 py-1.5 text-[12px] text-gray-900">
                             {entry.text}
                           </div>
                         </div>
                       ) : (
                         <div className="flex justify-start">
-                          <div className="max-w-[85%] rounded-xl rounded-tl-sm border border-gray-100 bg-gray-50 px-2.5 py-1.5 text-[12px] text-gray-900">
+                          <div className="max-w-[85%] rounded-lg rounded-tl-sm border border-gray-100 bg-white px-2.5 py-1.5 text-[12px] text-gray-900">
                             {entry.text}
                           </div>
                         </div>
@@ -206,7 +226,7 @@ const MultiCallStatus = React.memo(function MultiCallStatus({
                 )}
                 {state.thinking ? (
                   <div className="flex justify-start">
-                    <div className="rounded-xl rounded-tl-sm border border-gray-100 bg-gray-50 px-2.5 py-1.5 text-[11px] text-gray-500">
+                    <div className="rounded-lg rounded-tl-sm border border-gray-100 bg-white px-2.5 py-1.5 text-[12px] text-gray-500">
                       Thinking...
                     </div>
                   </div>
@@ -263,38 +283,40 @@ const MultiCallStatus = React.memo(function MultiCallStatus({
             </div>
           );
         })}
+          </div>
+        ) : null}
       </div>
       {/* Combined Decision Summary — only shown after all calls complete */}
       {allCallsDone ? (
-      <div className="mb-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-soft">
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-[12px] font-semibold text-gray-900">Combined Decision Summary</div>
+      <div className="mb-3 rounded-[10px] border border-gray-100 bg-white px-4 py-3 shadow-soft">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="text-[13px] font-medium text-gray-900">Combined Decision</div>
           {multiSummaryState === 'ready' && multiSummary?.recommended_phone ? (
-            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/80 backdrop-blur-sm border border-gray-200/50 px-2.5 py-1 text-[11px] font-medium text-emerald-600 shadow-soft">
               Best: {formatPhone(multiSummary.recommended_phone)}
             </span>
           ) : null}
         </div>
         {multiSummaryState === 'loading' ? (
-          <div className="mt-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-[12px] text-amber-700">
+          <div className="rounded-lg border border-amber-100 bg-amber-50 px-3.5 py-2.5 text-[13px] text-amber-700">
             Building one detailed recommendation across all calls...
           </div>
         ) : null}
         {multiSummaryState === 'idle' ? (
-          <div className="mt-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-[12px] text-gray-500">
+          <div className="rounded-lg border border-gray-100 bg-gray-50 px-3.5 py-2.5 text-[13px] text-gray-500">
             Summary will be generated when all calls complete.
           </div>
         ) : null}
         {multiSummaryState === 'error' ? (
-          <div className="mt-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2">
-            <div className="text-[12px] text-red-700">
+          <div className="rounded-lg border border-red-100 bg-red-50 px-3.5 py-2.5">
+            <div className="text-[13px] text-red-700">
               Combined summary unavailable: {multiSummaryError ? multiSummaryError : 'Unknown error'}
             </div>
             {multiSummaryTaskIds.length > 0 ? (
               <button
                 type="button"
                 onClick={() => { void onLoadMultiSummary(multiSummaryTaskIds, objective, true); }}
-                className="mt-2 rounded-lg border border-red-200 bg-white px-2.5 py-1 text-[11px] font-medium text-red-700 hover:bg-red-50"
+                className="mt-2 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-[12px] font-medium text-red-700 hover:bg-red-50 transition-colors"
               >
                 Retry summary
               </button>
@@ -302,54 +324,54 @@ const MultiCallStatus = React.memo(function MultiCallStatus({
           </div>
         ) : null}
         {multiSummary && multiSummaryState === 'ready' ? (
-          <div className="mt-2 space-y-2">
-            <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">Recommendation</div>
-              <p className="mt-1 text-[12px] leading-relaxed text-gray-800">{multiSummary.recommended_option}</p>
-              <p className="mt-1 text-[11.5px] leading-relaxed text-gray-600">{multiSummary.decision_rationale}</p>
+          <div className="space-y-2.5">
+            <div className="rounded-lg border border-gray-100 bg-gray-50 px-3.5 py-2.5">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Recommendation</div>
+              <p className="text-[13px] leading-relaxed text-gray-900">{multiSummary.recommended_option}</p>
+              <p className="mt-1.5 text-[13px] leading-relaxed text-gray-600">{multiSummary.decision_rationale}</p>
             </div>
-            <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">Cross-call Summary</div>
-              <p className="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-gray-700">{multiSummary.overall_summary}</p>
+            <div className="rounded-lg border border-gray-100 bg-gray-50 px-3.5 py-2.5">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Cross-call Summary</div>
+              <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-gray-700">{multiSummary.overall_summary}</p>
             </div>
             {multiSummary.price_comparison?.length > 0 ? (
-              <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">Price + Terms</div>
-                <div className="mt-1 space-y-2">
+              <div className="rounded-lg border border-gray-100 bg-gray-50 px-3.5 py-2.5">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Price + Terms</div>
+                <div className="space-y-2">
                   {multiSummary.price_comparison.map((item) => (
-                    <div key={item.task_id} className="rounded-lg border border-gray-100 bg-white px-2.5 py-2">
+                    <div key={item.task_id} className="rounded-lg border border-gray-200 bg-white px-3 py-2.5">
                       <div className="flex items-center justify-between gap-2">
-                        <div className="text-[11.5px] font-semibold text-gray-800">
+                        <div className="text-[13px] font-medium text-gray-900">
                           {item.vendor ? item.vendor : formatPhone(item.phone || '')}
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-gray-500">{item.confidence} confidence</span>
+                          <span className="text-[11px] text-gray-500">{item.confidence}</span>
                           {item.phone && phase === 'ended' ? (
                             <button
                               type="button"
                               onClick={() => onCallBackFromSummary(item)}
-                              className="flex items-center gap-1 rounded-lg bg-gray-900 px-2 py-1 text-[10px] font-medium text-white transition-all duration-150 hover:bg-gray-700 active:scale-[0.96]"
+                              className="flex items-center gap-1.5 rounded-lg bg-gray-900 px-2.5 py-1.5 text-[11px] font-medium text-white transition-all duration-150 hover:bg-gray-700 active:scale-[0.96]"
                             >
-                              <Phone size={10} strokeWidth={2.5} />
+                              <Phone size={11} strokeWidth={2.5} />
                               Call back
                             </button>
                           ) : null}
                         </div>
                       </div>
-                      <div className="mt-1 text-[11px] text-gray-600">
-                        Prices: {item.quoted_prices?.length ? item.quoted_prices.join(' | ') : 'Not captured'}
+                      <div className="mt-1.5 text-[12px] text-gray-700">
+                        <span className="font-medium">Prices:</span> {item.quoted_prices?.length ? item.quoted_prices.join(' | ') : 'Not captured'}
                       </div>
                       {item.location ? (
-                        <div className="mt-0.5 text-[11px] text-gray-600">Location: {item.location}</div>
+                        <div className="mt-0.5 text-[12px] text-gray-700"><span className="font-medium">Location:</span> {item.location}</div>
                       ) : null}
                       {item.discounts?.length > 0 ? (
-                        <div className="mt-0.5 text-[11px] text-gray-600">Discounts: {item.discounts.join(' | ')}</div>
+                        <div className="mt-0.5 text-[12px] text-gray-700"><span className="font-medium">Discounts:</span> {item.discounts.join(' | ')}</div>
                       ) : null}
                       {item.fees?.length > 0 ? (
-                        <div className="mt-0.5 text-[11px] text-gray-600">Fees: {item.fees.join(' | ')}</div>
+                        <div className="mt-0.5 text-[12px] text-gray-700"><span className="font-medium">Fees:</span> {item.fees.join(' | ')}</div>
                       ) : null}
                       {item.constraints?.length > 0 ? (
-                        <div className="mt-0.5 text-[11px] text-gray-600">Constraints: {item.constraints.join(' | ')}</div>
+                        <div className="mt-0.5 text-[12px] text-gray-700"><span className="font-medium">Constraints:</span> {item.constraints.join(' | ')}</div>
                       ) : null}
                     </div>
                   ))}
@@ -357,11 +379,14 @@ const MultiCallStatus = React.memo(function MultiCallStatus({
               </div>
             ) : null}
             {multiSummary.important_facts?.length > 0 ? (
-              <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">Important Facts</div>
-                <div className="mt-1 space-y-1">
+              <div className="rounded-lg border border-gray-100 bg-gray-50 px-3.5 py-2.5">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Important Facts</div>
+                <div className="space-y-1.5">
                   {multiSummary.important_facts.map((fact, idx) => (
-                    <div key={`fact-${idx}`} className="text-[11.5px] text-gray-700">{'\u2022'} {fact}</div>
+                    <div key={`fact-${idx}`} className="flex items-start gap-2">
+                      <span className="mt-1.5 h-1 w-1 rounded-full bg-gray-300 shrink-0" />
+                      <span className="text-[13px] text-gray-700 leading-relaxed">{fact}</span>
+                    </div>
                   ))}
                 </div>
               </div>

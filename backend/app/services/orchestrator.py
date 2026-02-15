@@ -83,7 +83,17 @@ class CallOrchestrator:
         return self._store.get_task_dir(task_id) / "recording_stats.json"
 
     def _voice_mode_enabled(self) -> bool:
-        return settings.DEEPGRAM_VOICE_AGENT_ENABLED and bool(settings.DEEPGRAM_API_KEY)
+        result = settings.DEEPGRAM_VOICE_AGENT_ENABLED and bool(settings.DEEPGRAM_API_KEY)
+        # #region agent log
+        import json
+        from pathlib import Path
+        import time
+        log_path = Path("/Users/pranavkarra/Developer/treehacks-26/.cursor/debug.log")
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_path, "a") as f:
+            f.write(json.dumps({"location":"backend/app/services/orchestrator.py:85","message":"Voice mode check","data":{"enabled":result,"DEEPGRAM_VOICE_AGENT_ENABLED":settings.DEEPGRAM_VOICE_AGENT_ENABLED,"has_api_key":bool(settings.DEEPGRAM_API_KEY)},"timestamp":int(time.time()*1000),"hypothesisId":"H7,H9"})+"\n")
+        # #endregion
+        return result
 
     def _link_stream_sid(self, task_id: str, stream_sid: Optional[str]) -> None:
         if not task_id or task_id == "unknown" or not stream_sid:
@@ -556,16 +566,35 @@ class CallOrchestrator:
         self._clear_media_context(task_id)
 
     async def set_media_stream_sid(self, task_id: str, stream_sid: str) -> None:
+        # #region agent log
+        import json
+        from pathlib import Path
+        log_path = Path("/Users/pranavkarra/Developer/treehacks-26/.cursor/debug.log")
+        with open(log_path, "a") as f:
+            f.write(json.dumps({"location":"backend/app/services/orchestrator.py:568","message":"set_media_stream_sid called","data":{"task_id":task_id,"stream_sid":stream_sid},"timestamp":int(time.time()*1000),"hypothesisId":"H7,H9"})+"\n")
+        # #endregion
         self._link_stream_sid(task_id, stream_sid)
         await self._flush_pending_agent_audio(task_id)
         # Start Deepgram now that Twilio media stream is fully ready
         if self._voice_mode_enabled():
+            # #region agent log
+            with open(log_path, "a") as f:
+                f.write(json.dumps({"location":"backend/app/services/orchestrator.py:572","message":"Voice mode enabled, checking session","data":{"task_id":task_id},"timestamp":int(time.time()*1000),"hypothesisId":"H7,H9"})+"\n")
+            # #endregion
             session_id = self._task_to_session.get(task_id)
             if session_id and session_id not in self._deepgram_sessions:
+                # #region agent log
+                with open(log_path, "a") as f:
+                    f.write(json.dumps({"location":"backend/app/services/orchestrator.py:577","message":"Starting voice session","data":{"task_id":task_id,"session_id":session_id},"timestamp":int(time.time()*1000),"hypothesisId":"H7,H9"})+"\n")
+                # #endregion
                 task = self._store.get_task(task_id) or {}
                 try:
                     await self._start_voice_session(task_id, session_id, task)
                 except Exception as exc:
+                    # #region agent log
+                    with open(log_path, "a") as f:
+                        f.write(json.dumps({"location":"backend/app/services/orchestrator.py:582","message":"Voice session start failed","data":{"task_id":task_id,"error":str(exc)},"timestamp":int(time.time()*1000),"hypothesisId":"H7,H9"})+"\n")
+                    # #endregion
                     log_event("orchestrator", "start_voice_session_failed",
                               task_id=task_id, status="warning",
                               details={"error": f"{type(exc).__name__}: {exc}"})
@@ -624,11 +653,27 @@ class CallOrchestrator:
                 self._deepgram_sessions.pop(session_id, None)
 
     async def handle_user_utterance(self, session_id: str, utterance: str) -> Optional[str]:
+        # #region agent log
+        import json
+        from pathlib import Path
+        log_path = Path("/Users/pranavkarra/Developer/treehacks-26/.cursor/debug.log")
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_path, "a") as f:
+            f.write(json.dumps({"location":"backend/app/services/orchestrator.py:626","message":"handle_user_utterance called","data":{"session_id":session_id,"utterance":utterance[:100]},"timestamp":int(time.time()*1000),"hypothesisId":"H8,H10"})+"\n")
+        # #endregion
         session = await self._sessions.get(session_id)
         if not session:
+            # #region agent log
+            with open(log_path, "a") as f:
+                f.write(json.dumps({"location":"backend/app/services/orchestrator.py:629","message":"No session found","data":{"session_id":session_id},"timestamp":int(time.time()*1000),"hypothesisId":"H8,H10"})+"\n")
+            # #endregion
             return None
         task = self._store.get_task(session.task_id)
         if not task:
+            # #region agent log
+            with open(log_path, "a") as f:
+                f.write(json.dumps({"location":"backend/app/services/orchestrator.py:632","message":"No task found","data":{"session_id":session_id,"task_id":session.task_id},"timestamp":int(time.time()*1000),"hypothesisId":"H8,H10"})+"\n")
+            # #endregion
             return None
 
         with timed_step(
@@ -648,6 +693,10 @@ class CallOrchestrator:
                 task,
                 utterance,
             )
+            # #region agent log
+            with open(log_path, "a") as f:
+                f.write(json.dumps({"location":"backend/app/services/orchestrator.py:650","message":"LLM response received","data":{"session_id":session_id,"task_id":session.task_id,"response":response[:200],"response_length":len(response)},"timestamp":int(time.time()*1000),"hypothesisId":"H6,H10"})+"\n")
+            # #endregion
 
             await self._sessions.append_conversation(
                 session_id,
@@ -834,7 +883,18 @@ class CallOrchestrator:
             await websocket.send_text(json.dumps(message))
 
     async def _start_voice_session(self, task_id: str, session_id: str, task: Dict[str, Any]) -> None:
+        # #region agent log
+        import json
+        from pathlib import Path
+        log_path = Path("/Users/pranavkarra/Developer/treehacks-26/.cursor/debug.log")
+        with open(log_path, "a") as f:
+            f.write(json.dumps({"location":"backend/app/services/orchestrator.py:866","message":"_start_voice_session called","data":{"task_id":task_id,"session_id":session_id,"voice_mode_enabled":self._voice_mode_enabled()},"timestamp":int(time.time()*1000),"hypothesisId":"H7,H9"})+"\n")
+        # #endregion
         if not self._voice_mode_enabled():
+            # #region agent log
+            with open(log_path, "a") as f:
+                f.write(json.dumps({"location":"backend/app/services/orchestrator.py:868","message":"Voice mode not enabled","data":{"task_id":task_id},"timestamp":int(time.time()*1000),"hypothesisId":"H7,H9"})+"\n")
+            # #endregion
             return
         if not task:
             task = self._store.get_task(task_id) or {}
@@ -851,6 +911,10 @@ class CallOrchestrator:
             async def on_agent_audio(audio: bytes) -> None:
                 if not audio:
                     return
+                # #region agent log
+                with open(log_path, "a") as f:
+                    f.write(json.dumps({"location":"backend/app/services/orchestrator.py:885","message":"on_agent_audio callback","data":{"task_id":task_id,"audio_bytes":len(audio)},"timestamp":int(time.time()*1000),"hypothesisId":"H7"})+"\n")
+                # #endregion
                 await self.save_audio_chunk(session_id, "agent", audio)
                 await self._send_agent_audio_to_twilio(task_id, audio)
 
@@ -885,8 +949,16 @@ class CallOrchestrator:
                 on_end_call=on_end_call,
             )
             self._deepgram_sessions[session_id] = session
+            # #region agent log
+            with open(log_path, "a") as f:
+                f.write(json.dumps({"location":"backend/app/services/orchestrator.py:920","message":"DeepgramVoiceAgentSession created","data":{"task_id":task_id,"session_id":session_id},"timestamp":int(time.time()*1000),"hypothesisId":"H7,H9"})+"\n")
+            # #endregion
 
         await session.start()
+        # #region agent log
+        with open(log_path, "a") as f:
+            f.write(json.dumps({"location":"backend/app/services/orchestrator.py:925","message":"DeepgramVoiceAgentSession started","data":{"task_id":task_id,"session_id":session_id},"timestamp":int(time.time()*1000),"hypothesisId":"H7,H9"})+"\n")
+        # #endregion
         log_event("orchestrator", "deepgram_session_started", task_id=task_id, session_id=session_id)
 
     async def _stop_voice_session(self, session_id: str) -> None:

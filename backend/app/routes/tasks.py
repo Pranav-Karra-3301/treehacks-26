@@ -141,6 +141,14 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
 
     @router.post("/{task_id}/call", response_model=ActionResponse)
     async def start_call(task_id: str):
+        # #region agent log
+        import json
+        from pathlib import Path
+        log_path = Path("/Users/pranavkarra/Developer/treehacks-26/.cursor/debug.log")
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_path, "a") as f:
+            f.write(json.dumps({"location":"backend/app/routes/tasks.py:143","message":"start_call endpoint called","data":{"task_id":task_id},"timestamp":int(__import__('time').time()*1000),"hypothesisId":"H1,H5"})+"\n")
+        # #endregion
         with timed_step("api", "start_call", task_id=task_id):
             row = store.get_task(task_id)
             if not row:
@@ -150,6 +158,10 @@ def get_routes(store: DataStore, orchestrator: CallOrchestrator, cache: CacheSer
                 await local_cache.delete(_tasks_cache_key())
                 await local_cache.delete(_analysis_cache_key(task_id))
             payload = await orchestrator.start_task_call(task_id, row)
+            # #region agent log
+            with open(log_path, "a") as f:
+                f.write(json.dumps({"location":"backend/app/routes/tasks.py:152","message":"orchestrator returned","data":{"task_id":task_id,"session_id":payload.get("session_id")},"timestamp":int(__import__('time').time()*1000),"hypothesisId":"H1,H5"})+"\n")
+            # #endregion
             return ActionResponse(ok=True, message="call started", session_id=payload["session_id"])
 
     @router.post("/{task_id}/stop", response_model=ActionResponse)

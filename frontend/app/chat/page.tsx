@@ -178,57 +178,6 @@ function formatPhone(phone: string): string {
 }
 
 /** True if the objective sounds like a business/commercial call (negotiation, vendor, etc.). */
-function objectiveLooksCommercial(objective: string): boolean {
-  const lower = objective.toLowerCase();
-  const commercialTerms = [
-    'negotiate', 'negotiation', 'discount', 'price', 'bill', 'contract',
-    'offer', 'rate', 'plan', 'quote', 'vendor', 'company', 'store', 'business',
-    'refund', 'cancellation', 'upgrade', 'subscription',
-  ];
-  return commercialTerms.some((term) => lower.includes(term));
-}
-
-function checkCallReadiness(
-  objective: string,
-  phone: string,
-  businessName: string | null,
-  context: string,
-): { confident: boolean; clarificationNeeded?: string } {
-  const trimmed = objective.trim();
-  const objectiveWords = trimmed.split(/\s+/).filter(Boolean).length;
-
-  if (objectiveWords < 3) {
-    return {
-      confident: false,
-      clarificationNeeded:
-        "Can you give me a bit more detail about what you want to do on this call? For example, what do you want to ask or accomplish?",
-    };
-  }
-
-  // Only require business/context when the objective sounds like a commercial call.
-  const isCommercial = objectiveLooksCommercial(trimmed);
-  if (isCommercial && !businessName && !context.trim()) {
-    return {
-      confident: false,
-      clarificationNeeded: `I'll be calling ${formatPhone(phone)}. Who is this (e.g. which business or person), so I can prepare properly?`,
-    };
-  }
-
-  const vagueKeywords = ['something', 'thing', 'stuff'];
-  const hasVagueTerms = vagueKeywords.some(
-    (word) => trimmed.toLowerCase().includes(word) && objectiveWords < 6,
-  );
-  if (hasVagueTerms) {
-    return {
-      confident: false,
-      clarificationNeeded:
-        "Can you be more specific about what you want to do? What exactly do you want to ask or achieve on the call?",
-    };
-  }
-
-  return { confident: true };
-}
-
 function extractConcurrentCountFromText(text: string): number | null {
   const normalized = text.toLowerCase();
   const direct = normalized.match(/\b(\d{1,2})\b(?=[^\n]{0,24}\b(?:concurrent|simultaneous|agents?|calls?|numbers?|users?)\b)/i);
@@ -1576,12 +1525,6 @@ export default function ChatPage() {
     if (!(await ensureLiveDialReady('phone'))) return;
 
     const resolvedObjective = (objectiveText ?? objective).trim();
-    const businessName = targetMeta?.title ?? null;
-    const readiness = checkCallReadiness(resolvedObjective, resolvedPhone, businessName, researchContext);
-    if (!readiness.confident) {
-      addMessage({ role: 'ai', text: readiness.clarificationNeeded! });
-      return;
-    }
 
     setActiveMultiHistoryId(null);
     setMultiCallTargets({});
@@ -1655,20 +1598,6 @@ export default function ChatPage() {
       return;
     }
     if (!(await ensureLiveDialReady('objective'))) return;
-
-    const resolvedObjectiveForCheck = (objectiveText ?? objective).trim()
-      || (mode === 'test' ? 'Have a friendly open-ended conversation.' : '');
-    const firstTarget = targetDirectory ? Object.values(targetDirectory)[0] : undefined;
-    const readiness = checkCallReadiness(
-      resolvedObjectiveForCheck,
-      normalizedPhones[0],
-      firstTarget?.title ?? null,
-      researchContext,
-    );
-    if (!readiness.confident) {
-      addMessage({ role: 'ai', text: readiness.clarificationNeeded! });
-      return;
-    }
 
     closeAllSockets();
     setSessionId(null);
@@ -1769,6 +1698,10 @@ export default function ChatPage() {
       }
     }));
 
+    // #region agent log
+    fetch('http://127.0.0.1:7248/ingest/7295f040-090d-41f5-a445-399ebc98ac02',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/app/chat/page.tsx:1701',message:'Task creation results',data:{taskCount:taskCreationResults.length,tasks:taskCreationResults.map(t=>({ok:t.ok,phone:t.phone}))},timestamp:Date.now(),hypothesisId:'H1,H4'})}).catch(()=>{});
+    // #endregion
+
     // Start calls sequentially with 500ms stagger to let each Twilio media
     // stream register before the next call arrives.
     const results: Array<
@@ -1777,6 +1710,9 @@ export default function ChatPage() {
     > = [];
     for (let i = 0; i < taskCreationResults.length; i++) {
       const taskResult = taskCreationResults[i];
+      // #region agent log
+      fetch('http://127.0.0.1:7248/ingest/7295f040-090d-41f5-a445-399ebc98ac02',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/app/chat/page.tsx:1710',message:'Starting call',data:{index:i,phone:taskResult.phone,ok:taskResult.ok},timestamp:Date.now(),hypothesisId:'H1,H5'})}).catch(()=>{});
+      // #endregion
       if (!taskResult.ok) {
         results.push(taskResult);
         continue;
@@ -1784,9 +1720,15 @@ export default function ChatPage() {
       try {
         if (i > 0) await new Promise((r) => setTimeout(r, 500));
         const callResult = await startCall(taskResult.taskId);
+        // #region agent log
+        fetch('http://127.0.0.1:7248/ingest/7295f040-090d-41f5-a445-399ebc98ac02',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/app/chat/page.tsx:1720',message:'Call started',data:{index:i,phone:taskResult.phone,ok:callResult.ok,status:callResult.status},timestamp:Date.now(),hypothesisId:'H1,H5'})}).catch(()=>{});
+        // #endregion
         results.push({ ok: true, phone: taskResult.phone, taskId: taskResult.taskId, sessionId: callResult.session_id ?? '', callResult });
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+        // #region agent log
+        fetch('http://127.0.0.1:7248/ingest/7295f040-090d-41f5-a445-399ebc98ac02',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/app/chat/page.tsx:1728',message:'Call start error',data:{index:i,phone:taskResult.phone,error:errorMsg},timestamp:Date.now(),hypothesisId:'H1,H5'})}).catch(()=>{});
+        // #endregion
         results.push({ ok: false, phone: taskResult.phone, errorMsg });
       }
     }
@@ -2792,7 +2734,7 @@ export default function ChatPage() {
                 className="w-full flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-[13px] font-medium text-gray-700 shadow-soft hover:shadow-card hover:border-gray-300 active:scale-[0.98] transition-all duration-150"
               >
                 <Plus size={14} />
-                New negotiation
+                New task
               </button>
             </div>
 
@@ -3205,7 +3147,7 @@ export default function ChatPage() {
                   className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-4 py-2 text-[12.5px] font-medium text-gray-700 shadow-soft transition-all duration-150 hover:shadow-card hover:border-gray-300 active:scale-[0.97]"
                 >
                   <RotateCcw size={13} />
-                  New negotiation
+                  New task
                 </button>
               </motion.div>
             ) : null}
