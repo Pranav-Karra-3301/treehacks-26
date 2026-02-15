@@ -42,20 +42,6 @@ export function useAudioPlayer(uri: string) {
       }
       console.log('[AudioPlayer] Loading audio from:', uri);
 
-      // First check if the URL is reachable
-      try {
-        const headRes = await fetch(uri, { method: 'HEAD' });
-        console.log('[AudioPlayer] HEAD response:', headRes.status, headRes.headers.get('content-type'));
-        if (!headRes.ok) {
-          console.warn('[AudioPlayer] Audio URL returned', headRes.status);
-          setState((prev) => ({ ...prev, error: true }));
-          return;
-        }
-      } catch (headErr) {
-        console.warn('[AudioPlayer] HEAD check failed:', headErr);
-        // Continue anyway — some servers don't support HEAD
-      }
-
       const { sound } = await Audio.Sound.createAsync(
         { uri },
         { shouldPlay: false, progressUpdateIntervalMillis: 250 },

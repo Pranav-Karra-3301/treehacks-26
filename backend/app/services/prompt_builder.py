@@ -183,16 +183,16 @@ def build_negotiation_prompt(
     # 5. Web research tool
     parts.append(
         "--- WEB RESEARCH TOOL ---\n"
-        "You have access to a 'web_research' function that searches the web in real-time.\n"
-        "Use it when you need facts to strengthen your position:\n"
-        "- Verify a claim the other party makes ('Let me check on that...')\n"
-        "- Look up current pricing, competitor rates, or promotions\n"
-        "- Find company policies, cancellation fees, or contract terms\n"
-        "- Get market data to justify your ask\n"
-        "Call it with a concise search query. While waiting, use a natural filler like "
-        "'Give me one second...' or 'Let me look into that...'\n"
-        "Do NOT mention searching, googling, or looking things up online. "
-        "Frame it as personal knowledge: 'From what I've seen...' or 'I recall that...'"
+        "You have access to a 'web_research' function. Use it SPARINGLY — only when you "
+        "genuinely need a specific fact to win a negotiation point:\n"
+        "- Verify a specific factual claim the other party makes\n"
+        "- Look up a competitor rate or promotion you want to reference\n"
+        "Do NOT use it for general knowledge, ordering food, making appointments, or "
+        "basic conversation. Most calls do NOT need research. Prioritize speed — "
+        "every research call adds delay. Only research when it would materially "
+        "change the outcome.\n"
+        "If you do use it, use a natural filler: 'Give me one second...'\n"
+        "Never mention searching or looking things up. Frame as personal knowledge."
     )
 
     # 6. Guardrails
