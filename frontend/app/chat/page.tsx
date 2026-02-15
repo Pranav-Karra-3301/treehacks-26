@@ -177,6 +177,58 @@ function formatPhone(phone: string): string {
   return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
 
+/** True if the objective sounds like a business/commercial call (negotiation, vendor, etc.). */
+function objectiveLooksCommercial(objective: string): boolean {
+  const lower = objective.toLowerCase();
+  const commercialTerms = [
+    'negotiate', 'negotiation', 'discount', 'price', 'bill', 'contract',
+    'offer', 'rate', 'plan', 'quote', 'vendor', 'company', 'store', 'business',
+    'refund', 'cancellation', 'upgrade', 'subscription',
+  ];
+  return commercialTerms.some((term) => lower.includes(term));
+}
+
+function checkCallReadiness(
+  objective: string,
+  phone: string,
+  businessName: string | null,
+  context: string,
+): { confident: boolean; clarificationNeeded?: string } {
+  const trimmed = objective.trim();
+  const objectiveWords = trimmed.split(/\s+/).filter(Boolean).length;
+
+  if (objectiveWords < 3) {
+    return {
+      confident: false,
+      clarificationNeeded:
+        "Can you give me a bit more detail about what you want to do on this call? For example, what do you want to ask or accomplish?",
+    };
+  }
+
+  // Only require business/context when the objective sounds like a commercial call.
+  const isCommercial = objectiveLooksCommercial(trimmed);
+  if (isCommercial && !businessName && !context.trim()) {
+    return {
+      confident: false,
+      clarificationNeeded: `I'll be calling ${formatPhone(phone)}. Who is this (e.g. which business or person), so I can prepare properly?`,
+    };
+  }
+
+  const vagueKeywords = ['something', 'thing', 'stuff'];
+  const hasVagueTerms = vagueKeywords.some(
+    (word) => trimmed.toLowerCase().includes(word) && objectiveWords < 6,
+  );
+  if (hasVagueTerms) {
+    return {
+      confident: false,
+      clarificationNeeded:
+        "Can you be more specific about what you want to do? What exactly do you want to ask or achieve on the call?",
+    };
+  }
+
+  return { confident: true };
+}
+
 function extractConcurrentCountFromText(text: string): number | null {
   const normalized = text.toLowerCase();
   const direct = normalized.match(/\b(\d{1,2})\b(?=[^\n]{0,24}\b(?:concurrent|simultaneous|agents?|calls?|numbers?|users?)\b)/i);
@@ -1523,6 +1575,14 @@ export default function ChatPage() {
     }
     if (!(await ensureLiveDialReady('phone'))) return;
 
+    const resolvedObjective = (objectiveText ?? objective).trim();
+    const businessName = targetMeta?.title ?? null;
+    const readiness = checkCallReadiness(resolvedObjective, resolvedPhone, businessName, researchContext);
+    if (!readiness.confident) {
+      addMessage({ role: 'ai', text: readiness.clarificationNeeded! });
+      return;
+    }
+
     setActiveMultiHistoryId(null);
     setMultiCallTargets({});
     setSingleDtmfInput('');
@@ -1595,6 +1655,20 @@ export default function ChatPage() {
       return;
     }
     if (!(await ensureLiveDialReady('objective'))) return;
+
+    const resolvedObjectiveForCheck = (objectiveText ?? objective).trim()
+      || (mode === 'test' ? 'Have a friendly open-ended conversation.' : '');
+    const firstTarget = targetDirectory ? Object.values(targetDirectory)[0] : undefined;
+    const readiness = checkCallReadiness(
+      resolvedObjectiveForCheck,
+      normalizedPhones[0],
+      firstTarget?.title ?? null,
+      researchContext,
+    );
+    if (!readiness.confident) {
+      addMessage({ role: 'ai', text: readiness.clarificationNeeded! });
+      return;
+    }
 
     closeAllSockets();
     setSessionId(null);
@@ -2849,7 +2923,7 @@ export default function ChatPage() {
                         >
                           <div className="truncate font-medium">{entry.objective || 'Concurrent run'}</div>
                           <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-gray-400 flex-wrap">
-                            <span className="text-white px-0.5" style={{ backgroundColor: '#64748B' }}>
+                            <span className="text-white px-0.5" style={{ backgroundColor: '#FF6B35' }}>
                               {entry.calls.length} call{entry.calls.length === 1 ? '' : 's'}
                             </span>
                             <span>•</span>
