@@ -74,6 +74,8 @@ export type BusinessResult = {
   snippet: string | null;
   published: string | null;
   score: number | null;
+  phone_numbers: string[];
+  highlights: string[];
 };
 
 export type ResearchResponse = {

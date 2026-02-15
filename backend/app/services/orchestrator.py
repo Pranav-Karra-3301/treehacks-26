@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.services.deepgram_voice_agent import DeepgramVoiceAgentSession
 from app.services.llm_client import LLMClient
 from app.services.negotiation_engine import NegotiationEngine
+from app.services.research import ExaSearchService
 from app.services.session_manager import SessionManager
 from app.services.storage import DataStore
 from app.services.twilio_client import TwilioClient
@@ -54,6 +55,9 @@ class CallOrchestrator:
 
         self._audio_stats: Dict[str, Dict[str, Any]] = {}
         self._voice_session_lock = asyncio.Lock()
+        # Track inbound byte counts so outbound can be time-aligned
+        self._inbound_bytes: dict[str, int] = {}
+        self._outbound_bytes: dict[str, int] = {}
 
     def _session_recording_path(self, task_id: str) -> Path:
         return self._store.get_task_dir(task_id) / "recording_stats.json"
@@ -535,6 +539,10 @@ class CallOrchestrator:
                 event_type = event.get("type")
                 log_event("deepgram", "event", task_id=task_id, details={"type": event_type, "event": event})
 
+            async def on_research(query: str) -> Dict[str, Any]:
+                exa = ExaSearchService()
+                return await exa.search(query, limit=3)
+
             session = DeepgramVoiceAgentSession(
                 task_id=task_id,
                 task=task,
@@ -542,6 +550,7 @@ class CallOrchestrator:
                 on_agent_audio=on_agent_audio,
                 on_thinking=on_thinking,
                 on_event=on_event,
+                on_research=on_research,
             )
             self._deepgram_sessions[session_id] = session
 
@@ -579,9 +588,28 @@ class CallOrchestrator:
         if side_key not in {"caller", "agent"}:
             side_key = "agent"
 
-        # Write to individual track file only (mixed is created at call end)
+        # For outbound (agent) audio: pad with mulaw silence (0xFF) so
+        # the outbound track stays time-aligned with the continuous inbound
+        # stream.  The inbound stream is a steady 8 kHz clock from Twilio,
+        # so its byte count represents elapsed call time.
+        if side_key == "agent":
+            inbound_pos = self._inbound_bytes.get(session_id, 0)
+            outbound_pos = self._outbound_bytes.get(session_id, 0)
+            gap = inbound_pos - outbound_pos
+            if gap > 0:
+                with open(call_dir / filename, "ab") as f:
+                    f.write(b"\xff" * gap)
+                self._outbound_bytes[session_id] = outbound_pos + gap
+
+        # Write the actual audio data
         with open(call_dir / filename, "ab") as f:
             f.write(chunk)
+
+        # Track byte positions for time alignment
+        if side_key == "caller":
+            self._inbound_bytes[session_id] = self._inbound_bytes.get(session_id, 0) + len(chunk)
+        else:
+            self._outbound_bytes[session_id] = self._outbound_bytes.get(session_id, 0) + len(chunk)
 
         stats = self._audio_stats.setdefault(
             session_id,
@@ -613,6 +641,18 @@ class CallOrchestrator:
 
         inbound_raw = inbound_path.read_bytes() if inbound_path.exists() else b""
         outbound_raw = outbound_path.read_bytes() if outbound_path.exists() else b""
+
+        log_event(
+            "orchestrator",
+            "create_mixed_audio",
+            task_id=task_id,
+            details={
+                "inbound_bytes": len(inbound_raw),
+                "outbound_bytes": len(outbound_raw),
+                "inbound_exists": inbound_path.exists(),
+                "outbound_exists": outbound_path.exists(),
+            },
+        )
 
         # Strip any existing RIFF header (shouldn't be there, but be safe)
         if inbound_raw[:4] == b"RIFF":
@@ -688,6 +728,9 @@ class CallOrchestrator:
 
         task_id = session.task_id
         with timed_step("orchestrator", "stop_session", session_id=session_id, task_id=task_id):
+            await self._stop_voice_session(session_id)
+            # Allow any in-flight audio writes to flush before mixing
+            await asyncio.sleep(0.5)
             await self._sessions.set_status(session_id, "ended")
             duration = await self._sessions.get_duration_seconds(session_id)
             self._store.update_duration(task_id, duration)
@@ -697,7 +740,6 @@ class CallOrchestrator:
             if stats is not None:
                 stats["stop_reason"] = stop_reason
             await self._persist_recording_stats(session_id)
-            await self._stop_voice_session(session_id)
             self._create_mixed_audio(task_id)
             await self._ws.broadcast(
                 task_id,
@@ -709,6 +751,8 @@ class CallOrchestrator:
         self._task_to_session.pop(task_id, None)
         self._clear_task_call_sid(task_id)
         self._audio_stats.pop(session_id, None)
+        self._inbound_bytes.pop(session_id, None)
+        self._outbound_bytes.pop(session_id, None)
 
         # Auto-generate analysis in background so outcome is always set
         asyncio.create_task(self._auto_analyze(task_id))

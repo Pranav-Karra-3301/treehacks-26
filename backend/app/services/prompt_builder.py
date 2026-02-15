@@ -1,4 +1,4 @@
-"""Unified prompt builder for NegotiateAI.
+"""Unified prompt builder for kiru.
 
 Single source of truth for all system prompts -- used by both the text
 negotiation engine and the Deepgram voice-agent path.
@@ -18,26 +18,27 @@ _SOUL_PATH = Path(__file__).resolve().parents[2] / "SOUL.md"
 
 PHASE_CONFIGS: Dict[str, Dict[str, Any]] = {
     "opening": {
-        "turn_range": (0, 3),
+        "turn_range": (0, 2),
         "instruction": (
-            "OPENING phase. Your only goals right now:\n"
-            "- Greet them warmly and naturally. Mirror their tone.\n"
-            "- State why you're calling in ONE casual sentence. Do NOT dump your full objective.\n"
-            "- Ask a single open-ended question to get them talking.\n"
-            "- Do NOT propose numbers, terms, or solutions yet.\n"
-            "- Do NOT mention walkaway points or targets.\n"
+            "OPENING phase. Be brief — get to the point fast:\n"
+            "- Greet them naturally in ONE sentence, then immediately state why you're calling.\n"
+            "- Combine the greeting and purpose: 'Hi, thanks for taking my call — I'm calling about [topic].'\n"
+            "- Ask ONE focused question to move things forward.\n"
+            "- Do NOT waste turns on small talk. You have a job to do.\n"
+            "- Do NOT propose numbers yet, but DO make your intent clear.\n"
             "Example: 'Hey, I'm calling about my account. I was wondering if there's any flexibility on my current rate?'"
         ),
     },
     "discovery": {
-        "turn_range": (3, 7),
+        "turn_range": (2, 6),
         "instruction": (
-            "DISCOVERY phase. You're gathering information now.\n"
-            "- Ask open-ended questions: 'What's driving that?' 'Help me understand the situation on your end.'\n"
-            "- Listen more than you talk. Let them explain. Acknowledge before redirecting.\n"
-            "- Identify what they can and can't do. Find their constraints and pain points.\n"
-            "- Take mental note of anything you can use as leverage later.\n"
-            "- Still NO proposals. You're building your case."
+            "DISCOVERY phase. Gather information quickly and purposefully.\n"
+            "- Ask targeted questions that relate to your objective: 'What's the best you can do on [X]?'\n"
+            "- Listen more than you talk. Acknowledge briefly, then ask your next question.\n"
+            "- Identify what they can and can't do. Find constraints you can use.\n"
+            "- If they go off-topic, acknowledge in one phrase and redirect to your objective.\n"
+            "- Stay focused. Every question should get you closer to a deal.\n"
+            "- Still NO proposals. But keep the pace up — don't let the conversation stall."
         ),
     },
     "proposal": {
@@ -142,6 +143,7 @@ def build_negotiation_prompt(
     style = task.get("style", "collaborative")
     objective = task.get("objective", "")
     context = task.get("context", "")
+    location = task.get("location") or ""
     walkaway = task.get("walkaway_point") or "No hard walkaway configured"
     target = task.get("target_outcome") or ""
 
@@ -159,6 +161,8 @@ def build_negotiation_prompt(
         "--- YOUR ASSIGNMENT ---",
         f"Objective: {objective}",
     ]
+    if location:
+        assignment_lines.append(f"Caller location: {location}")
     if context:
         assignment_lines.append(f"Background context: {context}")
     if target:
@@ -176,7 +180,22 @@ def build_negotiation_prompt(
             f"{phase_instruction}"
         )
 
-    # 5. Guardrails
+    # 5. Web research tool
+    parts.append(
+        "--- WEB RESEARCH TOOL ---\n"
+        "You have access to a 'web_research' function that searches the web in real-time.\n"
+        "Use it when you need facts to strengthen your position:\n"
+        "- Verify a claim the other party makes ('Let me check on that...')\n"
+        "- Look up current pricing, competitor rates, or promotions\n"
+        "- Find company policies, cancellation fees, or contract terms\n"
+        "- Get market data to justify your ask\n"
+        "Call it with a concise search query. While waiting, use a natural filler like "
+        "'Give me one second...' or 'Let me look into that...'\n"
+        "Do NOT mention searching, googling, or looking things up online. "
+        "Frame it as personal knowledge: 'From what I've seen...' or 'I recall that...'"
+    )
+
+    # 6. Guardrails
     guardrail_lines = [
         "--- GUARDRAILS ---",
         "Keep these in mind at all times.",
@@ -190,10 +209,11 @@ def build_negotiation_prompt(
         "8. NEVER agree to a deal that's obviously bad. Use common sense about prices and values.",
         "9. Output ONLY your spoken words. No internal thoughts, reasoning, or metacommentary. "
         "Everything you output will be converted to speech on a phone call.",
+        "10. STAY ON MISSION. Every response must advance toward the objective. No tangents, no extended small talk, no filler.",
     ]
     if walkaway and walkaway != "No hard walkaway configured":
         guardrail_lines.append(
-            f"10. HARD BUDGET LIMIT: {walkaway}. You MUST NOT exceed this under any circumstances."
+            f"12. HARD BUDGET LIMIT: {walkaway}. You MUST NOT exceed this under any circumstances."
         )
     parts.append("\n".join(guardrail_lines))
 

@@ -15,7 +15,7 @@ from collections import deque
 from app.core.config import settings
 
 
-_LOGGER = logging.getLogger("negotiateai")
+_LOGGER = logging.getLogger("kiru")
 _METRICS_LOCK = threading.Lock()
 _NOISY_METRIC_COUNTERS: Dict[str, int] = {}
 _NOISY_ACTIONS = set(settings.LOG_NOISY_ACTIONS or [])
@@ -142,7 +142,7 @@ def _render_console_entry(entry: Dict[str, Any]) -> str:
 
 
 def configure_logging() -> None:
-    if getattr(_LOGGER, "_negotiateai_configured", False):
+    if getattr(_LOGGER, "_kiru_configured", False):
         return
 
     log_level = getattr(logging, settings.LOG_LEVEL, logging.INFO)
@@ -175,7 +175,7 @@ def configure_logging() -> None:
     file_handler.setLevel(log_level)
     _LOGGER.addHandler(file_handler)
 
-    _LOGGER._negotiateai_configured = True  # type: ignore[attr-defined]
+    _LOGGER._kiru_configured = True  # type: ignore[attr-defined]
 
 
 def _append_jsonl(entry: Dict[str, Any]) -> None:

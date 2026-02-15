@@ -20,7 +20,7 @@ class CacheService:
         redis_url: str | None = None,
         enabled: bool = False,
         default_ttl_seconds: int = 300,
-        key_prefix: str = "negotiatai",
+        key_prefix: str = "kiru",
     ) -> None:
         self._enabled = bool(enabled)
         self._redis_url = (redis_url or settings.REDIS_URL or "").strip()

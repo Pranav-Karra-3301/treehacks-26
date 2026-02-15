@@ -1,11 +1,40 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Optional
 
 import httpx
 
 from app.core.config import settings
 from app.core.telemetry import log_event, timed_step
+
+_US_PHONE_RE = re.compile(
+    r"""
+    (?<!\d)                         # no digit before
+    (?:\+?1[\s.-]?)?                # optional +1 or 1 prefix
+    \(?([2-9]\d{2})\)?              # area code
+    [\s.\-]?                        # separator
+    ([2-9]\d{2})                    # exchange
+    [\s.\-]?                        # separator
+    (\d{4})                         # subscriber
+    (?!\d)                          # no digit after
+    """,
+    re.VERBOSE,
+)
+
+
+def extract_phone_numbers(text: str) -> List[str]:
+    """Extract US phone numbers from text and normalize to +1XXXXXXXXXX."""
+    if not text:
+        return []
+    seen: set[str] = set()
+    result: List[str] = []
+    for m in _US_PHONE_RE.finditer(text):
+        normalized = f"+1{m.group(1)}{m.group(2)}{m.group(3)}"
+        if normalized not in seen:
+            seen.add(normalized)
+            result.append(normalized)
+    return result
 
 
 class ExaSearchService:
@@ -46,11 +75,12 @@ class ExaSearchService:
 
         payload = {
             "query": trimmed_query,
-            "type": "keyword",
+            "type": settings.EXA_SEARCH_TYPE,
             "numResults": limit,
             "contents": {
-                "text": True,
+                "text": {"maxCharacters": 5000},
                 "summary": True,
+                "highlights": True,
             },
             "includeDomains": [],
             "excludeDomains": [],
@@ -116,13 +146,23 @@ class ExaSearchService:
         for item in raw_results:
             if not isinstance(item, dict):
                 continue
+            text_content = item.get("text") or item.get("snippet") or item.get("summary") or ""
+            highlights = item.get("highlights") or []
+            phone_numbers = extract_phone_numbers(text_content)
+            # Also try to extract from highlights
+            for h in highlights:
+                for p in extract_phone_numbers(h):
+                    if p not in phone_numbers:
+                        phone_numbers.append(p)
             normalized.append(
                 {
                     "title": item.get("title"),
                     "url": item.get("url"),
-                    "snippet": item.get("text") or item.get("snippet") or item.get("summary"),
+                    "snippet": text_content[:500] if text_content else None,
                     "published": item.get("published") or item.get("publishedDate"),
                     "score": item.get("score"),
+                    "phone_numbers": phone_numbers,
+                    "highlights": highlights[:5] if highlights else [],
                 }
             )
 
