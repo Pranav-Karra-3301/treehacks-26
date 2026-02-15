@@ -54,11 +54,13 @@ type MultiCallHistoryEntry = {
   objective: string;
   createdAt: string;
   mode?: ConcurrentMode;
-  calls: Array<{ 
-    phone: string; 
+  calls: Array<{
+    phone: string;
     taskId: string;
     vendor?: string | null;
     summary?: string | null;
+    analysis?: AnalysisPayload | null;
+    transcript?: MultiCallTranscriptEntry[] | null;
   }>;
   multiSummary?: MultiCallSummaryPayload | null;
 };
@@ -332,7 +334,10 @@ function downgradeSnapshot(snapshot: ChatSnapshot, level: 1 | 2 | 3): ChatSnapsh
       multiSummary: null,
       multiSummaryState: 'idle',
       multiSummaryError: null,
-      multiHistory: snapshot.multiHistory.slice(0, 15),
+      multiHistory: snapshot.multiHistory.slice(0, 15).map((entry) => ({
+        ...entry,
+        calls: entry.calls.map(({ analysis: _a, transcript: _t, ...rest }) => rest),
+      })),
       researchContext: compactText(snapshot.researchContext || '', 1400),
     };
   }
@@ -346,7 +351,10 @@ function downgradeSnapshot(snapshot: ChatSnapshot, level: 1 | 2 | 3): ChatSnapsh
     })),
     discoveryResults: [],
     multiCalls: {},
-    multiHistory: snapshot.multiHistory.slice(0, 10),
+    multiHistory: snapshot.multiHistory.slice(0, 10).map((entry) => ({
+      ...entry,
+      calls: entry.calls.map(({ analysis: _a, transcript: _t, ...rest }) => rest),
+    })),
     multiSummary: null,
     multiSummaryState: 'idle',
     multiSummaryError: null,
@@ -1223,6 +1231,8 @@ export default function ChatPage() {
                 ...call,
                 // Keep existing vendor (already set from targetDirectory)
                 summary: state?.analysis?.summary || call.summary,
+                analysis: state?.analysis || call.analysis || null,
+                transcript: state?.transcript || call.transcript || null,
               };
             });
             updated[0] = {
@@ -2560,7 +2570,7 @@ export default function ChatPage() {
         calls: groupedTasks.map((task) => ({ phone: task.target_phone, taskId: task.id })),
       } satisfies MultiCallHistoryEntry;
     })();
-    const history = historyFromLocal ?? historyFromTasks;
+    const history: MultiCallHistoryEntry | null | undefined = historyFromLocal ?? historyFromTasks;
     if (!history) return;
 
     closeAllSockets();
@@ -2610,72 +2620,84 @@ export default function ChatPage() {
     ]);
 
     const initialStates: Record<string, MultiCallState> = {};
-    history.calls.forEach(({ phone, taskId: callTaskId }) => {
+    history.calls.forEach(({ phone, taskId: callTaskId, analysis, transcript }) => {
       initialStates[phone] = {
         taskId: callTaskId,
         sessionId: null,
         status: 'ended',
-        transcript: [{ id: `${Date.now()}-${Math.random()}`, role: 'status', text: 'Loading saved transcript...' }],
+        transcript: transcript && transcript.length > 0
+          ? transcript
+          : [{ id: `${Date.now()}-${Math.random()}`, role: 'status', text: 'Loading saved transcript...' }],
         thinking: false,
-        analysis: null,
-        analysisState: 'loading',
+        analysis: analysis ?? null,
+        analysisState: analysis ? 'ready' : 'loading',
         analysisError: null,
       };
     });
     multiCallsRef.current = initialStates;
     setMultiCalls(initialStates);
 
-    // Load task + transcript first (fast), then analysis separately (no retries for historical)
-    await Promise.all(history.calls.map(async ({ phone, taskId: callTaskId }) => {
-      try {
-        const [task, transcriptRes] = await Promise.all([
-          getTask(callTaskId),
-          getTaskTranscript(callTaskId).catch(() => null),
-        ]);
+    // Only fetch from backend for calls that don't have cached analysis or transcript
+    const callsNeedingFetch = history.calls.filter((c) => !c.analysis || !c.transcript || c.transcript.length === 0);
 
-        const transcriptEntries: MultiCallTranscriptEntry[] = (transcriptRes?.turns || []).map((turn) => ({
-          id: `${Date.now()}-${Math.random()}`,
-          role: turn.speaker === 'agent' ? 'agent' : 'caller',
-          text: turn.content,
-        }));
-
-        updateMultiCall(phone, {
-          taskId: callTaskId,
-          status: task.status as MultiCallEventStatus,
-          transcript: transcriptEntries.length > 0
-            ? transcriptEntries
-            : [{ id: `${Date.now()}-${Math.random()}`, role: 'status', text: 'No transcript saved' }],
-          thinking: false,
-        });
-
-        // Load analysis separately — single attempt only for historical calls
+    if (callsNeedingFetch.length > 0) {
+      await Promise.all(callsNeedingFetch.map(async ({ phone, taskId: callTaskId }) => {
         try {
-          const analysis = await getTaskAnalysis(callTaskId);
+          const [task, transcriptRes] = await Promise.all([
+            getTask(callTaskId),
+            getTaskTranscript(callTaskId).catch(() => null),
+          ]);
+
+          const transcriptEntries: MultiCallTranscriptEntry[] = (transcriptRes?.turns || []).map((turn) => ({
+            id: `${Date.now()}-${Math.random()}`,
+            role: turn.speaker === 'agent' ? 'agent' : 'caller',
+            text: turn.content,
+          }));
+
           updateMultiCall(phone, {
-            analysis: analysis ?? null,
-            analysisState: analysis ? 'ready' : 'error',
-            analysisError: analysis ? null : 'Summary unavailable',
+            taskId: callTaskId,
+            status: task.status as MultiCallEventStatus,
+            transcript: transcriptEntries.length > 0
+              ? transcriptEntries
+              : [{ id: `${Date.now()}-${Math.random()}`, role: 'status', text: 'No transcript saved' }],
+            thinking: false,
           });
-        } catch {
+
+          // Load analysis separately — single attempt only for historical calls
+          try {
+            const analysis = await getTaskAnalysis(callTaskId);
+            updateMultiCall(phone, {
+              analysis: analysis ?? null,
+              analysisState: analysis ? 'ready' : 'error',
+              analysisError: analysis ? null : 'Summary unavailable',
+            });
+          } catch {
+            updateMultiCall(phone, {
+              analysis: null,
+              analysisState: 'error',
+              analysisError: 'Summary unavailable',
+            });
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Unknown error';
           updateMultiCall(phone, {
+            status: 'failed',
+            transcript: [{ id: `${Date.now()}-${Math.random()}`, role: 'status', text: `Failed to load call: ${message}` }],
             analysis: null,
             analysisState: 'error',
-            analysisError: 'Summary unavailable',
+            analysisError: message,
+            thinking: false,
           });
         }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Unknown error';
-        updateMultiCall(phone, {
-          status: 'failed',
-          transcript: [{ id: `${Date.now()}-${Math.random()}`, role: 'status', text: `Failed to load call: ${message}` }],
-          analysis: null,
-          analysisState: 'error',
-          analysisError: message,
-          thinking: false,
-        });
-      }
-    }));
-    await loadMultiSummary(history.calls.map((call) => call.taskId), history.objective);
+      }));
+    }
+
+    if (history.multiSummary) {
+      setMultiSummary(history.multiSummary);
+      setMultiSummaryState('ready');
+    } else {
+      await loadMultiSummary(history.calls.map((call) => call.taskId), history.objective);
+    }
   }
 
   function looksLikePhone(text: string): boolean {
