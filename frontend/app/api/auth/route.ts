@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createHmac, timingSafeEqual } from 'crypto';
 
-const SITE_PASSWORD = process.env.SITE_PASSWORD ?? '';
-const AUTH_SECRET = process.env.AUTH_SECRET ?? '';
+// Read at request time: on Cloudflare Workers, secrets are bound to process.env
+// per request, so module-level reads can see empty values.
+const getSitePassword = () => process.env.SITE_PASSWORD ?? '';
+const getAuthSecret = () => process.env.AUTH_SECRET ?? '';
 const COOKIE_NAME = 'kiru_auth';
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
 function sign(value: string): string {
-  return createHmac('sha256', AUTH_SECRET).update(value).digest('hex');
+  return createHmac('sha256', getAuthSecret()).update(value).digest('hex');
 }
 
 function safeEqual(a: string, b: string): boolean {
@@ -20,7 +22,8 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 export async function POST(request: NextRequest) {
-  if (!SITE_PASSWORD || !AUTH_SECRET) {
+  const SITE_PASSWORD = getSitePassword();
+  if (!SITE_PASSWORD || !getAuthSecret()) {
     return NextResponse.json({ ok: false, error: 'Auth not configured' }, { status: 500 });
   }
 

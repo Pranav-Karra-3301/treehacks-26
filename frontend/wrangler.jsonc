@@ -1,0 +1,26 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "kiru",
+  "account_id": "ed61a2220d42b5b8a61059cce9af9980",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "kiru"
+    }
+  ],
+  // TODO: once the kiru.chat zone is moved from Spaceship to Cloudflare, add
+  // { "pattern": "kiru.chat", "custom_domain": true } and
+  // { "pattern": "www.kiru.chat", "custom_domain": true } here.
+  "routes": [{ "pattern": "kiru.pranavkarra.me", "custom_domain": true }],
+  "workers_dev": false,
+  "observability": {
+    "enabled": true
+  }
+}

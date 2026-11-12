@@ -1,0 +1,8 @@
+# Cloudflare / OpenNext
+.open-next
+.wrangler
+.dev.vars*
+!.dev.vars.example
+
+# Local env files (build-time values)
+.env*.local
