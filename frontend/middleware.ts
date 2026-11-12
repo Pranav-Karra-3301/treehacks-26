@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const AUTH_SECRET = process.env.AUTH_SECRET ?? '';
+// Read at request time: on Cloudflare Workers, secrets are bound to process.env
+// per request, so a module-level read can see an empty value.
+const getAuthSecret = () => process.env.AUTH_SECRET ?? '';
 const COOKIE_NAME = 'kiru_auth';
 const COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -21,7 +23,7 @@ async function hmacSha256(secret: string, message: string): Promise<string> {
     .join('');
 }
 
-async function isValidToken(token: string): Promise<boolean> {
+async function isValidToken(token: string, AUTH_SECRET: string): Promise<boolean> {
   if (!AUTH_SECRET) return false;
 
   const dotIndex = token.indexOf('.');
@@ -58,10 +60,11 @@ export async function middleware(request: NextRequest) {
   if (!isProtected) return NextResponse.next();
 
   // If no AUTH_SECRET configured, skip auth (dev convenience)
+  const AUTH_SECRET = getAuthSecret();
   if (!AUTH_SECRET) return NextResponse.next();
 
   const token = request.cookies.get(COOKIE_NAME)?.value;
-  if (token && await isValidToken(token)) {
+  if (token && await isValidToken(token, AUTH_SECRET)) {
     return NextResponse.next();
   }
 
